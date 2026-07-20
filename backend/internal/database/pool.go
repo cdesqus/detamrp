@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -39,3 +40,9 @@ func (p *pgxTenantTx) SetTenant(ctx context.Context, tenantID string) error {
 }
 func (p *pgxTenantTx) Commit(ctx context.Context) error   { return p.tx.Commit(ctx) }
 func (p *pgxTenantTx) Rollback(ctx context.Context) error { return p.tx.Rollback(ctx) }
+func (p *pgxTenantTx) Exec(ctx context.Context, sql string, arguments ...any) (pgconn.CommandTag, error) {
+	return p.tx.Exec(ctx, sql, arguments...)
+}
+func (p *pgxTenantTx) QueryRow(ctx context.Context, sql string, args ...any) pgx.Row {
+	return p.tx.QueryRow(ctx, sql, args...)
+}

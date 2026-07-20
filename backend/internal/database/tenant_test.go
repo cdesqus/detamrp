@@ -6,6 +6,8 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 type fakeTenantTx struct {
@@ -20,6 +22,10 @@ func (f *fakeTenantTx) SetTenant(_ context.Context, tenantID string) error {
 }
 func (f *fakeTenantTx) Commit(_ context.Context) error   { f.committed = true; return nil }
 func (f *fakeTenantTx) Rollback(_ context.Context) error { f.rolledBack = true; return nil }
+func (f *fakeTenantTx) Exec(context.Context, string, ...any) (pgconn.CommandTag, error) {
+	return pgconn.CommandTag{}, nil
+}
+func (f *fakeTenantTx) QueryRow(context.Context, string, ...any) pgx.Row { return nil }
 
 type fakeTenantBeginner struct{ tx *fakeTenantTx }
 

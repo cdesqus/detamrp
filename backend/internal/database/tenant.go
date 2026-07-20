@@ -5,6 +5,8 @@ import (
 	"errors"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 type TenantContext struct {
@@ -16,6 +18,8 @@ type TenantTx interface {
 	SetTenant(ctx context.Context, tenantID string) error
 	Commit(ctx context.Context) error
 	Rollback(ctx context.Context) error
+	Exec(ctx context.Context, sql string, arguments ...any) (pgconn.CommandTag, error)
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
 }
 
 type TenantBeginner interface {
