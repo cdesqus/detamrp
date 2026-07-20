@@ -22,6 +22,7 @@ type User struct {
 	DisplayName  string
 	PasswordHash string
 	Locked       bool
+	Permissions  []string
 }
 
 type Session struct {

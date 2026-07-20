@@ -30,7 +30,7 @@ func registerAuthRoutes(router *gin.Engine, config serverConfig) {
 			return
 		}
 		http.SetCookie(c.Writer, &http.Cookie{Name: "session", Value: result.Token, Path: "/", HttpOnly: true, Secure: config.cookieSecure, SameSite: http.SameSiteLaxMode, Expires: result.ExpiresAt})
-		c.JSON(http.StatusOK, gin.H{"user": gin.H{"id": result.User.ID, "username": result.User.Username, "displayName": result.User.DisplayName}})
+		c.JSON(http.StatusOK, gin.H{"user": gin.H{"id": result.User.ID, "username": result.User.Username, "displayName": result.User.DisplayName, "permissions": result.User.Permissions}})
 	})
 	router.GET("/auth/me", func(c *gin.Context) {
 		cookie, err := c.Cookie("session")
@@ -43,7 +43,7 @@ func registerAuthRoutes(router *gin.Engine, config serverConfig) {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": auth.ErrUnauthenticated.Error()})
 			return
 		}
-		c.JSON(http.StatusOK, gin.H{"user": gin.H{"id": user.ID, "username": user.Username, "displayName": user.DisplayName}})
+		c.JSON(http.StatusOK, gin.H{"user": gin.H{"id": user.ID, "username": user.Username, "displayName": user.DisplayName, "permissions": user.Permissions}})
 	})
 	router.POST("/auth/logout", func(c *gin.Context) {
 		cookie, _ := c.Cookie("session")
