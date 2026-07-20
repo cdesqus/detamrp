@@ -1,0 +1,17 @@
+{
+  "name": "nextgen-logistics",
+  "private": true,
+  "workspaces": ["apps/*"],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "dev": "npm run dev --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present"
+  },
+  "devDependencies": {
+    "@eslint/js": "latest",
+    "typescript-eslint": "latest"
+  },
+  "engines": { "node": ">=24" }
+}
