@@ -22,7 +22,7 @@ func (s *SQLStore) FindUserByUsername(ctx context.Context, username string) (Use
 		return tx.QueryRow(ctx, `
 			SELECT u.id, u.tenant_id, u.username, u.display_name, u.password_hash, u.locked,
 			       ARRAY(SELECT DISTINCT rp.permission_code FROM user_roles ur JOIN role_permissions rp ON rp.tenant_id = ur.tenant_id AND rp.role_id = ur.role_id WHERE ur.tenant_id = u.tenant_id AND ur.user_id = u.id)
-			FROM users
+			FROM users u
 			WHERE u.tenant_id = $1 AND lower(u.username) = lower($2)
 		`, s.tenantID, username).Scan(&user.ID, &user.TenantID, &user.Username, &user.DisplayName, &user.PasswordHash, &user.Locked, &user.Permissions)
 	})

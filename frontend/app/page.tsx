@@ -1,3 +1,3 @@
-export default function HomePage() {
-  return <main><h1>NextGen Logistics</h1></main>;
-}
+import { redirect } from 'next/navigation';
+
+export default function HomePage() { redirect('/login'); }
