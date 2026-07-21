@@ -1,0 +1,256 @@
+package purchaseorder
+
+import (
+	"context"
+	"errors"
+	"net/http"
+	"strconv"
+
+	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
+	"order-stock/backend/internal/auth"
+	"order-stock/backend/internal/rbac"
+)
+
+// Authenticator supplies the authenticated tenant user for purchase-order routes.
+type Authenticator interface {
+	Authenticate(context.Context, string) (auth.User, error)
+}
+
+const actorContextKey = "purchase_order_actor"
+
+// RegisterRoutes registers tenant-scoped purchase-order and approval endpoints.
+func RegisterRoutes(router *gin.Engine, service *Service, authenticator Authenticator) {
+	orders := router.Group("/purchase-orders", authenticate(authenticator))
+	orders.GET("", rbac.RequirePermissions("po.view"), func(c *gin.Context) {
+		query, ok := listQuery(c)
+		if !ok {
+			return
+		}
+		items, total, err := service.List(c.Request.Context(), actorFrom(c), query)
+		if writeHTTPError(c, err) {
+			return
+		}
+		if items == nil {
+			items = []Order{}
+		}
+		c.JSON(http.StatusOK, gin.H{"items": items, "total": total})
+	})
+	orders.GET("/:id", rbac.RequirePermissions("po.view"), func(c *gin.Context) {
+		id, ok := routeID(c)
+		if !ok {
+			return
+		}
+		order, err := service.Get(c.Request.Context(), actorFrom(c), id)
+		if writeHTTPError(c, err) {
+			return
+		}
+		c.JSON(http.StatusOK, order)
+	})
+	orders.POST("", rbac.RequirePermissions("po.create"), func(c *gin.Context) {
+		input, ok := orderInput(c)
+		if !ok {
+			return
+		}
+		order, err := service.Create(c.Request.Context(), actorFrom(c), input)
+		if writeHTTPError(c, err) {
+			return
+		}
+		c.JSON(http.StatusCreated, order)
+	})
+	orders.PUT("/:id", rbac.RequirePermissions("po.edit_draft"), func(c *gin.Context) {
+		id, ok := routeID(c)
+		if !ok {
+			return
+		}
+		input, ok := orderInput(c)
+		if !ok {
+			return
+		}
+		order, err := service.Update(c.Request.Context(), actorFrom(c), id, input)
+		if writeHTTPError(c, err) {
+			return
+		}
+		c.JSON(http.StatusOK, order)
+	})
+	orders.POST("/:id/submit", rbac.RequirePermissions("po.submit"), func(c *gin.Context) {
+		id, ok := routeID(c)
+		if !ok {
+			return
+		}
+		order, err := service.Submit(c.Request.Context(), actorFrom(c), id)
+		if writeHTTPError(c, err) {
+			return
+		}
+		c.JSON(http.StatusOK, order)
+	})
+	orders.POST("/:id/cancel", rbac.RequirePermissions("po.edit_draft"), func(c *gin.Context) {
+		id, ok := routeID(c)
+		if !ok {
+			return
+		}
+		order, err := service.Cancel(c.Request.Context(), actorFrom(c), id)
+		if writeHTTPError(c, err) {
+			return
+		}
+		c.JSON(http.StatusOK, order)
+	})
+
+	approvals := router.Group("/purchase-order-approvals", authenticate(authenticator))
+	approvals.GET("", rbac.RequirePermissions("po.approve"), func(c *gin.Context) {
+		query, ok := listQuery(c)
+		if !ok {
+			return
+		}
+		items, total, err := service.ListApprovals(c.Request.Context(), actorFrom(c), query)
+		if writeHTTPError(c, err) {
+			return
+		}
+		if items == nil {
+			items = []Approval{}
+		}
+		c.JSON(http.StatusOK, gin.H{"items": items, "total": total})
+	})
+	approvals.POST("/:id/approve", rbac.RequirePermissions("po.approve"), func(c *gin.Context) {
+		id, ok := routeID(c)
+		if !ok {
+			return
+		}
+		input, ok := decisionInput(c)
+		if !ok {
+			return
+		}
+		approval, err := service.Approve(c.Request.Context(), actorFrom(c), id, input)
+		if writeHTTPError(c, err) {
+			return
+		}
+		c.JSON(http.StatusOK, approval)
+	})
+	approvals.POST("/:id/reject", rbac.RequirePermissions("po.reject"), func(c *gin.Context) {
+		id, ok := routeID(c)
+		if !ok {
+			return
+		}
+		input, ok := decisionInput(c)
+		if !ok {
+			return
+		}
+		approval, err := service.Reject(c.Request.Context(), actorFrom(c), id, input)
+		if writeHTTPError(c, err) {
+			return
+		}
+		c.JSON(http.StatusOK, approval)
+	})
+}
+
+func authenticate(authenticator Authenticator) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		token, err := c.Cookie("session")
+		if err != nil {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
+			return
+		}
+		user, err := authenticator.Authenticate(c.Request.Context(), token)
+		if err != nil {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
+			return
+		}
+		c.Set(actorContextKey, Actor{TenantID: user.TenantID, UserID: user.ID, DisplayName: user.DisplayName})
+		c.Set(rbac.ContextPermissionsKey, user.Permissions)
+		c.Next()
+	}
+}
+
+func actorFrom(c *gin.Context) Actor {
+	actor, _ := c.Get(actorContextKey)
+	return actor.(Actor)
+}
+
+func routeID(c *gin.Context) (uuid.UUID, bool) {
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_id"})
+		return uuid.Nil, false
+	}
+	return id, true
+}
+
+func listQuery(c *gin.Context) (ListQuery, bool) {
+	query := ListQuery{Search: c.Query("search")}
+	if raw := c.Query("supplierId"); raw != "" {
+		id, err := uuid.Parse(raw)
+		if err != nil {
+			invalidFilter(c, "supplierId", "Invalid supplier")
+			return query, false
+		}
+		query.SupplierID = id
+	}
+	query.Status = Status(c.Query("status"))
+	if raw := c.Query("limit"); raw != "" {
+		value, err := strconv.Atoi(raw)
+		if err != nil {
+			invalidFilter(c, "limit", "Must be an integer")
+			return query, false
+		}
+		query.Limit = value
+	}
+	if raw := c.Query("offset"); raw != "" {
+		value, err := strconv.Atoi(raw)
+		if err != nil {
+			invalidFilter(c, "offset", "Must be an integer")
+			return query, false
+		}
+		query.Offset = value
+	}
+	return query, true
+}
+
+func orderInput(c *gin.Context) (OrderInput, bool) {
+	var input OrderInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		invalidJSON(c)
+		return OrderInput{}, false
+	}
+	return input, true
+}
+
+func decisionInput(c *gin.Context) (DecisionInput, bool) {
+	var input DecisionInput
+	if c.Request.ContentLength != 0 {
+		if err := c.ShouldBindJSON(&input); err != nil {
+			invalidJSON(c)
+			return DecisionInput{}, false
+		}
+	}
+	// An empty body is valid for approval. Rejection validation remains in the
+	// service so a missing reason has the standard field-error response.
+	return input, true
+}
+
+func invalidJSON(c *gin.Context) {
+	c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request", "message": "Invalid JSON body"})
+}
+
+func invalidFilter(c *gin.Context, field, message string) {
+	c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_filter", "fields": FieldErrors{field: message}})
+}
+
+func writeHTTPError(c *gin.Context, err error) bool {
+	if err == nil {
+		return false
+	}
+	var validation ValidationError
+	var conflict ConflictError
+	var missing NotFoundError
+	switch {
+	case errors.As(err, &validation):
+		c.JSON(http.StatusBadRequest, gin.H{"error": "validation_failed", "message": "Please correct the highlighted fields", "fields": validation.Fields})
+	case errors.As(err, &conflict):
+		c.JSON(http.StatusConflict, gin.H{"error": "conflict", "message": "Purchase order conflicts with its current state", "fields": conflict.Fields})
+	case errors.As(err, &missing):
+		c.JSON(http.StatusNotFound, gin.H{"error": "not_found", "message": missing.Error()})
+	default:
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal_error", "message": "Request could not be completed"})
+	}
+	return true
+}

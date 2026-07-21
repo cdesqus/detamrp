@@ -7,6 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"order-stock/backend/internal/auth"
 	"order-stock/backend/internal/masterdata"
+	"order-stock/backend/internal/purchaseorder"
 	"order-stock/backend/internal/settings"
 )
 
@@ -17,12 +18,13 @@ type Authenticator interface {
 }
 
 type serverConfig struct {
-	authenticator      Authenticator
-	cookieSecure       bool
-	measurementService *masterdata.MeasurementService
-	supplierService    *masterdata.SupplierService
-	rawMaterialService *masterdata.RawMaterialService
-	settingsService    *settings.Service
+	authenticator        Authenticator
+	cookieSecure         bool
+	measurementService   *masterdata.MeasurementService
+	supplierService      *masterdata.SupplierService
+	rawMaterialService   *masterdata.RawMaterialService
+	settingsService      *settings.Service
+	purchaseOrderService *purchaseorder.Service
 }
 
 type ServerOption func(*serverConfig)
@@ -46,6 +48,9 @@ func WithRawMaterialService(service *masterdata.RawMaterialService) ServerOption
 }
 func WithSettingsService(service *settings.Service) ServerOption {
 	return func(c *serverConfig) { c.settingsService = service }
+}
+func WithPurchaseOrderService(service *purchaseorder.Service) ServerOption {
+	return func(c *serverConfig) { c.purchaseOrderService = service }
 }
 
 func NewServer(options ...ServerOption) http.Handler {
@@ -71,6 +76,9 @@ func NewServer(options ...ServerOption) http.Handler {
 		}
 		if config.settingsService != nil {
 			settings.RegisterRoutes(router, config.settingsService, config.authenticator)
+		}
+		if config.purchaseOrderService != nil {
+			purchaseorder.RegisterRoutes(router, config.purchaseOrderService, config.authenticator)
 		}
 	}
 	return router
