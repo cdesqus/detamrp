@@ -90,9 +90,9 @@ describe('AppShell', () => {
     await screen.findByText('Administrator');
     await user.click(screen.getByRole('button', { name: 'Open user menu' }));
 
-    expect(screen.getByRole('menu', { name: 'User menu' })).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: 'User menu' })).toBeInTheDocument();
     expect(screen.getByText('@admin')).toBeInTheDocument();
-    expect(screen.getByRole('menuitem', { name: 'Logout' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Logout' })).toHaveFocus();
   });
 
   it('posts logout with credentials and replaces history after a 204 response', async () => {
@@ -103,11 +103,11 @@ describe('AppShell', () => {
 
     await screen.findByText('Administrator');
     await user.click(screen.getByRole('button', { name: 'Open user menu' }));
-    await user.click(screen.getByRole('menuitem', { name: 'Logout' }));
+    await user.click(screen.getByRole('button', { name: 'Logout' }));
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/auth/logout', { method: 'POST', credentials: 'include' }));
     await waitFor(() => expect(replace).toHaveBeenCalledWith('/login'));
-    expect(screen.queryByRole('menu', { name: 'User menu' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: 'User menu' })).not.toBeInTheDocument();
   });
 
   it('closes the user menu on Escape and outside pointer interaction', async () => {
@@ -118,12 +118,12 @@ describe('AppShell', () => {
     const trigger = screen.getByRole('button', { name: 'Open user menu' });
     await user.click(trigger);
     await user.keyboard('{Escape}');
-    expect(screen.queryByRole('menu', { name: 'User menu' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: 'User menu' })).not.toBeInTheDocument();
     expect(trigger).toHaveFocus();
 
     await user.click(trigger);
     await user.pointer({ target: document.body, keys: '[MouseLeft]' });
-    expect(screen.queryByRole('menu', { name: 'User menu' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: 'User menu' })).not.toBeInTheDocument();
   });
 
   it('keeps the user menu and session UI visible when logout fails', async () => {
@@ -134,12 +134,77 @@ describe('AppShell', () => {
 
     await screen.findByText('Administrator');
     await user.click(screen.getByRole('button', { name: 'Open user menu' }));
-    await user.click(screen.getByRole('menuitem', { name: 'Logout' }));
+    await user.click(screen.getByRole('button', { name: 'Logout' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Unable to log out. Please try again.');
-    expect(screen.getByRole('menu', { name: 'User menu' })).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: 'User menu' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Open user menu' })).toBeInTheDocument();
     expect(replace).not.toHaveBeenCalled();
+  });
+
+  it('keeps a pending logout menu open through Escape and outside interaction, then announces the failure', async () => {
+    const pending = deferred<Response>();
+    const fetchMock = vi.fn((path: string) => path === '/api/auth/me' ? Promise.resolve(auth()) : pending.promise);
+    vi.stubGlobal('fetch', fetchMock);
+    const user = userEvent.setup();
+    render(<AppShell title="Dashboard"><div>content</div></AppShell>);
+
+    await screen.findByText('Administrator');
+    await user.click(screen.getByRole('button', { name: 'Open user menu' }));
+    await user.click(screen.getByRole('button', { name: 'Logout' }));
+    expect(screen.getByRole('button', { name: 'Logging out...' })).toBeDisabled();
+
+    await user.keyboard('{Escape}');
+    await user.pointer({ target: document.body, keys: '[MouseLeft]' });
+    expect(screen.getByRole('dialog', { name: 'User menu' })).toBeInTheDocument();
+
+    pending.resolve({ status: 500 } as Response);
+    expect(await screen.findByRole('alert')).toHaveTextContent('Unable to log out. Please try again.');
+    expect(screen.getByRole('dialog', { name: 'User menu' })).toBeInTheDocument();
+  });
+
+  it('prevents duplicate logout requests and redirects after a successful retry', async () => {
+    const firstAttempt = deferred<Response>();
+    const fetchMock = vi.fn((path: string) => {
+      if (path === '/api/auth/me') return Promise.resolve(auth());
+      return fetchMock.mock.calls.filter(([requestPath]) => requestPath === '/api/auth/logout').length === 1
+        ? firstAttempt.promise
+        : Promise.resolve({ status: 204 } as Response);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const user = userEvent.setup();
+    render(<AppShell title="Dashboard"><div>content</div></AppShell>);
+
+    await screen.findByText('Administrator');
+    await user.click(screen.getByRole('button', { name: 'Open user menu' }));
+    const logoutButton = screen.getByRole('button', { name: 'Logout' });
+    await user.click(logoutButton);
+    await user.click(logoutButton);
+    expect(fetchMock.mock.calls.filter(([path]) => path === '/api/auth/logout')).toHaveLength(1);
+
+    firstAttempt.resolve({ status: 500 } as Response);
+    expect(await screen.findByRole('alert')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Logout' }));
+
+    await waitFor(() => expect(fetchMock.mock.calls.filter(([path]) => path === '/api/auth/logout')).toHaveLength(2));
+    await waitFor(() => expect(replace).toHaveBeenCalledWith('/login'));
+  });
+
+  it('keeps only one header popover open at a time', async () => {
+    const user = userEvent.setup();
+    render(<AppShell title="Dashboard"><div>content</div></AppShell>);
+
+    await screen.findByText('Administrator');
+    await user.click(screen.getByRole('button', { name: 'Notifications' }));
+    expect(screen.getByRole('link', { name: /View all notifications/ })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Open user menu' }));
+    expect(screen.getByRole('dialog', { name: 'User menu' })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /View all notifications/ })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Notifications' }));
+    expect(screen.queryByRole('dialog', { name: 'User menu' })).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /View all notifications/ })).toBeInTheDocument();
   });
 
   it('uses enriched approvals and API total with real Director permissions', async () => {

@@ -26,8 +26,10 @@ export function AppShell({ title, children }: { title: string; children: ReactNo
   const decidedApprovalIDs = useRef(new Set<string>());
   const userMenuRef = useRef<HTMLDivElement>(null);
   const userMenuTriggerRef = useRef<HTMLButtonElement>(null);
+  const logoutButtonRef = useRef<HTMLButtonElement>(null);
   const [collapsed, setCollapsed] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [notificationOpen, setNotificationOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [logoutPending, setLogoutPending] = useState(false);
   const [logoutError, setLogoutError] = useState<string | null>(null);
@@ -97,11 +99,15 @@ export function AppShell({ title, children }: { title: string; children: ReactNo
   useEffect(() => {
     if (!userMenuOpen) return;
     const closeOutside = (event: PointerEvent) => {
-      if (!userMenuRef.current?.contains(event.target as Node)) setUserMenuOpen(false);
+      if (!logoutPending && !userMenuRef.current?.contains(event.target as Node)) {
+        setUserMenuOpen(false);
+        setLogoutError(null);
+      }
     };
     const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') return;
+      if (event.key !== 'Escape' || logoutPending) return;
       setUserMenuOpen(false);
+      setLogoutError(null);
       userMenuTriggerRef.current?.focus();
     };
     document.addEventListener('pointerdown', closeOutside);
@@ -110,6 +116,10 @@ export function AppShell({ title, children }: { title: string; children: ReactNo
       document.removeEventListener('pointerdown', closeOutside);
       document.removeEventListener('keydown', closeOnEscape);
     };
+  }, [userMenuOpen, logoutPending]);
+
+  useEffect(() => {
+    if (userMenuOpen) logoutButtonRef.current?.focus();
   }, [userMenuOpen]);
 
   function toggleSidebar() {
@@ -162,15 +172,30 @@ export function AppShell({ title, children }: { title: string; children: ReactNo
             <span>{title}</span>
           </div>
           <div className="header-end">
-            <NotificationCenter items={notificationItems} total={notificationTotal} />
-            <div className="user-menu" ref={userMenuRef}>
-              <button ref={userMenuTriggerRef} className="user-menu-trigger" aria-label="Open user menu" aria-haspopup="menu" aria-expanded={userMenuOpen} onClick={() => {
+            <NotificationCenter items={notificationItems} total={notificationTotal} open={notificationOpen} onOpenChange={open => {
+              if (open && logoutPending) {
+                setNotificationOpen(false);
+                return;
+              }
+              setNotificationOpen(open);
+              if (open) {
+                setUserMenuOpen(false);
                 setLogoutError(null);
-                setUserMenuOpen(value => !value);
-              }}>{user.displayName}<span aria-hidden="true">⌄</span></button>
-              {userMenuOpen ? <div className="user-menu-popover" role="menu" aria-label="User menu">
+              }
+            }} />
+            <div className="user-menu" ref={userMenuRef}>
+              <button ref={userMenuTriggerRef} className="user-menu-trigger" aria-label="Open user menu" aria-haspopup="dialog" aria-expanded={userMenuOpen} disabled={logoutPending} onClick={() => {
+                if (userMenuOpen) {
+                  setUserMenuOpen(false);
+                  setLogoutError(null);
+                  return;
+                }
+                setNotificationOpen(false);
+                setUserMenuOpen(true);
+              }}><span className="user-menu-trigger-name">{user.displayName}</span><span aria-hidden="true">⌄</span></button>
+              {userMenuOpen ? <div className="user-menu-popover" role="dialog" aria-label="User menu">
                 <div className="user-menu-identity"><strong>{user.displayName}</strong><span>@{user.username}</span></div>
-                <button className="user-menu-logout" role="menuitem" onClick={() => void logout()} disabled={logoutPending}>{logoutPending ? 'Logging out...' : 'Logout'}</button>
+                <button ref={logoutButtonRef} className="user-menu-logout" onClick={() => void logout()} disabled={logoutPending}>{logoutPending ? 'Logging out...' : 'Logout'}</button>
                 {logoutError ? <p className="user-menu-error" role="alert">{logoutError}</p> : null}
               </div> : null}
             </div>
