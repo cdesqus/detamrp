@@ -69,4 +69,25 @@ describe('AppShell', () => {
     await waitFor(() => expect(localStorage.getItem('order-stock.sidebar-collapsed')).toBe('true'));
     expect(screen.getByRole('button', { name: 'Expand sidebar' })).toBeInTheDocument();
   });
+
+  it('loads approval notifications for approvers and refreshes them after a decision event', async () => {
+    let refreshed = false;
+    vi.stubGlobal('fetch', vi.fn((path: string) => Promise.resolve(path === '/api/auth/me'
+      ? { ok: true, json: async () => ({ user: { username: 'director', displayName: 'Director', permissions: ['po.approve', 'po.view', 'master_data.view'] } }) }
+      : path === '/api/purchase-order-approvals' ? { ok: true, json: async () => ({ items: refreshed ? [] : [{ id: 'approval-1', purchaseOrderId: 'po-1' }], total: refreshed ? 0 : 1 }) }
+        : path === '/api/purchase-orders/po-1' ? { ok: true, json: async () => ({ id: 'po-1', poNumber: 'PO-202607-00001', supplierId: 'supplier-1' }) }
+          : { ok: true, json: async () => ({ items: [{ id: 'supplier-1', code: 'SUP-001', name: 'Acme' }] }) })));
+    const user = userEvent.setup();
+    render(<AppShell title="Dashboard"><div>content</div></AppShell>);
+
+    expect(await screen.findByText('Director')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByTestId('notification-badge')).toHaveTextContent('1'));
+    await user.click(screen.getByRole('button', { name: 'Notifications' }));
+    expect(screen.getByRole('link', { name: /PO-202607-00001 awaits approval/ })).toHaveAttribute('href', '/supplier-orders/po-1');
+    expect(screen.getByText('SUP-001 — Acme')).toBeInTheDocument();
+
+    refreshed = true;
+    window.dispatchEvent(new Event('purchase-order-approvals:refresh'));
+    await waitFor(() => expect(screen.queryByTestId('notification-badge')).not.toBeInTheDocument());
+  });
 });

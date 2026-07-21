@@ -14,7 +14,7 @@ export function NotificationCenter({ items }: { items: NotificationItem[] }) {
         <Icon name="bell" />
         {unread > 0 ? <span className="notification-badge" data-testid="notification-badge">{unread}</span> : null}
       </button>
-      {open ? <div className="notification-popover">
+      {open ? <div className="notification-popover" aria-live="polite">
         <div className="notification-heading"><strong>Notifications</strong><span>{unread} unread</span></div>
         <div className="notification-list">
           {items.length === 0 ? <div className="notification-empty"><Icon name="bell" size={20} /><strong>Belum ada notifikasi</strong><span>Update approval dan operasional akan tampil di sini.</span></div> : items.map(item => <Link href={item.href} key={item.id}><strong>{item.title}</strong><span>{item.description}</span></Link>)}
