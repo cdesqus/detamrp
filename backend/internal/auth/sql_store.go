@@ -71,8 +71,8 @@ func (s *SQLStore) EnsureInitialAdmin(ctx context.Context, username, password st
 	}
 	return database.WithTenant(ctx, s.database, database.TenantContext{TenantID: s.tenantID}, func(tx database.TenantTx) error {
 		_, err := tx.Exec(ctx, `
-			INSERT INTO users (tenant_id, username, display_name, password_hash)
-			VALUES ($1, $2, 'Administrator', $3)
+			INSERT INTO users (tenant_id, username, display_name, email, password_hash)
+			VALUES ($1, $2, 'Administrator', lower($2) || '@local.invalid', $3)
 			ON CONFLICT (tenant_id, username) DO NOTHING
 		`, s.tenantID, username, passwordHash)
 		if err != nil {
