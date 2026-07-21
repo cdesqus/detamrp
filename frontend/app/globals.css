@@ -40,6 +40,21 @@ button, input { font: inherit; }
 .sidebar-collapsed .nav-group-toggle { padding-inline: 9px; }
 .app-content > header { height: 48px; display: flex; align-items: center; justify-content: space-between; padding: 0 20px; background: white; border-bottom: 1px solid #e4e4e7; font-size: 13px; }
 .header-start { display: flex; align-items: center; gap: 10px; }
+.header-end { display: flex; align-items: center; gap: 10px; }
+.notification-center { position: relative; }
+.notification-trigger { position: relative; width: 30px; height: 30px; display: grid; place-items: center; padding: 0; color: #52525b; background: white; border: 1px solid #e4e4e7; border-radius: 6px; cursor: pointer; }
+.notification-badge { position: absolute; top: -5px; right: -5px; min-width: 16px; height: 16px; display: grid; place-items: center; padding: 0 4px; color: white; background: #dc2626; border: 2px solid white; border-radius: 999px; font-size: 9px; font-weight: 700; }
+.notification-popover { position: absolute; z-index: 30; top: 36px; right: 0; width: 320px; overflow: hidden; color: #27272a; background: white; border: 1px solid #e4e4e7; border-radius: 8px; box-shadow: 0 12px 30px rgb(0 0 0 / 10%); }
+.notification-heading { height: 48px; display: flex; align-items: center; justify-content: space-between; padding: 0 12px; border-bottom: 1px solid #f0f0f1; }
+.notification-heading strong { font-size: 12px; font-weight: 600; }
+.notification-heading span { color: #a1a1aa; font-size: 10px; }
+.notification-list > a { display: grid; gap: 3px; padding: 10px 12px; color: inherit; border-bottom: 1px solid #f4f4f5; text-decoration: none; }
+.notification-list > a strong { font-size: 11px; font-weight: 600; }
+.notification-list > a span { color: #71717a; font-size: 10px; }
+.notification-empty { min-height: 150px; display: grid; place-content: center; justify-items: center; gap: 6px; color: #a1a1aa; text-align: center; }
+.notification-empty strong { color: #52525b; font-size: 11px; font-weight: 600; }
+.notification-empty span { max-width: 220px; font-size: 10px; }
+.notification-footer { height: 36px; display: grid; place-items: center; color: #52525b; background: #fafafa; border-top: 1px solid #f0f0f1; font-size: 10px; font-weight: 600; text-decoration: none; }
 .mobile-sidebar-toggle { width: 28px; height: 28px; display: grid; place-items: center; border: 1px solid #e4e4e7; border-radius: 5px; color: #52525b; background: white; cursor: pointer; }
 .mobile-sidebar-toggle, .drawer-scrim { display: none; }
 .app-content main { padding: 20px; }

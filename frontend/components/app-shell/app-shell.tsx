@@ -4,6 +4,8 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { ReactNode, useEffect, useState } from 'react';
 import { Icon } from '../icons';
+import { NotificationCenter } from '../notifications/notification-center';
+import { emptyNotificationSnapshot } from '../notifications/notification-data';
 import { navigationGroups } from './navigation';
 
 type CurrentUser = { username: string; displayName: string; permissions: string[] };
@@ -61,7 +63,7 @@ export function AppShell({ title, children }: { title: string; children: ReactNo
             <button className="mobile-sidebar-toggle" aria-label="Open navigation" onClick={() => setDrawerOpen(true)}><Icon name="menu" /></button>
             <span>{title}</span>
           </div>
-          <span>{user.displayName}</span>
+          <div className="header-end"><NotificationCenter items={emptyNotificationSnapshot.items} /><span>{user.displayName}</span></div>
         </header>
         <main>{children}</main>
       </section>
