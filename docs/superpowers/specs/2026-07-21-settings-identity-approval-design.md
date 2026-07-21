@@ -26,6 +26,7 @@ Fields:
 - Password: required on create, optional on edit, minimum eight characters.
 - Roles: at least one active role is required.
 - Status: Active or Locked.
+- Purchase Order Approver: optional checkbox; only one user can be selected tenant-wide.
 
 The API never returns password hashes. An administrator cannot lock their own current account. The final active Administrator cannot be locked or stripped of the Administrator role.
 
@@ -37,7 +38,9 @@ Permission selection is grouped by module: Procurement, Logistics, Inventory, In
 
 ## Default Approver
 
-The Users page contains a compact Approval Configuration card above the user table. It has one searchable Default Approver selector and Save action.
+Default Approver is configured inside the User create/edit modal through `Set as Purchase Order Approver`. The Users table shows a `PO Approver` badge on the selected account; no separate Approval Configuration card is shown.
+
+Checking the option on a different eligible user asks for confirmation and atomically replaces the previous approver. Unchecking the current approver is rejected because Supplier Order submission requires exactly one configured approver after initial setup.
 
 Only an active, unlocked user whose effective roles grant `po.approve` can be selected. The backend revalidates this rule transactionally. A configured Default Approver cannot be locked, lose all `po.approve` permission, or be assigned an inactive approval role until another approver is selected.
 
