@@ -234,9 +234,46 @@ describe('supplier order UI', () => {
     expect(screen.getByText(/RM-SNAPSHOT/)).toBeInTheDocument();
     expect(screen.getByRole('columnheader', { name: 'Unit Price' })).toBeInTheDocument();
     expect(screen.getByText('7.000000')).toBeInTheDocument();
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(fetchMock).toHaveBeenCalledWith('/api/purchase-orders/po-director', { credentials: 'include' });
+    expect(fetchMock).toHaveBeenCalledWith('/api/purchase-order-approvals?limit=200&offset=0', { credentials: 'include' });
     expect(screen.queryByText(/could not be loaded/i)).not.toBeInTheDocument();
+  });
+
+  it('lets the assigned Director approve a pending order from its detail page', async () => {
+    const pendingOrder = { id: 'po-director', poNumber: 'PO-DIRECTOR', status: 'PENDING_APPROVAL', supplierId: 'supplier-1', supplierName: 'PT Prima', currency: 'IDR', orderDate: '2026-07-21', expectedDeliveryDate: '2026-07-22', lines: [] };
+    const fetchMock = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+      if (url === '/api/purchase-order-approvals?limit=200&offset=0') return Promise.resolve(response({ items: [{ id: 'approval-1', purchaseOrderId: 'po-director', poNumber: 'PO-DIRECTOR', status: 'PENDING' }] }));
+      if (url === '/api/purchase-order-approvals/approval-1/approve' && init?.method === 'POST') return Promise.resolve(response({ status: 'APPROVED' }));
+      if (url === '/api/purchase-orders/po-director') return Promise.resolve(response({ ...pendingOrder, status: 'APPROVED' }));
+      return Promise.resolve(response({ items: [] }));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const user = userEvent.setup();
+
+    render(<SupplierOrderForm initialOrder={pendingOrder} permissions={['po.view', 'po.approve', 'po.reject']} />);
+
+    await user.click(await screen.findByRole('button', { name: 'Approve PO-DIRECTOR' }));
+    await user.click(screen.getByRole('button', { name: 'Approve order' }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/purchase-order-approvals/approval-1/approve', expect.objectContaining({ method: 'POST', body: '{}' })));
+    expect(await screen.findByText('APPROVED')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Approve PO-DIRECTOR' })).not.toBeInTheDocument();
+  });
+
+  it('requires a reason when the assigned Director rejects from the order detail page', async () => {
+    const pendingOrder = { id: 'po-director', poNumber: 'PO-DIRECTOR', status: 'PENDING_APPROVAL', supplierId: 'supplier-1', supplierName: 'PT Prima', currency: 'IDR', orderDate: '2026-07-21', expectedDeliveryDate: '2026-07-22', lines: [] };
+    const fetchMock = vi.fn().mockResolvedValue(response({ items: [{ id: 'approval-1', purchaseOrderId: 'po-director', poNumber: 'PO-DIRECTOR', status: 'PENDING' }] }));
+    vi.stubGlobal('fetch', fetchMock);
+    const user = userEvent.setup();
+
+    render(<SupplierOrderForm initialOrder={pendingOrder} permissions={['po.view', 'po.approve', 'po.reject']} />);
+
+    await user.click(await screen.findByRole('button', { name: 'Reject PO-DIRECTOR' }));
+    await user.click(screen.getByRole('button', { name: 'Reject order' }));
+
+    expect(await screen.findByText('Rejection reason is required')).toBeInTheDocument();
+    expect(fetchMock).not.toHaveBeenCalledWith('/api/purchase-order-approvals/approval-1/reject', expect.anything());
   });
 
   it('hides price and amount values in Viewer detail instead of rendering zeroes', () => {

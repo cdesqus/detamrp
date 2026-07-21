@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useCurrentUser } from '../app-shell/app-shell';
 
@@ -11,6 +11,7 @@ type InitialOrder = { id: string; poNumber?: string; status: string; supplierId:
 type Props = { orderId?: string; initialOrder?: InitialOrder; permissions?: string[] };
 type ApiError = { message?: string; fields?: Record<string, string> };
 type Decimal = { value: bigint; scale: number };
+type PendingApproval = { id: string; purchaseOrderId: string; poNumber?: string; status: string };
 
 export function localDateISO(date: Date = new Date()) {
   const year = date.getFullYear();
@@ -71,7 +72,10 @@ function errorFields(body: ApiError, fallback: string) { return { ...(body.field
 export function SupplierOrderForm({ orderId, initialOrder, permissions }: Props) {
   const router = useRouter();
   const currentUser = useCurrentUser();
-  const canViewPrices = (permissions ?? currentUser?.permissions ?? []).includes('po.price.view');
+  const permissionList = permissions ?? currentUser?.permissions ?? [];
+  const canViewPrices = permissionList.includes('po.price.view');
+  const canApprove = permissionList.includes('po.approve');
+  const canReject = permissionList.includes('po.reject');
   const [savedId, setSavedId] = useState(initialOrder?.id ?? '');
   const [status, setStatus] = useState(initialOrder?.status ?? 'DRAFT');
   const [poNumber, setPONumber] = useState(initialOrder?.poNumber ?? '');
@@ -94,6 +98,12 @@ export function SupplierOrderForm({ orderId, initialOrder, permissions }: Props)
   const [detailAttempt, setDetailAttempt] = useState(0);
   const [detailLoading, setDetailLoading] = useState(Boolean(orderId && !initialOrder));
   const [saving, setSaving] = useState(false);
+  const [approval, setApproval] = useState<PendingApproval | null>(null);
+  const [decision, setDecision] = useState<'approve' | 'reject' | null>(null);
+  const [decisionReason, setDecisionReason] = useState('');
+  const [decisionError, setDecisionError] = useState('');
+  const [reasonError, setReasonError] = useState('');
+  const [deciding, setDeciding] = useState(false);
   const editable = !detailLoading && !detailError && status === 'DRAFT';
 
   const hydrate = useCallback((order: InitialOrder) => {
@@ -139,6 +149,15 @@ export function SupplierOrderForm({ orderId, initialOrder, permissions }: Props)
       .catch(() => { if (current && !controller.signal.aborted) setMaterialError('Raw Materials could not be loaded.'); });
     return () => { current = false; controller.abort(); };
   }, [editable, supplierId]);
+  useEffect(() => {
+    if (status !== 'PENDING_APPROVAL' || !savedId || (!canApprove && !canReject)) { setApproval(null); return; }
+    let current = true;
+    fetch('/api/purchase-order-approvals?limit=200&offset=0', { credentials: 'include' })
+      .then(response => response.ok ? response.json() as Promise<{ items?: PendingApproval[] }> : Promise.reject())
+      .then(payload => { if (current) setApproval((payload.items ?? []).find(item => item.purchaseOrderId === savedId) ?? null); })
+      .catch(() => { if (current) setApproval(null); });
+    return () => { current = false; };
+  }, [canApprove, canReject, savedId, status]);
 
   const selectSupplier = useCallback((candidate: Supplier) => {
     if (candidate.id === supplierId) { setSupplierQuery(optionLabel(candidate)); return; }
@@ -213,6 +232,26 @@ export function SupplierOrderForm({ orderId, initialOrder, permissions }: Props)
     finally { setSaving(false); }
   }
 
+  async function submitDecision(event: FormEvent) {
+    event.preventDefault();
+    if (!approval || !decision || deciding) return;
+    const reason = decisionReason.trim();
+    if (decision === 'reject' && !reason) { setReasonError('Rejection reason is required'); return; }
+    setDeciding(true); setDecisionError(''); setReasonError('');
+    try {
+      const response = await fetch(`/api/purchase-order-approvals/${approval.id}/${decision}`, {
+        method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(decision === 'reject' ? { reason } : {})
+      });
+      if (!response.ok) throw new Error((await response.json() as ApiError).message ?? 'Approval could not be updated');
+      const detail = await fetch(`/api/purchase-orders/${savedId}`, { credentials: 'include' });
+      if (!detail.ok) throw new Error('The decision was saved, but the purchase order could not be refreshed');
+      hydrate(await detail.json() as InitialOrder);
+      setApproval(null); setDecision(null); setDecisionReason('');
+      window.dispatchEvent(new CustomEvent('purchase-order-approvals:refresh', { detail: { approvalId: approval.id } }));
+    } catch (cause) { setDecisionError(cause instanceof Error ? cause.message : 'Approval could not be updated'); }
+    finally { setDeciding(false); }
+  }
+
   if (detailLoading) return <section className="supplier-order-form"><div className="table-empty">Loading supplier order...</div></section>;
   if (detailError) return <section className="supplier-order-form"><div className="table-empty"><strong>Could not load supplier order</strong><span>{detailError}</span><button className="table-action" onClick={() => setDetailAttempt(value => value + 1)}>Retry</button></div></section>;
   const availableMaterials = materials.filter(item => !lines.some(line => line.rawMaterialId === item.id));
@@ -233,5 +272,7 @@ export function SupplierOrderForm({ orderId, initialOrder, permissions }: Props)
       {materialError && <p className="form-error" role="alert">{materialError}</p>}
       <div className="table-frame"><table><thead><tr><th>Raw Material</th><th>Base Unit</th><th>Qty / Kanban</th><th>Total Kanban</th><th>Total Quantity</th>{canViewPrices && <><th>Unit Price</th><th>Amount</th></>}{editable && <th></th>}</tr></thead><tbody>{lines.length === 0 ? <tr><td colSpan={5 + (canViewPrices ? 2 : 0) + (editable ? 1 : 0)}><div className="table-empty">No Raw Materials selected.</div></td></tr> : lines.map((line, index) => { const quantity = multiplyDecimals(line.qtyPerKanbanSnapshot, line.totalKanban || '0'); const amount = multiplyDecimals(quantity, line.unitPriceSnapshot); const lineError = errors[fieldKey(index)]; const rawMaterialError = errors[materialFieldKey(index)] ?? errors[`lines[${index}]`]; return <tr key={line.rawMaterialId}><td aria-describedby={rawMaterialError ? `material-error-${index}` : undefined}>{line.rawMaterialCode} — {line.rawMaterialName}{rawMaterialError && <small id={`material-error-${index}`} role="alert">{rawMaterialError}</small>}</td><td>{line.baseUnitCode}</td><td><output>{formatDecimal(line.qtyPerKanbanSnapshot)}</output></td><td><input aria-label={`Total Kanban for ${line.rawMaterialName}`} aria-describedby={lineError ? `kanban-error-${index}` : undefined} type="number" min="1" max="99999999999999" step="1" value={line.totalKanban} disabled={!editable} onChange={event => changeKanban(line.rawMaterialId, event.target.value)} />{lineError && <small id={`kanban-error-${index}`} role="alert">{lineError}</small>}</td><td><output>{quantity}</output></td>{canViewPrices && <><td><output>{formatDecimal(line.unitPriceSnapshot)}</output></td><td><output>{amount}</output></td></>}{editable && <td><button type="button" className="table-action" aria-label={`Remove ${line.rawMaterialName}`} onClick={() => setLines(current => current.filter(item => item.rawMaterialId !== line.rawMaterialId))}>Remove</button></td>}</tr>; })}</tbody>{canViewPrices && <tfoot><tr><td colSpan={6}>Order Total</td><td><output>{total}</output></td>{editable && <td></td>}</tr></tfoot>}</table></div></div>
     {editable && <div className="supplier-order-actions"><div>{errors.lines && <small role="alert">{errors.lines}</small>}</div><div>{savedId && <button type="button" onClick={cancel} disabled={saving}>Cancel draft</button>}<button type="button" onClick={() => router.push('/supplier-orders')} disabled={saving}>Back</button><button type="button" onClick={() => save(false)} disabled={saving}>Save as Draft</button><button type="button" className="primary-button" onClick={() => save(true)} disabled={saving}>Save &amp; Send for Approval</button></div></div>}
+    {approval && <div className="supplier-order-actions"><div><small>Review the complete order before making a decision.</small></div><div>{canReject && <button type="button" aria-label={`Reject ${poNumber}`} onClick={() => { setDecision('reject'); setDecisionError(''); setReasonError(''); }}>Reject</button>}{canApprove && <button type="button" className="primary-button" aria-label={`Approve ${poNumber}`} onClick={() => { setDecision('approve'); setDecisionError(''); }}>Approve</button>}</div></div>}
+    {decision && approval ? <><button className="crud-scrim" aria-label="Close decision form" onClick={() => !deciding && setDecision(null)} /><div className="crud-modal crud-modal--compact" role="dialog" aria-modal="true" aria-label={`${decision === 'approve' ? 'Approve' : 'Reject'} ${poNumber}`}><div className="crud-modal-heading"><div><strong>{decision === 'approve' ? 'Approve' : 'Reject'} {poNumber}</strong><span>{decision === 'approve' ? 'This decision cannot be undone.' : 'Provide a brief reason for the requester.'}</span></div><button aria-label="Close decision form" onClick={() => setDecision(null)} disabled={deciding}>×</button></div><form onSubmit={submitDecision}>{decisionError && <p className="form-error" role="alert">{decisionError}</p>}{decision === 'reject' ? <div className="crud-fields"><label className="approval-reason"><span>Rejection reason *</span><textarea autoFocus aria-label="Rejection reason" aria-invalid={Boolean(reasonError)} value={decisionReason} onChange={event => { setDecisionReason(event.target.value); setReasonError(''); }} />{reasonError && <small className="form-error" role="alert">{reasonError}</small>}</label></div> : <div className="crud-fields"><p>Confirm approval of this purchase order.</p></div>}<div className="crud-actions"><button type="button" onClick={() => setDecision(null)} disabled={deciding}>Cancel</button><button autoFocus={decision === 'approve'} className="primary-button" disabled={deciding}>{deciding ? `${decision === 'approve' ? 'Approving' : 'Rejecting'}...` : `${decision === 'approve' ? 'Approve' : 'Reject'} order`}</button></div></form></div></> : null}
   </section>;
 }
