@@ -83,6 +83,65 @@ describe('AppShell', () => {
     expect(screen.getByRole('button', { name: 'Expand sidebar' })).toBeInTheDocument();
   });
 
+  it('opens the user menu with the authenticated username', async () => {
+    const user = userEvent.setup();
+    render(<AppShell title="Dashboard"><div>content</div></AppShell>);
+
+    await screen.findByText('Administrator');
+    await user.click(screen.getByRole('button', { name: 'Open user menu' }));
+
+    expect(screen.getByRole('menu', { name: 'User menu' })).toBeInTheDocument();
+    expect(screen.getByText('@admin')).toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: 'Logout' })).toBeInTheDocument();
+  });
+
+  it('posts logout with credentials and replaces history after a 204 response', async () => {
+    const fetchMock = vi.fn((path: string) => Promise.resolve(path === '/api/auth/me' ? auth() : { status: 204 } as Response));
+    vi.stubGlobal('fetch', fetchMock);
+    const user = userEvent.setup();
+    render(<AppShell title="Dashboard"><div>content</div></AppShell>);
+
+    await screen.findByText('Administrator');
+    await user.click(screen.getByRole('button', { name: 'Open user menu' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Logout' }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/auth/logout', { method: 'POST', credentials: 'include' }));
+    await waitFor(() => expect(replace).toHaveBeenCalledWith('/login'));
+    expect(screen.queryByRole('menu', { name: 'User menu' })).not.toBeInTheDocument();
+  });
+
+  it('closes the user menu on Escape and outside pointer interaction', async () => {
+    const user = userEvent.setup();
+    render(<AppShell title="Dashboard"><div>content</div></AppShell>);
+
+    await screen.findByText('Administrator');
+    const trigger = screen.getByRole('button', { name: 'Open user menu' });
+    await user.click(trigger);
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('menu', { name: 'User menu' })).not.toBeInTheDocument();
+    expect(trigger).toHaveFocus();
+
+    await user.click(trigger);
+    await user.pointer({ target: document.body, keys: '[MouseLeft]' });
+    expect(screen.queryByRole('menu', { name: 'User menu' })).not.toBeInTheDocument();
+  });
+
+  it('keeps the user menu and session UI visible when logout fails', async () => {
+    const fetchMock = vi.fn((path: string) => Promise.resolve(path === '/api/auth/me' ? auth() : { status: 500 } as Response));
+    vi.stubGlobal('fetch', fetchMock);
+    const user = userEvent.setup();
+    render(<AppShell title="Dashboard"><div>content</div></AppShell>);
+
+    await screen.findByText('Administrator');
+    await user.click(screen.getByRole('button', { name: 'Open user menu' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Logout' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Unable to log out. Please try again.');
+    expect(screen.getByRole('menu', { name: 'User menu' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Open user menu' })).toBeInTheDocument();
+    expect(replace).not.toHaveBeenCalled();
+  });
+
   it('uses enriched approvals and API total with real Director permissions', async () => {
     const fetchMock = vi.fn((path: string) => Promise.resolve(path === '/api/auth/me' ? auth(director) : approvals('PO-202607-00001', 'Acme', 205)));
     vi.stubGlobal('fetch', fetchMock);

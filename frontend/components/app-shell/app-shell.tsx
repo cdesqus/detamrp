@@ -24,8 +24,13 @@ export function AppShell({ title, children }: { title: string; children: ReactNo
   const [notificationTotal, setNotificationTotal] = useState(0);
   const notificationRequest = useRef<{ generation: number; controller: AbortController | null }>({ generation: 0, controller: null });
   const decidedApprovalIDs = useRef(new Set<string>());
+  const userMenuRef = useRef<HTMLDivElement>(null);
+  const userMenuTriggerRef = useRef<HTMLButtonElement>(null);
   const [collapsed, setCollapsed] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [logoutPending, setLogoutPending] = useState(false);
+  const [logoutError, setLogoutError] = useState<string | null>(null);
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() => Object.fromEntries(navigationGroups.filter(group => group.collapsible && group.label).map(group => [group.label!, group.items.some(item => pathname === item.href || pathname.startsWith(`${item.href}/`))])));
 
   useEffect(() => {
@@ -89,10 +94,42 @@ export function AppShell({ title, children }: { title: string; children: ReactNo
     };
   }, [loadApprovalNotifications]);
 
+  useEffect(() => {
+    if (!userMenuOpen) return;
+    const closeOutside = (event: PointerEvent) => {
+      if (!userMenuRef.current?.contains(event.target as Node)) setUserMenuOpen(false);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      setUserMenuOpen(false);
+      userMenuTriggerRef.current?.focus();
+    };
+    document.addEventListener('pointerdown', closeOutside);
+    document.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.removeEventListener('pointerdown', closeOutside);
+      document.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [userMenuOpen]);
+
   function toggleSidebar() {
     const next = !collapsed;
     setCollapsed(next);
     localStorage.setItem(storageKey, String(next));
+  }
+
+  async function logout() {
+    setLogoutError(null);
+    setLogoutPending(true);
+    try {
+      const response = await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
+      if (response.status !== 204) throw new Error('logout failed');
+      setUserMenuOpen(false);
+      router.replace('/login');
+    } catch {
+      setLogoutPending(false);
+      setLogoutError('Unable to log out. Please try again.');
+    }
   }
 
   if (!user) return <main className="loading-page">Loading...</main>;
@@ -124,7 +161,20 @@ export function AppShell({ title, children }: { title: string; children: ReactNo
             <button className="mobile-sidebar-toggle" aria-label="Open navigation" onClick={() => setDrawerOpen(true)}><Icon name="menu" /></button>
             <span>{title}</span>
           </div>
-          <div className="header-end"><NotificationCenter items={notificationItems} total={notificationTotal} /><span>{user.displayName}</span></div>
+          <div className="header-end">
+            <NotificationCenter items={notificationItems} total={notificationTotal} />
+            <div className="user-menu" ref={userMenuRef}>
+              <button ref={userMenuTriggerRef} className="user-menu-trigger" aria-label="Open user menu" aria-haspopup="menu" aria-expanded={userMenuOpen} onClick={() => {
+                setLogoutError(null);
+                setUserMenuOpen(value => !value);
+              }}>{user.displayName}<span aria-hidden="true">⌄</span></button>
+              {userMenuOpen ? <div className="user-menu-popover" role="menu" aria-label="User menu">
+                <div className="user-menu-identity"><strong>{user.displayName}</strong><span>@{user.username}</span></div>
+                <button className="user-menu-logout" role="menuitem" onClick={() => void logout()} disabled={logoutPending}>{logoutPending ? 'Logging out...' : 'Logout'}</button>
+                {logoutError ? <p className="user-menu-error" role="alert">{logoutError}</p> : null}
+              </div> : null}
+            </div>
+          </div>
         </header>
         <main>{children}</main>
       </section>

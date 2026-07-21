@@ -44,6 +44,17 @@ button, input, select, textarea { font: inherit; }
 .header-start { display: flex; align-items: center; gap: 10px; }
 .header-end { display: flex; align-items: center; gap: 10px; }
 .notification-center { position: relative; }
+.user-menu { position: relative; }
+.user-menu-trigger { height: 30px; display: flex; align-items: center; gap: 5px; padding: 0 8px; color: #3f3f46; background: white; border: 1px solid #e4e4e7; border-radius: 6px; cursor: pointer; font-size: 11px; font-weight: 600; }
+.user-menu-trigger:hover, .user-menu-trigger:focus-visible { border-color: #a1a1aa; outline: none; box-shadow: 0 0 0 2px rgb(24 24 27 / 7%); }
+.user-menu-trigger span { color: #71717a; font-size: 13px; line-height: 1; }
+.user-menu-popover { position: absolute; z-index: 30; top: 36px; right: 0; width: 190px; overflow: hidden; color: #27272a; background: white; border: 1px solid #e4e4e7; border-radius: 8px; box-shadow: 0 12px 30px rgb(0 0 0 / 10%); }
+.user-menu-identity { display: grid; gap: 2px; padding: 10px 11px; border-bottom: 1px solid #f0f0f1; }
+.user-menu-identity strong { overflow: hidden; font-size: 11px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.user-menu-identity span { overflow: hidden; color: #71717a; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.user-menu-logout { width: 100%; height: 32px; padding: 0 11px; color: #3f3f46; background: white; border: 0; cursor: pointer; font-size: 11px; text-align: left; }
+.user-menu-logout:hover, .user-menu-logout:focus-visible { color: #18181b; background: #f4f4f5; outline: none; }
+.user-menu-error { margin: 0; padding: 0 11px 10px; color: #b91c1c; font-size: 10px; line-height: 1.35; }
 .notification-trigger { position: relative; width: 30px; height: 30px; display: grid; place-items: center; padding: 0; color: #52525b; background: white; border: 1px solid #e4e4e7; border-radius: 6px; cursor: pointer; }
 .notification-badge { position: absolute; top: -5px; right: -5px; min-width: 16px; height: 16px; display: grid; place-items: center; padding: 0 4px; color: white; background: #dc2626; border: 2px solid white; border-radius: 999px; font-size: 9px; font-weight: 700; }
 .notification-popover { position: absolute; z-index: 30; top: 36px; right: 0; width: 320px; overflow: hidden; color: #27272a; background: white; border: 1px solid #e4e4e7; border-radius: 8px; box-shadow: 0 12px 30px rgb(0 0 0 / 10%); }
