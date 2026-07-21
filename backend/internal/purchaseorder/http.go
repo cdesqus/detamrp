@@ -62,7 +62,7 @@ func RegisterRoutes(router *gin.Engine, service *Service, authenticator Authenti
 		if writeHTTPError(c, err) {
 			return
 		}
-		c.JSON(http.StatusCreated, order)
+		c.JSON(http.StatusCreated, projectOrder(order, hasPermission(c, "po.price.view")))
 	})
 	orders.PUT("/:id", rbac.RequirePermissions("po.edit_draft"), func(c *gin.Context) {
 		id, ok := routeID(c)
@@ -77,7 +77,7 @@ func RegisterRoutes(router *gin.Engine, service *Service, authenticator Authenti
 		if writeHTTPError(c, err) {
 			return
 		}
-		c.JSON(http.StatusOK, order)
+		c.JSON(http.StatusOK, projectOrder(order, hasPermission(c, "po.price.view")))
 	})
 	orders.POST("/:id/submit", rbac.RequirePermissions("po.submit"), func(c *gin.Context) {
 		id, ok := routeID(c)
@@ -88,7 +88,7 @@ func RegisterRoutes(router *gin.Engine, service *Service, authenticator Authenti
 		if writeHTTPError(c, err) {
 			return
 		}
-		c.JSON(http.StatusOK, order)
+		c.JSON(http.StatusOK, projectOrder(order, hasPermission(c, "po.price.view")))
 	})
 	orders.POST("/:id/cancel", rbac.RequirePermissions("po.edit_draft"), func(c *gin.Context) {
 		id, ok := routeID(c)
@@ -99,7 +99,7 @@ func RegisterRoutes(router *gin.Engine, service *Service, authenticator Authenti
 		if writeHTTPError(c, err) {
 			return
 		}
-		c.JSON(http.StatusOK, order)
+		c.JSON(http.StatusOK, projectOrder(order, hasPermission(c, "po.price.view")))
 	})
 
 	approvals := router.Group("/purchase-order-approvals", authenticate(authenticator))

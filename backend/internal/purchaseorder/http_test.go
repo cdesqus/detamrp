@@ -232,6 +232,43 @@ func TestPurchaseOrderGetResponsesRedactPricesWithoutPricePermission(t *testing.
 	}
 }
 
+func TestPurchaseOrderMutationResponsesRedactPricesWithoutPricePermission(t *testing.T) {
+	line := OrderLine{RawMaterialID: uuid.New(), TotalKanban: decimal.NewFromInt(1), UnitPriceSnapshot: decimal.NewFromInt(7), LineTotal: decimal.NewFromInt(21)}
+	order := Order{ID: uuid.New(), Status: StatusDraft, TotalAmount: decimal.NewFromInt(21), Lines: []OrderLine{line}}
+	for _, test := range []struct {
+		name       string
+		method     string
+		path       string
+		body       string
+		permission string
+	}{
+		{name: "create", method: http.MethodPost, path: "/purchase-orders", body: validOrderJSON(), permission: "po.create"},
+		{name: "update", method: http.MethodPut, path: "/purchase-orders/" + order.ID.String(), body: validOrderJSON(), permission: "po.edit_draft"},
+		{name: "submit", method: http.MethodPost, path: "/purchase-orders/" + order.ID.String() + "/submit", permission: "po.submit"},
+		{name: "cancel", method: http.MethodPost, path: "/purchase-orders/" + order.ID.String() + "/cancel", permission: "po.edit_draft"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			repository := &httpRepository{order: order}
+			redacted := serve(purchaseOrderRouter(t, []string{test.permission}, repository), test.method, test.path, test.body, "session")
+			if redacted.Code < 200 || redacted.Code >= 300 {
+				t.Fatalf("redacted status = %d: %s", redacted.Code, redacted.Body.String())
+			}
+			for _, forbidden := range []string{`"totalAmount"`, `"unitPriceSnapshot"`, `"lineTotal"`} {
+				if strings.Contains(redacted.Body.String(), forbidden) {
+					t.Errorf("response without price permission exposed %s: %s", forbidden, redacted.Body.String())
+				}
+			}
+
+			authorized := serve(purchaseOrderRouter(t, []string{test.permission, "po.price.view"}, repository), test.method, test.path, test.body, "session")
+			for _, required := range []string{`"totalAmount"`, `"unitPriceSnapshot"`, `"lineTotal"`} {
+				if !strings.Contains(authorized.Body.String(), required) {
+					t.Errorf("authorized response omitted %s: %s", required, authorized.Body.String())
+				}
+			}
+		})
+	}
+}
+
 func TestPurchaseOrderRoutesReturnFieldErrorsForInvalidDates(t *testing.T) {
 	router := purchaseOrderRouter(t, []string{"po.create"}, &httpRepository{})
 	body := `{"supplierId":"` + uuid.New().String() + `","orderDate":"2026-02-30","expectedDeliveryDate":"not-a-date","currency":"IDR"}`

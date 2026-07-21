@@ -2,11 +2,13 @@ package database
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -18,6 +20,7 @@ func TestComposeRunsVersionedMigrationsBeforeBackend(t *testing.T) {
 		"PGUSER: nextgen",
 		"PGPASSWORD: nextgen",
 		"./database/migrations:/migrations:ro",
+		"./database/migration-bootstrap.sql:/migration-tools/migration-bootstrap.sql:ro",
 	} {
 		if !strings.Contains(content, fragment) {
 			t.Errorf("compose migration contract missing %q", fragment)
@@ -50,11 +53,7 @@ func TestLiveSchemaMigrationsAreAppliedExactlyOnce(t *testing.T) {
 func TestMigrationScriptBaselinesOnlyLegacyVersionsAndSortsNumericFiles(t *testing.T) {
 	content := readRepositoryFile(t, "database", "migrate.sh")
 	for _, fragment := range []string{
-		"to_regclass('public.tenants')",
-		"001_foundation.sql",
-		"002_master_data.sql",
-		"003_raw_material_price.sql",
-		"004_settings_identity.sql",
+		"migration-bootstrap.sql",
 		"sort -n",
 		"migrate-one.sql",
 	} {
@@ -62,9 +61,64 @@ func TestMigrationScriptBaselinesOnlyLegacyVersionsAndSortsNumericFiles(t *testi
 			t.Errorf("migration runner missing %q", fragment)
 		}
 	}
-	baseline := content[strings.Index(content, "legacy_initialized"):strings.Index(content, "find /migrations")]
-	if strings.Contains(baseline, "005_purchase_orders.sql") {
-		t.Fatal("legacy baseline must not mark migration 005 as applied")
+	bootstrap := readRepositoryFile(t, "database", "migration-bootstrap.sql")
+	for _, fragment := range []string{
+		"partial legacy schema",
+		"measurements", "suppliers", "raw_materials", "warehouses", "warehouse_locations",
+		"standard_unit_price", "currency", "default_approver_user_id", "users_tenant_email_ci_key",
+		"(1, '001_foundation.sql')", "(2, '002_master_data.sql')", "(3, '003_raw_material_price.sql')", "(4, '004_settings_identity.sql')",
+	} {
+		if !strings.Contains(bootstrap, fragment) {
+			t.Errorf("migration bootstrap missing sentinel %q", fragment)
+		}
+	}
+	if strings.Contains(bootstrap, "005_purchase_orders.sql") {
+		t.Fatal("legacy bootstrap must not mark migration 005 as applied")
+	}
+}
+
+func TestLiveMigrationBootstrapRejectsPartialLegacySchemaWithoutLedger(t *testing.T) {
+	databaseURL := os.Getenv("TEST_DATABASE_URL")
+	if databaseURL == "" {
+		t.Skip("TEST_DATABASE_URL is not configured")
+	}
+	ctx := context.Background()
+	pool, err := pgxpool.New(ctx, databaseURL)
+	if err != nil {
+		t.Fatalf("open test database: %v", err)
+	}
+	defer pool.Close()
+	connection, err := pool.Acquire(ctx)
+	if err != nil {
+		t.Fatalf("acquire connection: %v", err)
+	}
+	defer connection.Release()
+	schema := "migration_partial_" + strings.ReplaceAll(filepath.Base(t.TempDir()), "-", "_")
+	identifier := pgx.Identifier{schema}.Sanitize()
+	if _, err := connection.Exec(ctx, "CREATE SCHEMA "+identifier); err != nil {
+		t.Fatalf("create partial schema: %v", err)
+	}
+	defer connection.Exec(ctx, "DROP SCHEMA IF EXISTS "+identifier+" CASCADE")
+	if _, err := connection.Exec(ctx, "SET search_path TO "+identifier); err != nil {
+		t.Fatalf("set partial schema: %v", err)
+	}
+	if _, err := connection.Exec(ctx, `CREATE TABLE tenants(id uuid PRIMARY KEY)`); err != nil {
+		t.Fatalf("create tenants sentinel: %v", err)
+	}
+	bootstrap := readRepositoryFile(t, "database", "migration-bootstrap.sql")
+	_, err = connection.Exec(ctx, bootstrap, pgx.QueryExecModeSimpleProtocol)
+	if err == nil || !strings.Contains(strings.ToLower(err.Error()), "partial legacy schema") {
+		t.Fatalf("bootstrap error = %v, want clear partial legacy failure", err)
+	}
+	if _, rollbackErr := connection.Exec(ctx, "ROLLBACK"); rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
+		t.Fatalf("rollback failed bootstrap: %v", rollbackErr)
+	}
+	var ledgerTables int
+	if err := connection.QueryRow(ctx, `SELECT count(*) FROM information_schema.tables WHERE table_schema=$1 AND table_name='schema_migrations'`, schema).Scan(&ledgerTables); err != nil {
+		t.Fatalf("inspect migration ledger: %v", err)
+	}
+	if ledgerTables != 0 {
+		t.Fatal("partial legacy bootstrap persisted a migration ledger")
 	}
 }
 

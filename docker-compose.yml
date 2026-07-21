@@ -27,6 +27,7 @@ services:
     volumes:
       - ./database/migrations:/migrations:ro
       - ./database/migrate.sh:/migration-tools/migrate.sh:ro
+      - ./database/migration-bootstrap.sql:/migration-tools/migration-bootstrap.sql:ro
       - ./database/migrate-one.sql:/migration-tools/migrate-one.sql:ro
     command: ["/bin/sh", "/migration-tools/migrate.sh"]
     restart: "no"
