@@ -65,16 +65,18 @@ func (s Supplier) Validate() error {
 }
 
 type RawMaterial struct {
-	ID           uuid.UUID       `json:"id"`
-	Code         string          `json:"code"`
-	SageItemCode string          `json:"sageItemCode"`
-	Name         string          `json:"name"`
-	SupplierID   uuid.UUID       `json:"supplierId"`
-	BaseUnitID   uuid.UUID       `json:"baseUnitId"`
-	QtyPerKanban decimal.Decimal `json:"qtyPerKanban"`
-	MinimumStock decimal.Decimal `json:"minimumStock"`
-	Description  string          `json:"description"`
-	Active       bool            `json:"active"`
+	ID                uuid.UUID       `json:"id"`
+	Code              string          `json:"code"`
+	SageItemCode      string          `json:"sageItemCode"`
+	Name              string          `json:"name"`
+	SupplierID        uuid.UUID       `json:"supplierId"`
+	BaseUnitID        uuid.UUID       `json:"baseUnitId"`
+	QtyPerKanban      decimal.Decimal `json:"qtyPerKanban"`
+	MinimumStock      decimal.Decimal `json:"minimumStock"`
+	StandardUnitPrice decimal.Decimal `json:"standardUnitPrice"`
+	Currency          string          `json:"currency"`
+	Description       string          `json:"description"`
+	Active            bool            `json:"active"`
 	Audit
 }
 
