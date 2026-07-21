@@ -23,6 +23,7 @@ export function AppShell({ title, children }: { title: string; children: ReactNo
   const [notificationItems, setNotificationItems] = useState<NotificationItem[]>([]);
   const [notificationTotal, setNotificationTotal] = useState(0);
   const notificationRequest = useRef<{ generation: number; controller: AbortController | null }>({ generation: 0, controller: null });
+  const decidedApprovalIDs = useRef(new Set<string>());
   const [collapsed, setCollapsed] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() => Object.fromEntries(navigationGroups.filter(group => group.collapsible && group.label).map(group => [group.label!, group.items.some(item => pathname === item.href || pathname.startsWith(`${item.href}/`))])));
@@ -52,8 +53,10 @@ export function AppShell({ title, children }: { title: string; children: ReactNo
       const payload = await response.json() as { items?: PendingApproval[]; total?: number };
       if (generation !== notificationRequest.current.generation || controller.signal.aborted) return;
       const approvals = payload.items ?? [];
+      const visibleApprovals = approvals.filter(approval => !decidedApprovalIDs.current.has(approval.id));
+      const excludedCount = approvals.length - visibleApprovals.length;
       const canViewPurchaseOrders = user.permissions.includes('po.view');
-      setNotificationItems(approvals.map(approval => {
+      setNotificationItems(visibleApprovals.map(approval => {
         const reference = approval.poNumber ?? `PO ${approval.purchaseOrderId}`;
         return {
         id: approval.id,
@@ -63,13 +66,21 @@ export function AppShell({ title, children }: { title: string; children: ReactNo
         unread: true,
         type: 'approval'
       }; }));
-      setNotificationTotal(payload.total ?? approvals.length);
+      setNotificationTotal(Math.max(0, (payload.total ?? approvals.length) - excludedCount));
     } catch { /* Preserve the last good notification snapshot on refresh failure. */ }
   }, [user]);
 
   useEffect(() => {
     void loadApprovalNotifications();
-    const refresh = () => void loadApprovalNotifications();
+    const refresh = (event: Event) => {
+      const approvalID = (event as CustomEvent<{ approvalId?: string }>).detail?.approvalId;
+      if (approvalID && !decidedApprovalIDs.current.has(approvalID)) {
+        decidedApprovalIDs.current.add(approvalID);
+        setNotificationItems(value => value.filter(item => item.id !== approvalID));
+        setNotificationTotal(value => Math.max(0, value - 1));
+      }
+      void loadApprovalNotifications();
+    };
     window.addEventListener(approvalRefreshEvent, refresh);
     return () => {
       window.removeEventListener(approvalRefreshEvent, refresh);

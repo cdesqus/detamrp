@@ -129,6 +129,9 @@ button:disabled { cursor: not-allowed; opacity: .48; }
 .approval-actions { display: flex; align-items: center; gap: 5px; }
 .approval-actions button { height: 27px; padding: 0 8px; border: 1px solid #d4d4d8; border-radius: 4px; background: white; color: #3f3f46; cursor: pointer; font-size: 10px; }
 .approval-actions .primary-button { color: white; border-color: #27272a; background: #27272a; }
+.approval-pagination { display: flex; align-items: center; justify-content: flex-end; gap: 10px; padding: 7px 9px; color: #71717a; background: white; border: 1px solid #e4e4e7; border-top: 0; border-radius: 0 0 7px 7px; font-size: 10px; }
+.approval-pagination > div { display: flex; gap: 5px; }
+.approval-pagination button { height: 26px; padding: 0 8px; color: #3f3f46; background: white; border: 1px solid #d4d4d8; border-radius: 4px; cursor: pointer; }
 .approval-card { display: grid; grid-template-columns: minmax(220px, 1fr) minmax(260px, 1.4fr) auto; align-items: center; gap: 10px; margin-top: 16px; padding: 12px; background: white; border: 1px solid #e4e4e7; border-radius: 7px; }
 .approval-card > div { display: grid; gap: 3px; }
 .approval-card strong { font-size: 12px; font-weight: 600; }

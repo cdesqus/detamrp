@@ -4,12 +4,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppShell } from './app-shell';
 
 const replace = vi.fn();
+const router = { replace };
 let currentPath = '/dashboard';
 const director = { username: 'director_demo', displayName: 'Director Demo', permissions: ['po.view', 'po.price.view', 'po.approve', 'po.reject', 'inventory.view'] };
 
 vi.mock('next/navigation', () => ({
   usePathname: () => currentPath,
-  useRouter: () => ({ replace })
+  useRouter: () => router
 }));
 
 function auth(user = { username: 'admin', displayName: 'Administrator', permissions: [] as string[] }) {
@@ -143,5 +144,31 @@ describe('AppShell', () => {
 
     expect(screen.getByText('PO-GOOD awaits approval')).toBeInTheDocument();
     expect(screen.getByTestId('notification-badge')).toHaveTextContent('4');
+  });
+
+  it('optimistically removes a decided approval and never restores it when refresh fails', async () => {
+    let approvalRequest = 0;
+    const fetchMock = vi.fn((path: string) => {
+      if (path === '/api/auth/me') return Promise.resolve(auth(director));
+      approvalRequest += 1;
+      return Promise.resolve(approvalRequest === 1
+        ? { ok: true, json: async () => ({ items: [
+          { id: 'approval-decided', purchaseOrderId: 'po-decided', poNumber: 'PO-DECIDED', supplierName: 'Supplier A' },
+          { id: 'approval-other', purchaseOrderId: 'po-other', poNumber: 'PO-OTHER', supplierName: 'Supplier B' }
+        ], total: 2 }) } as Response
+        : { ok: false } as Response);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const user = userEvent.setup();
+    render(<AppShell title="Dashboard"><div>content</div></AppShell>);
+    await waitFor(() => expect(screen.getByTestId('notification-badge')).toHaveTextContent('2'));
+
+    window.dispatchEvent(new CustomEvent('purchase-order-approvals:refresh', { detail: { approvalId: 'approval-decided' } }));
+    await waitFor(() => expect(fetchMock.mock.calls.filter(([path]) => path === '/api/purchase-order-approvals?limit=200').length).toBe(2));
+    await user.click(screen.getByRole('button', { name: 'Notifications' }));
+
+    expect(screen.queryByText('PO-DECIDED awaits approval')).not.toBeInTheDocument();
+    expect(screen.getByText('PO-OTHER awaits approval')).toBeInTheDocument();
+    expect(screen.getByTestId('notification-badge')).toHaveTextContent('1');
   });
 });
