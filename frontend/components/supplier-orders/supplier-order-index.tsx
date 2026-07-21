@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
 type Order = { id: string; poNumber: string; supplierId: string; supplierName?: string; orderDate: string; expectedDeliveryDate: string; status: string; totalAmount: string; currency: string; createdBy?: { displayName?: string } };
@@ -15,16 +15,19 @@ export function SupplierOrderIndex() {
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const requestSequence = useRef(0);
   const load = useCallback(async () => {
+    const request = ++requestSequence.current;
     setLoading(true); setError('');
     try {
       const [response, supplierResponse] = await Promise.all([fetch(`/api/purchase-orders?${new URLSearchParams({ search })}`, { credentials: 'include' }), fetch('/api/master-data/suppliers?active=true&limit=200', { credentials: 'include' })]);
       if (!response.ok) throw new Error('Supplier orders could not be loaded');
       const [data, supplierData] = await Promise.all([response.json() as Promise<{ items: Order[]; total: number }>, supplierResponse.ok ? supplierResponse.json() as Promise<{ items: Supplier[] }> : Promise.resolve({ items: [] as Supplier[] })]);
       const names = new Map((supplierData.items ?? []).map(supplier => [supplier.id, `${supplier.code} — ${supplier.name}`]));
+      if (request !== requestSequence.current) return;
       setItems((data.items ?? []).map(order => ({ ...order, supplierName: names.get(order.supplierId) ?? '—' }))); setTotal(data.total ?? 0);
-    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Supplier orders could not be loaded'); }
-    finally { setLoading(false); }
+    } catch (cause) { if (request === requestSequence.current) setError(cause instanceof Error ? cause.message : 'Supplier orders could not be loaded'); }
+    finally { if (request === requestSequence.current) setLoading(false); }
   }, [search]);
   useEffect(() => { const timer = setTimeout(load, 200); return () => clearTimeout(timer); }, [load]);
   return <section className="module-index supplier-order-index">
