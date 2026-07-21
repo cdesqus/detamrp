@@ -36,6 +36,7 @@ func TestMigrationContainsTenantScopedPurchaseOrderContracts(t *testing.T) {
 		"foreign key (tenant_id, base_unit_id)",
 		"force row level security",
 		"purchase_order_supplier_matches_material",
+		"grant select, insert, update, delete on purchase_order_lines to nextgen_app",
 	} {
 		if !strings.Contains(sql, fragment) {
 			t.Fatalf("migration missing %q", fragment)

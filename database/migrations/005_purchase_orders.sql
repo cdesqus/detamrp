@@ -147,4 +147,5 @@ CREATE POLICY purchase_order_approvals_isolation ON purchase_order_approvals
   USING (tenant_id = current_setting('app.tenant_id', true)::uuid)
   WITH CHECK (tenant_id = current_setting('app.tenant_id', true)::uuid);
 
-GRANT SELECT, INSERT, UPDATE ON purchase_order_number_sequences, purchase_orders, purchase_order_lines, purchase_order_approvals TO nextgen_app;
+GRANT SELECT, INSERT, UPDATE ON purchase_order_number_sequences, purchase_orders, purchase_order_approvals TO nextgen_app;
+GRANT SELECT, INSERT, UPDATE, DELETE ON purchase_order_lines TO nextgen_app;

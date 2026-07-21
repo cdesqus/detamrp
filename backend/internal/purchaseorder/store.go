@@ -26,6 +26,8 @@ const orderSelect = `SELECT p.id,p.tenant_id,p.po_number,p.supplier_id,p.order_d
  JOIN users cu ON cu.tenant_id=p.tenant_id AND cu.id=p.created_by_user_id
  JOIN users uu ON uu.tenant_id=p.tenant_id AND uu.id=p.updated_by_user_id`
 
+const getOrderHeaderQuery = orderSelect + ` WHERE p.tenant_id=$1 AND p.id=$2 FOR SHARE`
+
 const orderLineSelect = `SELECT l.id,l.tenant_id,l.purchase_order_id,l.raw_material_id,l.raw_material_code_snapshot,
  l.raw_material_name_snapshot,l.base_unit_id,l.base_unit_code_snapshot,l.qty_per_kanban_snapshot,l.total_kanban,
  l.ordered_base_qty,l.unit_price_snapshot,l.line_total,l.sort_position,l.created_by_user_id,cu.display_name,cu.email,
@@ -120,7 +122,7 @@ func (s *SQLStore) GetOrder(ctx context.Context, actor Actor, id uuid.UUID) (ord
 }
 
 func getOrder(ctx context.Context, tx database.TenantTx, tenantID, id uuid.UUID) (Order, error) {
-	order, err := scanOrder(tx.QueryRow(ctx, orderSelect+` WHERE p.tenant_id=$1 AND p.id=$2`, tenantID, id))
+	order, err := scanOrder(tx.QueryRow(ctx, getOrderHeaderQuery, tenantID, id))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Order{}, NotFoundError{Resource: "purchase order"}
 	}
