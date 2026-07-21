@@ -36,6 +36,20 @@ button, input { font: inherit; }
 .mobile-sidebar-toggle, .drawer-scrim { display: none; }
 .app-content main { padding: 20px; }
 .app-content h1 { margin: 0 0 5px; font-size: 20px; font-weight: 600; }
+.page-title-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.primary-button, .table-toolbar button { height: 32px; padding: 0 11px; border: 1px solid #d4d4d8; border-radius: 5px; background: white; color: #3f3f46; }
+.primary-button { color: white; border-color: #27272a; background: #27272a; }
+button:disabled { cursor: not-allowed; opacity: .48; }
+.table-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 18px; padding: 8px; background: white; border: 1px solid #e4e4e7; border-bottom: 0; border-radius: 7px 7px 0 0; }
+.table-toolbar input { width: min(280px, 100%); height: 32px; padding: 0 9px; border: 1px solid #d4d4d8; border-radius: 5px; outline: none; }
+.table-toolbar input:focus { border-color: #71717a; box-shadow: 0 0 0 2px rgb(24 24 27 / 7%); }
+.toolbar-actions { display: flex; gap: 6px; }
+.table-frame { overflow-x: auto; background: white; border: 1px solid #e4e4e7; border-radius: 0 0 7px 7px; }
+.table-frame table { width: 100%; min-width: 760px; border-collapse: collapse; }
+.table-frame th { height: 34px; padding: 0 10px; color: #71717a; background: #fafafa; border-bottom: 1px solid #e4e4e7; font-size: 11px; font-weight: 600; text-align: left; white-space: nowrap; }
+.table-frame td { padding: 0 10px; }
+.table-empty { min-height: 220px; display: grid; place-content: center; justify-items: center; gap: 5px; color: #71717a; font-size: 12px; }
+.table-empty strong { color: #3f3f46; font-size: 13px; font-weight: 600; }
 .metric-grid { display: grid; grid-template-columns: repeat(4, minmax(140px, 1fr)); gap: 10px; margin-top: 20px; }
 .metric-grid article { min-height: 82px; display: grid; align-content: space-between; padding: 13px; background: white; border: 1px solid #e4e4e7; border-radius: 7px; }
 .metric-grid span { color: #71717a; font-size: 12px; }
