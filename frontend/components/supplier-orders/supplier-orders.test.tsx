@@ -1,7 +1,7 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { SupplierOrderForm } from './supplier-order-form';
+import { localDateISO, SupplierOrderForm } from './supplier-order-form';
 import { SupplierOrderIndex } from './supplier-order-index';
 import { formatDecimal, multiplyDecimals } from './supplier-order-form';
 
@@ -12,6 +12,7 @@ const supplier = { id: 'supplier-1', code: 'SUP-01', name: 'PT Prima', currency:
 const material = { id: 'material-1', code: 'RM-01', name: 'Steel Coil', supplierId: 'supplier-1', baseUnitCode: 'KG', qtyPerKanban: '0.1', standardUnitPrice: '0.2', active: true };
 
 function response(body: unknown, ok = true) { return { ok, json: async () => body } as Response; }
+function deferred<T>() { let resolve!: (value: T) => void; const promise = new Promise<T>(value => { resolve = value; }); return { promise, resolve }; }
 
 describe('supplier order UI', () => {
   beforeEach(() => { push.mockReset(); vi.stubGlobal('confirm', vi.fn(() => true)); });
@@ -21,8 +22,34 @@ describe('supplier order UI', () => {
     const user = userEvent.setup();
     render(<SupplierOrderIndex />);
     expect(await screen.findByText('PO-202607-00001')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Open PO-202607-00001' })).toBeInTheDocument();
+    expect(fetch).toHaveBeenCalledWith('/api/master-data/suppliers?limit=200', { credentials: 'include' });
     await user.click(screen.getByRole('button', { name: 'Create order' }));
     expect(push).toHaveBeenCalledWith('/supplier-orders/new');
+  });
+
+  it('ignores an out-of-order earlier index response after search changes', async () => {
+    vi.useFakeTimers();
+    try {
+      const firstOrders = deferred<Response>(); const firstSuppliers = deferred<Response>();
+      const secondOrders = deferred<Response>(); const secondSuppliers = deferred<Response>();
+      let request = 0;
+      const fetchMock = vi.fn().mockImplementation(() => [firstOrders, firstSuppliers, secondOrders, secondSuppliers][request++]?.promise);
+      vi.stubGlobal('fetch', fetchMock);
+      render(<SupplierOrderIndex />);
+      await act(async () => { await vi.advanceTimersByTimeAsync(200); });
+      fireEvent.change(screen.getByRole('searchbox', { name: 'Search Supplier Orders' }), { target: { value: 'new' } });
+      await act(async () => { await vi.advanceTimersByTimeAsync(200); });
+      secondOrders.resolve(response({ items: [{ id: 'new', poNumber: 'PO-NEW', supplierId: 'supplier-1', orderDate: '2026-07-21', expectedDeliveryDate: '2026-07-22', status: 'DRAFT', totalAmount: '1', currency: 'IDR' }], total: 1 }));
+      secondSuppliers.resolve(response({ items: [supplier] }));
+      await act(async () => {});
+      expect(screen.getByText('PO-NEW')).toBeInTheDocument();
+      firstOrders.resolve(response({ items: [{ id: 'old', poNumber: 'PO-OLD', supplierId: 'supplier-1', orderDate: '2026-07-21', expectedDeliveryDate: '2026-07-22', status: 'DRAFT', totalAmount: '1', currency: 'IDR' }], total: 1 }));
+      firstSuppliers.resolve(response({ items: [supplier] }));
+      await act(async () => {});
+      expect(screen.queryByText('PO-OLD')).not.toBeInTheDocument();
+      expect(screen.getByText('PO-NEW')).toBeInTheDocument();
+    } finally { vi.useRealTimers(); }
   });
 
   it('filters material choices by searchable supplier, calculates without float drift, and sends both save actions', async () => {
@@ -86,6 +113,22 @@ describe('supplier order UI', () => {
     expect(screen.getByRole('combobox', { name: 'Supplier' })).toHaveValue('SUP-01 — PT Prima');
   });
 
+  it('keeps committed supplier lines while users incrementally type an alternative and restores on declined confirmation', async () => {
+    const other = { ...supplier, id: 'supplier-2', code: 'SUP-02', name: 'PT Dua' };
+    vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => Promise.resolve(response(url.includes('suppliers') ? { items: [supplier, other] } : { items: [material] }))));
+    const confirmMock = vi.fn(() => false);
+    vi.stubGlobal('confirm', confirmMock);
+    const user = userEvent.setup();
+    render(<SupplierOrderForm initialOrder={{ id: 'po-1', status: 'DRAFT', supplierId: 'supplier-1', currency: 'IDR', orderDate: '2026-07-21', expectedDeliveryDate: '2026-07-22', lines: [{ rawMaterialId: 'material-1', rawMaterialCode: 'RM-01', rawMaterialName: 'Steel Coil', baseUnitCode: 'KG', qtyPerKanbanSnapshot: '1', totalKanban: '1', unitPriceSnapshot: '1' }] }} />);
+    const supplierBox = screen.getByRole('combobox', { name: 'Supplier' });
+    await waitFor(() => expect(supplierBox).toHaveValue('SUP-01 — PT Prima'));
+    await user.clear(supplierBox);
+    await user.type(supplierBox, 'SUP-02 — PT Dua');
+    expect(confirmMock).toHaveBeenCalledTimes(1);
+    expect(screen.getByText('RM-01 — Steel Coil')).toBeInTheDocument();
+    expect(supplierBox).toHaveValue('SUP-01 — PT Prima');
+  });
+
   it('shows server errors, lets a draft be cancelled, and keeps submitted details read-only', async () => {
     const fetchMock = vi.fn().mockResolvedValue(response({ message: 'Cannot save this order', fields: { expectedDeliveryDate: 'Expected date is invalid' } }, false));
     vi.stubGlobal('fetch', fetchMock);
@@ -105,7 +148,12 @@ describe('supplier order UI', () => {
     expect(multiplyDecimals('0.3333335', '3')).toBe('1.000001');
   });
 
-  it('clears stale selection IDs when supplier or material text is cleared', async () => {
+  it('derives default order dates from local calendar components', () => {
+    expect(localDateISO(new Date(2026, 0, 1, 0, 5))).toBe('2026-01-01');
+    expect(localDateISO(new Date(2026, 11, 31, 23, 55))).toBe('2026-12-31');
+  });
+
+  it('clears stale material selection while restoring committed supplier after an unmatched query blur', async () => {
     const fetchMock = vi.fn().mockResolvedValueOnce(response({ items: [supplier], total: 1 })).mockResolvedValueOnce(response({ items: [material], total: 1 }));
     vi.stubGlobal('fetch', fetchMock);
     const user = userEvent.setup();
@@ -120,9 +168,9 @@ describe('supplier order UI', () => {
     await user.clear(materialBox);
     expect(screen.getByRole('button', { name: '+ Raw Material' })).toBeDisabled();
     await user.clear(supplierBox);
-    expect(screen.getByRole('combobox', { name: 'Raw Material' })).toBeDisabled();
-    await user.click(screen.getByRole('button', { name: 'Save as Draft' }));
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    await user.tab();
+    expect(supplierBox).toHaveValue('SUP-01 — PT Prima');
+    expect(screen.getByRole('combobox', { name: 'Raw Material' })).toBeEnabled();
   });
 
   it('blocks saving invalid Total Kanban and maps indexed backend field errors to that row', async () => {

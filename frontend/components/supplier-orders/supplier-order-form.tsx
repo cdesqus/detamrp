@@ -11,7 +11,12 @@ type Props = { orderId?: string; initialOrder?: InitialOrder };
 type ApiError = { message?: string; fields?: Record<string, string> };
 type Decimal = { value: bigint; scale: number };
 
-const today = () => new Date().toISOString().slice(0, 10);
+export function localDateISO(date: Date = new Date()) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
 const dateOnly = (value?: string) => (value || '').slice(0, 10);
 const optionLabel = (value: { code: string; name: string }) => `${value.code} — ${value.name}`;
 const fieldKey = (index: number) => `lines[${index}].totalKanban`;
@@ -67,12 +72,12 @@ export function SupplierOrderForm({ orderId, initialOrder }: Props) {
   const [poNumber, setPONumber] = useState(initialOrder?.poNumber ?? '');
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [supplierId, setSupplierId] = useState(initialOrder?.supplierId ?? '');
-  const [supplierText, setSupplierText] = useState('');
+  const [supplierQuery, setSupplierQuery] = useState('');
   const [materials, setMaterials] = useState<Material[]>([]);
   const [materialText, setMaterialText] = useState('');
   const [selectedMaterial, setSelectedMaterial] = useState<Material | null>(null);
-  const [orderDate, setOrderDate] = useState(dateOnly(initialOrder?.orderDate) || today());
-  const [expectedDeliveryDate, setExpectedDeliveryDate] = useState(dateOnly(initialOrder?.expectedDeliveryDate) || today());
+  const [orderDate, setOrderDate] = useState(dateOnly(initialOrder?.orderDate) || localDateISO());
+  const [expectedDeliveryDate, setExpectedDeliveryDate] = useState(dateOnly(initialOrder?.expectedDeliveryDate) || localDateISO());
   const [currency, setCurrency] = useState(initialOrder?.currency ?? '');
   const [notes, setNotes] = useState(initialOrder?.notes ?? '');
   const [lines, setLines] = useState<OrderLine[]>(initialOrder?.lines ?? []);
@@ -105,7 +110,7 @@ export function SupplierOrderForm({ orderId, initialOrder }: Props) {
   useEffect(() => {
     if (!supplierId) return;
     const supplier = suppliers.find(item => item.id === supplierId);
-    if (supplier) setSupplierText(optionLabel(supplier));
+    if (supplier) setSupplierQuery(optionLabel(supplier));
   }, [supplierId, suppliers]);
   useEffect(() => {
     if (!orderId || initialOrder) return;
@@ -129,21 +134,23 @@ export function SupplierOrderForm({ orderId, initialOrder }: Props) {
     return () => { current = false; controller.abort(); };
   }, [supplierId]);
 
-  const clearSupplier = useCallback((text = '') => {
-    setSupplierText(text); setSupplierId(''); setCurrency(''); setLines([]); setMaterials([]); setMaterialText(''); setSelectedMaterial(null); setMaterialError('');
-  }, []);
   const selectSupplier = useCallback((candidate: Supplier) => {
-    if (candidate.id === supplierId) { setSupplierText(optionLabel(candidate)); return; }
+    if (candidate.id === supplierId) { setSupplierQuery(optionLabel(candidate)); return; }
     if (lines.length > 0 && !window.confirm('Changing supplier clears all selected Raw Materials. Continue?')) {
       const existing = suppliers.find(item => item.id === supplierId);
-      setSupplierText(existing ? optionLabel(existing) : '');
+      setSupplierQuery(existing ? optionLabel(existing) : '');
       return;
     }
-    setSupplierId(candidate.id); setSupplierText(optionLabel(candidate)); setCurrency(candidate.currency); setLines([]); setMaterials([]); setMaterialText(''); setSelectedMaterial(null);
+    setSupplierId(candidate.id); setSupplierQuery(optionLabel(candidate)); setCurrency(candidate.currency); setLines([]); setMaterials([]); setMaterialText(''); setSelectedMaterial(null);
   }, [lines.length, supplierId, suppliers]);
   const changeSupplierText = (text: string) => {
+    setSupplierQuery(text);
     const match = suppliers.find(item => optionLabel(item) === text);
-    if (match) selectSupplier(match); else clearSupplier(text);
+    if (match) selectSupplier(match);
+  };
+  const restoreSupplierQuery = () => {
+    const committed = suppliers.find(item => item.id === supplierId);
+    if (supplierQuery !== (committed ? optionLabel(committed) : '')) setSupplierQuery(committed ? optionLabel(committed) : '');
   };
   const changeMaterialText = (text: string) => {
     setMaterialText(text);
@@ -205,7 +212,7 @@ export function SupplierOrderForm({ orderId, initialOrder }: Props) {
     {errors._form && <p className="form-error" role="alert">{errors._form}</p>}
     {supplierError && <p className="form-error" role="alert">{supplierError} <button className="table-action" onClick={() => void loadSuppliers()}>Retry</button></p>}
     <div className="supplier-order-card"><div className="supplier-order-fields">
-      <label>Supplier<input aria-label="Supplier" list="supplier-options" disabled={!editable} value={supplierText} onChange={event => changeSupplierText(event.target.value)} /><datalist id="supplier-options">{suppliers.map(item => <option key={item.id} value={optionLabel(item)} />)}</datalist>{errors.supplierId && <small role="alert">{errors.supplierId}</small>}</label>
+      <label>Supplier<input aria-label="Supplier" list="supplier-options" disabled={!editable} value={supplierQuery} onChange={event => changeSupplierText(event.target.value)} onBlur={restoreSupplierQuery} /><datalist id="supplier-options">{suppliers.map(item => <option key={item.id} value={optionLabel(item)} />)}</datalist>{errors.supplierId && <small role="alert">{errors.supplierId}</small>}</label>
       <label>Order Date<input type="date" value={orderDate} disabled={!editable} onChange={event => setOrderDate(event.target.value)} />{errors.orderDate && <small role="alert">{errors.orderDate}</small>}</label>
       <label>Expected Delivery Date<input type="date" min={orderDate} value={expectedDeliveryDate} disabled={!editable} onChange={event => setExpectedDeliveryDate(event.target.value)} />{errors.expectedDeliveryDate && <small role="alert">{errors.expectedDeliveryDate}</small>}</label>
       <label>Currency<input value={currency} aria-label="Currency" readOnly /></label>
