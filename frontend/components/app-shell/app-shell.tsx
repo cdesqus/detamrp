@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { ReactNode, useEffect, useState } from 'react';
+import { Icon } from '../icons';
 import { navigationGroups } from './navigation';
 
 type CurrentUser = { username: string; displayName: string; permissions: string[] };
@@ -14,6 +15,7 @@ export function AppShell({ title, children }: { title: string; children: ReactNo
   const [user, setUser] = useState<CurrentUser | null>(null);
   const [collapsed, setCollapsed] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(pathname.startsWith('/settings'));
 
   useEffect(() => {
     setCollapsed(localStorage.getItem(storageKey) === 'true');
@@ -36,16 +38,16 @@ export function AppShell({ title, children }: { title: string; children: ReactNo
     <div className={`app-shell${collapsed ? ' sidebar-collapsed' : ''}${drawerOpen ? ' drawer-open' : ''}`}>
       <button className="drawer-scrim" aria-label="Close navigation" onClick={() => setDrawerOpen(false)} />
       <aside aria-label="Main navigation">
-        <div className="sidebar-brand"><span>OS</span><b>Order Stock</b></div>
+        <div className="sidebar-brand"><span>OS</span><b>Order Stock</b><button className="sidebar-collapse" aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} aria-expanded={!collapsed} onClick={toggleSidebar}><Icon name={collapsed ? 'chevron-right' : 'chevron-left'} /></button></div>
         <nav>
           {navigationGroups.map((group, groupIndex) => (
             <div className="nav-group" key={group.label ?? groupIndex}>
-              {group.label ? <p>{group.label}</p> : null}
-              {group.items.map(item => {
+              {group.collapsible ? <button className="nav-group-toggle" aria-expanded={settingsOpen} onClick={() => setSettingsOpen(value => !value)}><Icon name={group.icon ?? 'settings'} /><span className="nav-label">{group.label}</span><Icon name={settingsOpen ? 'chevron-left' : 'chevron-right'} /></button> : group.label ? <p>{group.label}</p> : null}
+              {(!group.collapsible || settingsOpen) && group.items.map(item => {
                 const active = pathname === item.href || (item.href !== '/dashboard' && pathname.startsWith(`${item.href}/`));
                 return (
                   <Link href={item.href} key={item.href} aria-current={active ? 'page' : undefined} title={collapsed ? item.label : undefined} onClick={() => setDrawerOpen(false)}>
-                    <span className="nav-icon" aria-hidden="true">{item.icon}</span><span className="nav-label">{item.label}</span>
+                    <span className="nav-icon"><Icon name={item.icon} /></span><span className="nav-label">{item.label}</span>
                   </Link>
                 );
               })}
@@ -56,8 +58,7 @@ export function AppShell({ title, children }: { title: string; children: ReactNo
       <section className="app-content">
         <header>
           <div className="header-start">
-            <button className="desktop-sidebar-toggle" aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} aria-expanded={!collapsed} onClick={toggleSidebar}>{collapsed ? '›' : '‹'}</button>
-            <button className="mobile-sidebar-toggle" aria-label="Open navigation" onClick={() => setDrawerOpen(true)}>☰</button>
+            <button className="mobile-sidebar-toggle" aria-label="Open navigation" onClick={() => setDrawerOpen(true)}><Icon name="menu" /></button>
             <span>{title}</span>
           </div>
           <span>{user.displayName}</span>
