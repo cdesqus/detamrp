@@ -5,6 +5,8 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -185,7 +187,13 @@ func listQuery(c *gin.Context) (ListQuery, bool) {
 		}
 		query.SupplierID = id
 	}
-	query.Status = Status(c.Query("status"))
+	if raw := c.Query("status"); raw != "" {
+		query.Status = Status(raw)
+		if !isSupportedStatus(query.Status) {
+			invalidFilter(c, "status", "Unsupported purchase order status")
+			return query, false
+		}
+	}
 	if raw := c.Query("limit"); raw != "" {
 		value, err := strconv.Atoi(raw)
 		if err != nil {
@@ -206,12 +214,64 @@ func listQuery(c *gin.Context) (ListQuery, bool) {
 }
 
 func orderInput(c *gin.Context) (OrderInput, bool) {
-	var input OrderInput
-	if err := c.ShouldBindJSON(&input); err != nil {
+	var request orderRequest
+	if err := c.ShouldBindJSON(&request); err != nil {
 		invalidJSON(c)
 		return OrderInput{}, false
 	}
+	input := OrderInput{
+		SupplierID: request.SupplierID,
+		Currency:   request.Currency,
+		Notes:      request.Notes,
+		Lines:      request.Lines,
+	}
+	fields := FieldErrors{}
+	var err error
+	if input.OrderDate, err = parseOrderDate(request.OrderDate); err != nil {
+		fields["orderDate"] = "Order Date must be a valid date"
+	}
+	if input.ExpectedDeliveryDate, err = parseOrderDate(request.ExpectedDeliveryDate); err != nil {
+		fields["expectedDeliveryDate"] = "Expected Delivery Date must be a valid date"
+	}
+	if len(fields) > 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "validation_failed", "message": "Please correct the highlighted fields", "fields": fields})
+		return OrderInput{}, false
+	}
 	return input, true
+}
+
+type orderRequest struct {
+	SupplierID           uuid.UUID   `json:"supplierId"`
+	OrderDate            string      `json:"orderDate"`
+	ExpectedDeliveryDate string      `json:"expectedDeliveryDate"`
+	Currency             string      `json:"currency"`
+	Notes                string      `json:"notes"`
+	Lines                []LineInput `json:"lines"`
+}
+
+func parseOrderDate(value string) (time.Time, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return time.Time{}, nil
+	}
+	parsed, err := time.Parse(time.DateOnly, value)
+	if err != nil {
+		parsed, err = time.Parse(time.RFC3339, value)
+		if err != nil {
+			return time.Time{}, err
+		}
+	}
+	utc := parsed.UTC()
+	return time.Date(utc.Year(), utc.Month(), utc.Day(), 0, 0, 0, 0, time.UTC), nil
+}
+
+func isSupportedStatus(status Status) bool {
+	switch status {
+	case StatusDraft, StatusPendingApproval, StatusApproved, StatusRejected, StatusCancelled:
+		return true
+	default:
+		return false
+	}
 }
 
 func decisionInput(c *gin.Context) (DecisionInput, bool) {

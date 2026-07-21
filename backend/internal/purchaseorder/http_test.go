@@ -33,6 +33,8 @@ type httpRepository struct {
 	total     int
 	err       error
 	called    string
+	create    OrderInput
+	update    OrderInput
 }
 
 func (r *httpRepository) ListOrders(context.Context, Actor, ListQuery) ([]Order, int, error) {
@@ -43,12 +45,14 @@ func (r *httpRepository) GetOrder(context.Context, Actor, uuid.UUID) (Order, err
 	r.called = "get"
 	return r.order, r.err
 }
-func (r *httpRepository) CreateOrder(context.Context, Actor, OrderInput) (Order, error) {
+func (r *httpRepository) CreateOrder(_ context.Context, _ Actor, input OrderInput) (Order, error) {
 	r.called = "create"
+	r.create = input
 	return r.order, r.err
 }
-func (r *httpRepository) UpdateOrder(context.Context, Actor, uuid.UUID, OrderInput) (Order, error) {
+func (r *httpRepository) UpdateOrder(_ context.Context, _ Actor, _ uuid.UUID, input OrderInput) (Order, error) {
 	r.called = "update"
+	r.update = input
 	return r.order, r.err
 }
 func (r *httpRepository) SubmitOrder(context.Context, Actor, uuid.UUID) (Order, error) {
@@ -142,6 +146,70 @@ func TestPurchaseOrderRoutesRejectInvalidJSONAndUUIDs(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestPurchaseOrderRoutesRejectUnsupportedStatusFilter(t *testing.T) {
+	router := purchaseOrderRouter(t, []string{"po.view"}, &httpRepository{})
+	recorder := serve(router, http.MethodGet, "/purchase-orders?status=WAITING_FOR_VP", "", "session")
+
+	if recorder.Code != http.StatusBadRequest || !strings.Contains(recorder.Body.String(), `"error":"invalid_filter"`) || !strings.Contains(recorder.Body.String(), `"status"`) {
+		t.Fatalf("unexpected response: %d %s", recorder.Code, recorder.Body.String())
+	}
+}
+
+func TestPurchaseOrderRoutesAcceptDateOnlyOrderDates(t *testing.T) {
+	body := `{"supplierId":"` + uuid.New().String() + `","orderDate":"2026-07-21","expectedDeliveryDate":"2026-07-22","currency":"IDR","lines":[{"rawMaterialId":"` + uuid.New().String() + `","totalKanban":"1"}]}`
+	for _, test := range []struct {
+		name       string
+		method     string
+		path       string
+		permission string
+		status     int
+	}{
+		{"create", http.MethodPost, "/purchase-orders", "po.create", http.StatusCreated},
+		{"update", http.MethodPut, "/purchase-orders/" + uuid.New().String(), "po.edit_draft", http.StatusOK},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			repository := &httpRepository{order: Order{Status: StatusDraft}}
+			router := purchaseOrderRouter(t, []string{test.permission}, repository)
+			recorder := serve(router, test.method, test.path, body, "session")
+			if recorder.Code != test.status {
+				t.Fatalf("status = %d, want %d: %s", recorder.Code, test.status, recorder.Body.String())
+			}
+			input := repository.create
+			if test.name == "update" {
+				input = repository.update
+			}
+			if got := input.OrderDate; !got.Equal(time.Date(2026, time.July, 21, 0, 0, 0, 0, time.UTC)) || got.Location() != time.UTC {
+				t.Fatalf("order date = %s (%s), want normalized UTC date", got, got.Location())
+			}
+			if got := input.ExpectedDeliveryDate; !got.Equal(time.Date(2026, time.July, 22, 0, 0, 0, 0, time.UTC)) || got.Location() != time.UTC {
+				t.Fatalf("expected delivery date = %s (%s), want normalized UTC date", got, got.Location())
+			}
+		})
+	}
+}
+
+func TestPurchaseOrderRoutesReturnFieldErrorsForInvalidDates(t *testing.T) {
+	router := purchaseOrderRouter(t, []string{"po.create"}, &httpRepository{})
+	body := `{"supplierId":"` + uuid.New().String() + `","orderDate":"2026-02-30","expectedDeliveryDate":"not-a-date","currency":"IDR"}`
+	recorder := serve(router, http.MethodPost, "/purchase-orders", body, "session")
+
+	if recorder.Code != http.StatusBadRequest || !strings.Contains(recorder.Body.String(), `"fields"`) || !strings.Contains(recorder.Body.String(), `"orderDate"`) || !strings.Contains(recorder.Body.String(), `"expectedDeliveryDate"`) {
+		t.Fatalf("unexpected response: %d %s", recorder.Code, recorder.Body.String())
+	}
+}
+
+func TestPurchaseOrderResponseModelsUseLowerCamelJSON(t *testing.T) {
+	actor := Actor{TenantID: uuid.New(), UserID: uuid.New(), DisplayName: "Buyer", Email: "buyer@example.test"}
+	line := OrderLine{ID: uuid.New(), TenantID: uuid.New(), PurchaseOrderID: uuid.New(), RawMaterialID: uuid.New(), RawMaterialCode: "RM-1", RawMaterialName: "Resin", BaseUnitID: uuid.New(), BaseUnitCode: "KG", QtyPerKanbanSnapshot: decimal.NewFromInt(2), TotalKanban: decimal.NewFromInt(3), OrderedBaseQty: decimal.NewFromInt(6), UnitPriceSnapshot: decimal.NewFromInt(4), LineTotal: decimal.NewFromInt(24), SortPosition: 1, CreatedBy: actor, CreatedAt: time.Now(), UpdatedBy: actor, UpdatedAt: time.Now()}
+	order := Order{ID: uuid.New(), TenantID: uuid.New(), PONumber: "PO-202607-00001", SupplierID: uuid.New(), OrderDate: time.Now(), ExpectedDeliveryDate: time.Now(), Currency: "IDR", Notes: "notes", Status: StatusDraft, Version: 1, TotalAmount: decimal.NewFromInt(24), SagePurchaseOrderNumber: "SAGE-1", SubmittedApproverUserID: uuid.New(), SubmittedApproverDisplayName: "Director", SubmittedApproverEmail: "director@example.test", CreatedBy: actor, CreatedAt: time.Now(), UpdatedBy: actor, UpdatedAt: time.Now(), Lines: []OrderLine{line}}
+	approval := Approval{ID: uuid.New(), TenantID: uuid.New(), PurchaseOrderID: order.ID, Version: 1, ApproverUserID: uuid.New(), ApproverDisplayName: "Director", ApproverEmail: "director@example.test", Status: ApprovalPending, DecisionReason: "", DecidedByUserID: uuid.New(), CreatedBy: actor, CreatedAt: time.Now(), UpdatedBy: actor, UpdatedAt: time.Now()}
+
+	assertJSONKeys(t, order, []string{"id", "tenantId", "poNumber", "supplierId", "orderDate", "expectedDeliveryDate", "currency", "notes", "status", "version", "totalAmount", "sagePurchaseOrderNumber", "submittedApproverUserId", "submittedApproverDisplayName", "submittedApproverEmail", "createdBy", "createdAt", "updatedBy", "updatedAt", "lines"})
+	assertJSONKeys(t, line, []string{"id", "tenantId", "purchaseOrderId", "rawMaterialId", "rawMaterialCode", "rawMaterialName", "baseUnitId", "baseUnitCode", "qtyPerKanbanSnapshot", "totalKanban", "orderedBaseQty", "unitPriceSnapshot", "lineTotal", "sortPosition", "createdBy", "createdAt", "updatedBy", "updatedAt"})
+	assertJSONKeys(t, approval, []string{"id", "tenantId", "purchaseOrderId", "version", "approverUserId", "approverDisplayName", "approverEmail", "status", "decisionReason", "decidedAt", "decidedByUserId", "createdBy", "createdAt", "updatedBy", "updatedAt"})
+	assertJSONKeys(t, actor, []string{"tenantId", "userId", "displayName", "email"})
 }
 
 func TestPurchaseOrderRoutesReturnExpectedSuccessCodes(t *testing.T) {
@@ -246,4 +314,26 @@ func serve(router http.Handler, method, path, body, session string) *httptest.Re
 
 func validOrderJSON() string {
 	return `{"supplierId":"` + uuid.New().String() + `","orderDate":"` + time.Date(2026, time.July, 21, 0, 0, 0, 0, time.UTC).Format(time.RFC3339) + `","expectedDeliveryDate":"2026-07-22T00:00:00Z","currency":"IDR","lines":[{"rawMaterialId":"` + uuid.New().String() + `","totalKanban":"` + decimal.NewFromInt(1).String() + `"}]}`
+}
+
+func assertJSONKeys(t *testing.T, value any, keys []string) {
+	t.Helper()
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		t.Fatalf("marshal response model: %v", err)
+	}
+	var response map[string]json.RawMessage
+	if err := json.Unmarshal(encoded, &response); err != nil {
+		t.Fatalf("decode response model: %v", err)
+	}
+	for _, key := range keys {
+		if _, ok := response[key]; !ok {
+			t.Errorf("response missing JSON key %q: %s", key, encoded)
+		}
+	}
+	for key := range response {
+		if key != "" && key[0] >= 'A' && key[0] <= 'Z' {
+			t.Errorf("response exposed non-camel JSON key %q: %s", key, encoded)
+		}
+	}
 }

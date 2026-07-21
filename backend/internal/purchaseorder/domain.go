@@ -30,54 +30,54 @@ const (
 const databaseDecimalPlaces int32 = 6
 
 type Actor struct {
-	TenantID    uuid.UUID
-	UserID      uuid.UUID
-	DisplayName string
-	Email       string
+	TenantID    uuid.UUID `json:"tenantId"`
+	UserID      uuid.UUID `json:"userId"`
+	DisplayName string    `json:"displayName"`
+	Email       string    `json:"email"`
 }
 
 type Order struct {
-	ID                           uuid.UUID
-	TenantID                     uuid.UUID
-	PONumber                     string
-	SupplierID                   uuid.UUID
-	OrderDate                    time.Time
-	ExpectedDeliveryDate         time.Time
-	Currency                     string
-	Notes                        string
-	Status                       Status
-	Version                      int
-	TotalAmount                  decimal.Decimal
-	SagePurchaseOrderNumber      string
-	SubmittedApproverUserID      uuid.UUID
-	SubmittedApproverDisplayName string
-	SubmittedApproverEmail       string
-	CreatedBy                    Actor
-	CreatedAt                    time.Time
-	UpdatedBy                    Actor
-	UpdatedAt                    time.Time
-	Lines                        []OrderLine
+	ID                           uuid.UUID       `json:"id"`
+	TenantID                     uuid.UUID       `json:"tenantId"`
+	PONumber                     string          `json:"poNumber"`
+	SupplierID                   uuid.UUID       `json:"supplierId"`
+	OrderDate                    time.Time       `json:"orderDate"`
+	ExpectedDeliveryDate         time.Time       `json:"expectedDeliveryDate"`
+	Currency                     string          `json:"currency"`
+	Notes                        string          `json:"notes"`
+	Status                       Status          `json:"status"`
+	Version                      int             `json:"version"`
+	TotalAmount                  decimal.Decimal `json:"totalAmount"`
+	SagePurchaseOrderNumber      string          `json:"sagePurchaseOrderNumber"`
+	SubmittedApproverUserID      uuid.UUID       `json:"submittedApproverUserId"`
+	SubmittedApproverDisplayName string          `json:"submittedApproverDisplayName"`
+	SubmittedApproverEmail       string          `json:"submittedApproverEmail"`
+	CreatedBy                    Actor           `json:"createdBy"`
+	CreatedAt                    time.Time       `json:"createdAt"`
+	UpdatedBy                    Actor           `json:"updatedBy"`
+	UpdatedAt                    time.Time       `json:"updatedAt"`
+	Lines                        []OrderLine     `json:"lines"`
 }
 
 type OrderLine struct {
-	ID                   uuid.UUID
-	TenantID             uuid.UUID
-	PurchaseOrderID      uuid.UUID
-	RawMaterialID        uuid.UUID
-	RawMaterialCode      string
-	RawMaterialName      string
-	BaseUnitID           uuid.UUID
-	BaseUnitCode         string
-	QtyPerKanbanSnapshot decimal.Decimal
-	TotalKanban          decimal.Decimal
-	OrderedBaseQty       decimal.Decimal
-	UnitPriceSnapshot    decimal.Decimal
-	LineTotal            decimal.Decimal
-	SortPosition         int
-	CreatedBy            Actor
-	CreatedAt            time.Time
-	UpdatedBy            Actor
-	UpdatedAt            time.Time
+	ID                   uuid.UUID       `json:"id"`
+	TenantID             uuid.UUID       `json:"tenantId"`
+	PurchaseOrderID      uuid.UUID       `json:"purchaseOrderId"`
+	RawMaterialID        uuid.UUID       `json:"rawMaterialId"`
+	RawMaterialCode      string          `json:"rawMaterialCode"`
+	RawMaterialName      string          `json:"rawMaterialName"`
+	BaseUnitID           uuid.UUID       `json:"baseUnitId"`
+	BaseUnitCode         string          `json:"baseUnitCode"`
+	QtyPerKanbanSnapshot decimal.Decimal `json:"qtyPerKanbanSnapshot"`
+	TotalKanban          decimal.Decimal `json:"totalKanban"`
+	OrderedBaseQty       decimal.Decimal `json:"orderedBaseQty"`
+	UnitPriceSnapshot    decimal.Decimal `json:"unitPriceSnapshot"`
+	LineTotal            decimal.Decimal `json:"lineTotal"`
+	SortPosition         int             `json:"sortPosition"`
+	CreatedBy            Actor           `json:"createdBy"`
+	CreatedAt            time.Time       `json:"createdAt"`
+	UpdatedBy            Actor           `json:"updatedBy"`
+	UpdatedAt            time.Time       `json:"updatedAt"`
 }
 
 func (l *OrderLine) Recalculate() {
@@ -166,21 +166,21 @@ func isASCIICurrency(value string) bool {
 }
 
 type Approval struct {
-	ID                  uuid.UUID
-	TenantID            uuid.UUID
-	PurchaseOrderID     uuid.UUID
-	Version             int
-	ApproverUserID      uuid.UUID
-	ApproverDisplayName string
-	ApproverEmail       string
-	Status              ApprovalStatus
-	DecisionReason      string
-	DecidedAt           *time.Time
-	DecidedByUserID     uuid.UUID
-	CreatedBy           Actor
-	CreatedAt           time.Time
-	UpdatedBy           Actor
-	UpdatedAt           time.Time
+	ID                  uuid.UUID      `json:"id"`
+	TenantID            uuid.UUID      `json:"tenantId"`
+	PurchaseOrderID     uuid.UUID      `json:"purchaseOrderId"`
+	Version             int            `json:"version"`
+	ApproverUserID      uuid.UUID      `json:"approverUserId"`
+	ApproverDisplayName string         `json:"approverDisplayName"`
+	ApproverEmail       string         `json:"approverEmail"`
+	Status              ApprovalStatus `json:"status"`
+	DecisionReason      string         `json:"decisionReason"`
+	DecidedAt           *time.Time     `json:"decidedAt"`
+	DecidedByUserID     uuid.UUID      `json:"decidedByUserId"`
+	CreatedBy           Actor          `json:"createdBy"`
+	CreatedAt           time.Time      `json:"createdAt"`
+	UpdatedBy           Actor          `json:"updatedBy"`
+	UpdatedAt           time.Time      `json:"updatedAt"`
 }
 
 type DecisionInput struct {
