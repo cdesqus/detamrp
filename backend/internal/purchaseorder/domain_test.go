@@ -59,10 +59,10 @@ func TestOrderLineCalculatesExactDecimalAmounts(t *testing.T) {
 	}
 
 	line.Recalculate()
-	if got, want := line.OrderedBaseQty.String(), "0.999999"; got != want {
+	if got, want := line.OrderedBaseQty.StringFixed(6), "0.999999"; got != want || line.OrderedBaseQty.Exponent() != -6 {
 		t.Fatalf("ordered quantity = %s, want %s", got, want)
 	}
-	if got, want := line.LineTotal.String(), "19.999979000001"; got != want {
+	if got, want := line.LineTotal, decimal.RequireFromString("19.999979"); !got.Equal(want) || got.Exponent() != -6 {
 		t.Fatalf("line total = %s, want %s", got, want)
 	}
 }
@@ -74,8 +74,37 @@ func TestOrderRecalculatesExactTotalFromLines(t *testing.T) {
 	}}
 
 	order.RecalculateTotals()
-	if got, want := order.TotalAmount.String(), "0.48"; got != want {
+	if got, want := order.TotalAmount, decimal.RequireFromString("0.480000"); !got.Equal(want) || got.Exponent() != -6 {
 		t.Fatalf("order total = %s, want %s", got, want)
+	}
+}
+
+func TestOrderLineRoundsHalfAwayFromZeroAtSixDecimalPlaces(t *testing.T) {
+	line := OrderLine{
+		QtyPerKanbanSnapshot: decimal.RequireFromString("0.000001"),
+		TotalKanban:          decimal.NewFromInt(1),
+		UnitPriceSnapshot:    decimal.RequireFromString("0.500000"),
+	}
+
+	line.Recalculate()
+	if got, want := line.LineTotal, decimal.RequireFromString("0.000001"); !got.Equal(want) || got.Exponent() != -6 {
+		t.Fatalf("line total = %s, want %s", got, want)
+	}
+}
+
+func TestOrderInputRequiresThreeASCIIAlphabeticCurrencyLetters(t *testing.T) {
+	for _, currency := range []string{"US1", "€UR", "USD1"} {
+		input := validOrderInput()
+		input.Currency = currency
+		if errs := input.NormalizeAndValidate(false); errs["currency"] == "" {
+			t.Fatalf("currency %q was accepted", currency)
+		}
+	}
+
+	input := validOrderInput()
+	input.Currency = " idr "
+	if errs := input.NormalizeAndValidate(false); errs["currency"] != "" || input.Currency != "IDR" {
+		t.Fatalf("valid currency was not normalized: input=%#v errors=%#v", input, errs)
 	}
 }
 

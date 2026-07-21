@@ -27,6 +27,8 @@ const (
 	ApprovalRejected ApprovalStatus = "REJECTED"
 )
 
+const databaseDecimalPlaces int32 = 6
+
 type Actor struct {
 	TenantID    uuid.UUID
 	UserID      uuid.UUID
@@ -79,8 +81,8 @@ type OrderLine struct {
 }
 
 func (l *OrderLine) Recalculate() {
-	l.OrderedBaseQty = l.QtyPerKanbanSnapshot.Mul(l.TotalKanban)
-	l.LineTotal = l.OrderedBaseQty.Mul(l.UnitPriceSnapshot)
+	l.OrderedBaseQty = roundDatabaseDecimal(l.QtyPerKanbanSnapshot.Mul(l.TotalKanban))
+	l.LineTotal = roundDatabaseDecimal(l.OrderedBaseQty.Mul(l.UnitPriceSnapshot))
 }
 
 func (o *Order) RecalculateTotals() {
@@ -89,6 +91,12 @@ func (o *Order) RecalculateTotals() {
 		o.Lines[index].Recalculate()
 		o.TotalAmount = o.TotalAmount.Add(o.Lines[index].LineTotal)
 	}
+	o.TotalAmount = roundDatabaseDecimal(o.TotalAmount)
+}
+
+// roundDatabaseDecimal applies PostgreSQL numeric(20,6) precision using half-away-from-zero rounding.
+func roundDatabaseDecimal(value decimal.Decimal) decimal.Decimal {
+	return value.Round(databaseDecimalPlaces)
 }
 
 type OrderInput struct {
@@ -120,7 +128,7 @@ func (i *OrderInput) NormalizeAndValidate(requireLines bool) FieldErrors {
 	} else if !i.OrderDate.IsZero() && i.ExpectedDeliveryDate.Before(i.OrderDate) {
 		errs["expectedDeliveryDate"] = "Expected Delivery Date cannot precede Order Date"
 	}
-	if len(i.Currency) != 3 {
+	if !isASCIICurrency(i.Currency) {
 		errs["currency"] = "Currency must be a three-letter code"
 	}
 	if requireLines && len(i.Lines) == 0 {
@@ -143,6 +151,18 @@ func (i *OrderInput) NormalizeAndValidate(requireLines bool) FieldErrors {
 		}
 	}
 	return errs
+}
+
+func isASCIICurrency(value string) bool {
+	if len(value) != 3 {
+		return false
+	}
+	for _, character := range value {
+		if character < 'A' || character > 'Z' {
+			return false
+		}
+	}
+	return true
 }
 
 type Approval struct {
