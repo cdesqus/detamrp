@@ -78,6 +78,29 @@ button:disabled { cursor: not-allowed; opacity: .48; }
 .table-frame tbody tr:not(:last-child) td { border-bottom: 1px solid #f4f4f5; }
 .table-frame tbody td { height: 38px; color: #52525b; font-size: 11px; white-space: nowrap; }
 .table-action { padding: 3px 7px; color: #3f3f46; background: white; border: 1px solid #d4d4d8; border-radius: 4px; cursor: pointer; font-size: 10px; }
+.status-pill { display: inline-flex; align-items: center; height: 21px; padding: 0 7px; color: #52525b; background: #f4f4f5; border: 1px solid #e4e4e7; border-radius: 999px; font-size: 10px; font-weight: 600; }
+.supplier-order-form { max-width: 1160px; }
+.supplier-order-card { margin-top: 16px; padding: 14px; background: white; border: 1px solid #e4e4e7; border-radius: 7px; }
+.supplier-order-fields { display: grid; grid-template-columns: repeat(4, minmax(140px, 1fr)); gap: 11px; }
+.supplier-order-fields label { display: grid; gap: 5px; color: #52525b; font-size: 11px; font-weight: 600; }
+.supplier-order-fields input, .supplier-order-fields textarea, .material-add input, .supplier-order-materials tbody input { width: 100%; min-height: 32px; padding: 0 8px; color: #27272a; background: white; border: 1px solid #d4d4d8; border-radius: 5px; }
+.supplier-order-fields textarea { min-height: 70px; padding-block: 7px; resize: vertical; }
+.supplier-order-fields small, .supplier-order-materials small, .supplier-order-actions small { color: #b91c1c; font-size: 10px; }
+.supplier-order-notes { grid-column: span 2; }
+.supplier-order-material-toolbar { display: flex; align-items: end; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+.supplier-order-material-toolbar > div:first-child { display: grid; gap: 2px; }
+.supplier-order-material-toolbar strong { font-size: 12px; }
+.supplier-order-material-toolbar span { color: #a1a1aa; font-size: 10px; }
+.material-add { display: flex; gap: 6px; }
+.material-add input { width: min(280px, 42vw); }
+.supplier-order-materials .table-frame { border-radius: 5px; }
+.supplier-order-materials .table-frame table { min-width: 970px; }
+.supplier-order-materials tfoot td { height: 36px; padding: 0 10px; color: #3f3f46; background: #fafafa; border-top: 1px solid #e4e4e7; font-size: 11px; font-weight: 600; }
+.supplier-order-materials output { font-variant-numeric: tabular-nums; }
+.supplier-order-actions { position: sticky; bottom: 0; z-index: 5; display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 12px; padding: 10px 12px; background: white; border: 1px solid #e4e4e7; border-radius: 7px; box-shadow: 0 -8px 20px rgb(0 0 0 / 4%); }
+.supplier-order-actions > div:last-child { display: flex; gap: 7px; }
+.supplier-order-actions button { height: 32px; padding: 0 11px; color: #3f3f46; background: white; border: 1px solid #d4d4d8; border-radius: 5px; cursor: pointer; }
+.supplier-order-actions .primary-button { color: white; border-color: #27272a; background: #27272a; }
 .crud-scrim { position: fixed; z-index: 39; inset: 0; width: 100%; background: rgb(0 0 0 / 20%); border: 0; }
 .crud-modal { position: fixed; z-index: 40; top: 50%; left: 50%; display: flex; flex-direction: column; max-width: calc(100vw - 32px); max-height: min(84vh, 760px); overflow: hidden; background: white; border: 1px solid #e4e4e7; border-radius: 9px; box-shadow: 0 20px 60px rgb(0 0 0 / 18%); transform: translate(-50%, -50%); }
 .crud-modal--compact { width: 520px; }
