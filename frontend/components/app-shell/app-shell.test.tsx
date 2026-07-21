@@ -56,6 +56,7 @@ describe('AppShell', () => {
     expect(screen.getByRole('link', { name: 'Dashboard' })).toHaveAttribute('aria-current', 'page');
     await user.click(screen.getByRole('button', { name: 'Data Master' }));
     expect(screen.getByRole('link', { name: 'Raw Materials' })).toHaveAttribute('href', '/raw-materials');
+    expect(screen.getByRole('link', { name: 'Raw Materials' })).toHaveClass('nav-child-link');
   });
 
   it('collapses the sidebar and persists the preference', async () => {

@@ -48,7 +48,7 @@ export function AppShell({ title, children }: { title: string; children: ReactNo
               {(!group.collapsible || openGroups[group.label!]) && group.items.map(item => {
                 const active = pathname === item.href || (item.href !== '/dashboard' && pathname.startsWith(`${item.href}/`));
                 return (
-                  <Link href={item.href} key={item.href} aria-current={active ? 'page' : undefined} title={collapsed ? item.label : undefined} onClick={() => setDrawerOpen(false)}>
+                  <Link className={group.collapsible ? 'nav-child-link' : undefined} href={item.href} key={item.href} aria-current={active ? 'page' : undefined} title={collapsed ? item.label : undefined} onClick={() => setDrawerOpen(false)}>
                     <span className="nav-icon"><Icon name={item.icon} /></span><span className="nav-label">{item.label}</span>
                   </Link>
                 );
