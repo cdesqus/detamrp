@@ -7,6 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"order-stock/backend/internal/auth"
 	"order-stock/backend/internal/masterdata"
+	"order-stock/backend/internal/settings"
 )
 
 type Authenticator interface {
@@ -21,6 +22,7 @@ type serverConfig struct {
 	measurementService *masterdata.MeasurementService
 	supplierService    *masterdata.SupplierService
 	rawMaterialService *masterdata.RawMaterialService
+	settingsService    *settings.Service
 }
 
 type ServerOption func(*serverConfig)
@@ -41,6 +43,9 @@ func WithSupplierService(service *masterdata.SupplierService) ServerOption {
 }
 func WithRawMaterialService(service *masterdata.RawMaterialService) ServerOption {
 	return func(c *serverConfig) { c.rawMaterialService = service }
+}
+func WithSettingsService(service *settings.Service) ServerOption {
+	return func(c *serverConfig) { c.settingsService = service }
 }
 
 func NewServer(options ...ServerOption) http.Handler {
@@ -63,6 +68,9 @@ func NewServer(options ...ServerOption) http.Handler {
 		}
 		if config.rawMaterialService != nil {
 			masterdata.RegisterRawMaterialRoutes(router, config.rawMaterialService, config.authenticator)
+		}
+		if config.settingsService != nil {
+			settings.RegisterRoutes(router, config.settingsService, config.authenticator)
 		}
 	}
 	return router
