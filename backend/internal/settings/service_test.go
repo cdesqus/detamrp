@@ -43,12 +43,15 @@ func TestServiceNormalizesUserAndRequiresCreatePassword(t *testing.T) {
 	service := NewService(repo)
 	actor := Actor{TenantID: uuid.New(), UserID: uuid.New()}
 	role := uuid.New()
-	_, err := service.CreateUser(context.Background(), actor, UserInput{Username: " Director ", DisplayName: " Director ", Email: " DIRECTOR@EXAMPLE.COM ", Password: "12345678", RoleIDs: []uuid.UUID{role}, Active: true})
+	_, err := service.CreateUser(context.Background(), actor, UserInput{Username: " Director ", DisplayName: " Director ", Email: " DIRECTOR@EXAMPLE.COM ", Password: "12345678", RoleIDs: []uuid.UUID{role}, Active: true, IsPurchaseOrderApprover: true})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if repo.created.Username != "director" || repo.created.Email != "director@example.com" {
 		t.Fatalf("not normalized: %#v", repo.created)
+	}
+	if !repo.created.IsPurchaseOrderApprover {
+		t.Fatal("approver flag was not forwarded")
 	}
 	_, err = service.CreateUser(context.Background(), actor, UserInput{Username: "x", DisplayName: "X", Email: "x@example.com", RoleIDs: []uuid.UUID{role}, Active: true})
 	if _, ok := err.(ValidationError); !ok {

@@ -43,13 +43,14 @@ type RoleSummary struct {
 	Name string    `json:"name"`
 }
 type User struct {
-	ID          uuid.UUID     `json:"id"`
-	Username    string        `json:"username"`
-	DisplayName string        `json:"displayName"`
-	Email       string        `json:"email"`
-	Active      bool          `json:"active"`
-	Roles       []RoleSummary `json:"roles"`
-	Permissions []string      `json:"permissions"`
+	ID                      uuid.UUID     `json:"id"`
+	Username                string        `json:"username"`
+	DisplayName             string        `json:"displayName"`
+	Email                   string        `json:"email"`
+	Active                  bool          `json:"active"`
+	IsPurchaseOrderApprover bool          `json:"isPurchaseOrderApprover"`
+	Roles                   []RoleSummary `json:"roles"`
+	Permissions             []string      `json:"permissions"`
 	Audit
 }
 type Role struct {
@@ -73,12 +74,13 @@ type ApprovalConfig struct {
 	Email                 string    `json:"email"`
 }
 type UserInput struct {
-	Username    string      `json:"username"`
-	DisplayName string      `json:"displayName"`
-	Email       string      `json:"email"`
-	Password    string      `json:"password"`
-	RoleIDs     []uuid.UUID `json:"roleIds"`
-	Active      bool        `json:"active"`
+	Username                string      `json:"username"`
+	DisplayName             string      `json:"displayName"`
+	Email                   string      `json:"email"`
+	Password                string      `json:"password"`
+	RoleIDs                 []uuid.UUID `json:"roleIds"`
+	Active                  bool        `json:"active"`
+	IsPurchaseOrderApprover bool        `json:"isPurchaseOrderApprover"`
 }
 
 func (i *UserInput) NormalizeAndValidate(create bool) FieldErrors {

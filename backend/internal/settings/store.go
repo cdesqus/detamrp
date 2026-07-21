@@ -17,6 +17,7 @@ type SQLStore struct{ db *database.Pool }
 func NewSQLStore(db *database.Pool) *SQLStore { return &SQLStore{db: db} }
 
 const userSelect = `SELECT u.id,u.username,u.display_name,u.email,NOT u.locked,
+ EXISTS(SELECT 1 FROM tenant_settings ts WHERE ts.tenant_id=u.tenant_id AND ts.default_approver_user_id=u.id),
  COALESCE(array_agg(DISTINCT r.id) FILTER(WHERE r.id IS NOT NULL),'{}'),COALESCE(array_agg(DISTINCT r.code) FILTER(WHERE r.id IS NOT NULL),'{}'),COALESCE(array_agg(DISTINCT r.name) FILTER(WHERE r.id IS NOT NULL),'{}'),
  COALESCE((SELECT array_agg(DISTINCT rp.permission_code) FROM user_roles x JOIN roles xr ON xr.tenant_id=x.tenant_id AND xr.id=x.role_id AND xr.active JOIN role_permissions rp ON rp.tenant_id=x.tenant_id AND rp.role_id=x.role_id WHERE x.tenant_id=u.tenant_id AND x.user_id=u.id),'{}'),
  COALESCE(u.created_by_user_id,u.id),COALESCE(cu.display_name,u.display_name),u.created_at,COALESCE(u.updated_by_user_id,u.id),COALESCE(uu.display_name,u.display_name),u.updated_at
@@ -27,7 +28,7 @@ func scanUser(row pgx.Row) (User, error) {
 	var u User
 	var ids []uuid.UUID
 	var codes, names []string
-	err := row.Scan(&u.ID, &u.Username, &u.DisplayName, &u.Email, &u.Active, &ids, &codes, &names, &u.Permissions, &u.CreatedBy, &u.CreatedByName, &u.CreatedAt, &u.UpdatedBy, &u.UpdatedByName, &u.UpdatedAt)
+	err := row.Scan(&u.ID, &u.Username, &u.DisplayName, &u.Email, &u.Active, &u.IsPurchaseOrderApprover, &ids, &codes, &names, &u.Permissions, &u.CreatedBy, &u.CreatedByName, &u.CreatedAt, &u.UpdatedBy, &u.UpdatedByName, &u.UpdatedAt)
 	for i := range ids {
 		u.Roles = append(u.Roles, RoleSummary{ID: ids[i], Code: codes[i], Name: names[i]})
 	}
@@ -88,6 +89,27 @@ func assignRoles(ctx context.Context, tx database.TenantTx, a Actor, userID uuid
 	}
 	return nil
 }
+func setUserApprover(ctx context.Context, tx database.TenantTx, a Actor, userID uuid.UUID, requested bool) error {
+	var current bool
+	if e := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM tenant_settings WHERE tenant_id=$1 AND default_approver_user_id=$2)`, a.TenantID, userID).Scan(&current); e != nil {
+		return e
+	}
+	if !requested {
+		if current {
+			return ConflictError{Fields: FieldErrors{"isPurchaseOrderApprover": "Select another PO Approver instead"}}
+		}
+		return nil
+	}
+	var eligible bool
+	if e := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM users u JOIN user_roles ur ON ur.tenant_id=u.tenant_id AND ur.user_id=u.id JOIN roles r ON r.tenant_id=ur.tenant_id AND r.id=ur.role_id AND r.active JOIN role_permissions rp ON rp.tenant_id=r.tenant_id AND rp.role_id=r.id AND rp.permission_code='po.approve' WHERE u.tenant_id=$1 AND u.id=$2 AND NOT u.locked)`, a.TenantID, userID).Scan(&eligible); e != nil {
+		return e
+	}
+	if !eligible {
+		return ConflictError{Fields: FieldErrors{"isPurchaseOrderApprover": "Approver must be active and have PO Approve permission"}}
+	}
+	_, e := tx.Exec(ctx, `UPDATE tenant_settings SET default_approver_user_id=$2,updated_by_user_id=$3,updated_at=now() WHERE tenant_id=$1`, a.TenantID, userID, a.UserID)
+	return e
+}
 func (s *SQLStore) CreateUser(ctx context.Context, a Actor, in UserInput) (item User, err error) {
 	hash, e := auth.HashPassword(in.Password)
 	if e != nil {
@@ -103,6 +125,9 @@ func (s *SQLStore) CreateUser(ctx context.Context, a Actor, in UserInput) (item 
 			return writeError(e)
 		}
 		if e = assignRoles(ctx, tx, a, id, in.RoleIDs); e != nil {
+			return e
+		}
+		if e = setUserApprover(ctx, tx, a, id, in.IsPurchaseOrderApprover); e != nil {
 			return e
 		}
 		item, e = getUser(ctx, tx, a.TenantID, id)
@@ -163,6 +188,9 @@ func (s *SQLStore) UpdateUser(ctx context.Context, a Actor, id uuid.UUID, in Use
 			}
 		}
 		if e = assignRoles(ctx, tx, a, id, in.RoleIDs); e != nil {
+			return e
+		}
+		if e = setUserApprover(ctx, tx, a, id, in.IsPurchaseOrderApprover); e != nil {
 			return e
 		}
 		item, e = getUser(ctx, tx, a.TenantID, id)
