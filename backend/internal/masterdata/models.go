@@ -72,7 +72,9 @@ type RawMaterial struct {
 	SageItemCode      string          `json:"sageItemCode"`
 	Name              string          `json:"name"`
 	SupplierID        uuid.UUID       `json:"supplierId"`
+	SupplierName      string          `json:"supplierName"`
 	BaseUnitID        uuid.UUID       `json:"baseUnitId"`
+	BaseUnitCode      string          `json:"baseUnitCode"`
 	QtyPerKanban      decimal.Decimal `json:"qtyPerKanban"`
 	MinimumStock      decimal.Decimal `json:"minimumStock"`
 	StandardUnitPrice decimal.Decimal `json:"standardUnitPrice"`

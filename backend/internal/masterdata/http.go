@@ -75,6 +75,128 @@ func RegisterMeasurementRoutes(router *gin.Engine, service *MeasurementService, 
 	})
 }
 
+func RegisterSupplierRoutes(router *gin.Engine, service *SupplierService, authenticator Authenticator) {
+	g := router.Group("/master-data", authenticateMasterData(authenticator))
+	g.GET("/suppliers", rbac.RequirePermissions("master_data.view"), func(c *gin.Context) {
+		q, ok := listQuery(c)
+		if !ok {
+			return
+		}
+		items, total, err := service.List(c, actorFrom(c), q)
+		if writeError(c, err) {
+			return
+		}
+		if items == nil {
+			items = []Supplier{}
+		}
+		c.JSON(200, gin.H{"items": items, "total": total})
+	})
+	g.GET("/suppliers/:id", rbac.RequirePermissions("master_data.view"), func(c *gin.Context) {
+		id, ok := routeID(c)
+		if !ok {
+			return
+		}
+		item, err := service.Get(c, actorFrom(c), id)
+		if writeError(c, err) {
+			return
+		}
+		c.JSON(200, item)
+	})
+	g.POST("/suppliers", rbac.RequirePermissions("master_data.manage"), func(c *gin.Context) {
+		var in SupplierInput
+		if c.ShouldBindJSON(&in) != nil {
+			c.JSON(400, gin.H{"error": "invalid_request"})
+			return
+		}
+		item, err := service.Create(c, actorFrom(c), in)
+		if writeError(c, err) {
+			return
+		}
+		c.JSON(201, item)
+	})
+	g.PUT("/suppliers/:id", rbac.RequirePermissions("master_data.manage"), func(c *gin.Context) {
+		id, ok := routeID(c)
+		if !ok {
+			return
+		}
+		var in SupplierInput
+		if c.ShouldBindJSON(&in) != nil {
+			c.JSON(400, gin.H{"error": "invalid_request"})
+			return
+		}
+		item, err := service.Update(c, actorFrom(c), id, in)
+		if writeError(c, err) {
+			return
+		}
+		c.JSON(200, item)
+	})
+}
+
+func RegisterRawMaterialRoutes(router *gin.Engine, service *RawMaterialService, authenticator Authenticator) {
+	g := router.Group("/master-data", authenticateMasterData(authenticator))
+	g.GET("/raw-materials", rbac.RequirePermissions("master_data.view"), func(c *gin.Context) {
+		q, ok := listQuery(c)
+		if !ok {
+			return
+		}
+		if raw := c.Query("supplierId"); raw != "" {
+			id, e := uuid.Parse(raw)
+			if e != nil {
+				c.JSON(400, gin.H{"error": "invalid_filter", "fields": FieldErrors{"supplierId": "Invalid supplier"}})
+				return
+			}
+			q.SupplierID = id
+		}
+		items, total, err := service.List(c, actorFrom(c), q)
+		if writeError(c, err) {
+			return
+		}
+		if items == nil {
+			items = []RawMaterial{}
+		}
+		c.JSON(200, gin.H{"items": items, "total": total})
+	})
+	g.GET("/raw-materials/:id", rbac.RequirePermissions("master_data.view"), func(c *gin.Context) {
+		id, ok := routeID(c)
+		if !ok {
+			return
+		}
+		item, err := service.Get(c, actorFrom(c), id)
+		if writeError(c, err) {
+			return
+		}
+		c.JSON(200, item)
+	})
+	g.POST("/raw-materials", rbac.RequirePermissions("master_data.manage"), func(c *gin.Context) {
+		var in RawMaterialInput
+		if c.ShouldBindJSON(&in) != nil {
+			c.JSON(400, gin.H{"error": "invalid_request"})
+			return
+		}
+		item, err := service.Create(c, actorFrom(c), in)
+		if writeError(c, err) {
+			return
+		}
+		c.JSON(201, item)
+	})
+	g.PUT("/raw-materials/:id", rbac.RequirePermissions("master_data.manage"), func(c *gin.Context) {
+		id, ok := routeID(c)
+		if !ok {
+			return
+		}
+		var in RawMaterialInput
+		if c.ShouldBindJSON(&in) != nil {
+			c.JSON(400, gin.H{"error": "invalid_request"})
+			return
+		}
+		item, err := service.Update(c, actorFrom(c), id, in)
+		if writeError(c, err) {
+			return
+		}
+		c.JSON(200, item)
+	})
+}
+
 func authenticateMasterData(a Authenticator) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		token, err := c.Cookie("session")

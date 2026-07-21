@@ -19,6 +19,8 @@ type serverConfig struct {
 	authenticator      Authenticator
 	cookieSecure       bool
 	measurementService *masterdata.MeasurementService
+	supplierService    *masterdata.SupplierService
+	rawMaterialService *masterdata.RawMaterialService
 }
 
 type ServerOption func(*serverConfig)
@@ -33,6 +35,12 @@ func WithSecureCookies() ServerOption {
 
 func WithMeasurementService(service *masterdata.MeasurementService) ServerOption {
 	return func(config *serverConfig) { config.measurementService = service }
+}
+func WithSupplierService(service *masterdata.SupplierService) ServerOption {
+	return func(config *serverConfig) { config.supplierService = service }
+}
+func WithRawMaterialService(service *masterdata.RawMaterialService) ServerOption {
+	return func(c *serverConfig) { c.rawMaterialService = service }
 }
 
 func NewServer(options ...ServerOption) http.Handler {
@@ -49,6 +57,12 @@ func NewServer(options ...ServerOption) http.Handler {
 		registerAuthRoutes(router, config)
 		if config.measurementService != nil {
 			masterdata.RegisterMeasurementRoutes(router, config.measurementService, config.authenticator)
+		}
+		if config.supplierService != nil {
+			masterdata.RegisterSupplierRoutes(router, config.supplierService, config.authenticator)
+		}
+		if config.rawMaterialService != nil {
+			masterdata.RegisterRawMaterialRoutes(router, config.rawMaterialService, config.authenticator)
 		}
 	}
 	return router
