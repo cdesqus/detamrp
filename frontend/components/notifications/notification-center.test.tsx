@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
@@ -5,6 +6,12 @@ import { NotificationCenter } from './notification-center';
 import { emptyNotificationSnapshot } from './notification-data';
 
 describe('NotificationCenter', () => {
+  it('bounds the popover width to the mobile viewport', () => {
+    const css = readFileSync('app/globals.css', 'utf8');
+    expect(css).toContain('.notification-popover {');
+    expect(css).toContain('width: min(320px, calc(100vw - 28px))');
+  });
+
   it('shows the pending approval count and real PO link', async () => {
     const user = userEvent.setup();
     render(<NotificationCenter total={205} items={[{ id: 'approval-1', title: 'PO PO-202607-00001 awaits approval', description: 'Supplier: Acme', href: '/supplier-orders/po-1', unread: true, type: 'approval' }]} />);

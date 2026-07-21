@@ -36,7 +36,11 @@ func RegisterRoutes(router *gin.Engine, service *Service, authenticator Authenti
 		if items == nil {
 			items = []Order{}
 		}
-		c.JSON(http.StatusOK, gin.H{"items": items, "total": total})
+		projected := make([]gin.H, 0, len(items))
+		for _, item := range items {
+			projected = append(projected, projectOrder(item, hasPermission(c, "po.price.view")))
+		}
+		c.JSON(http.StatusOK, gin.H{"items": projected, "total": total})
 	})
 	orders.GET("/:id", rbac.RequirePermissions("po.view"), func(c *gin.Context) {
 		id, ok := routeID(c)
@@ -47,7 +51,7 @@ func RegisterRoutes(router *gin.Engine, service *Service, authenticator Authenti
 		if writeHTTPError(c, err) {
 			return
 		}
-		c.JSON(http.StatusOK, order)
+		c.JSON(http.StatusOK, projectOrder(order, hasPermission(c, "po.price.view")))
 	})
 	orders.POST("", rbac.RequirePermissions("po.create"), func(c *gin.Context) {
 		input, ok := orderInput(c)
@@ -168,6 +172,48 @@ func actorFrom(c *gin.Context) Actor {
 	return actor.(Actor)
 }
 
+func hasPermission(c *gin.Context, permission string) bool {
+	value, exists := c.Get(rbac.ContextPermissionsKey)
+	permissions, valid := value.([]string)
+	return exists && valid && rbac.Allows(permissions, permission)
+}
+
+// projectOrder is the public read model. Commercial fields are added only
+// after explicit authorization so omitted prices cannot be mistaken for zero.
+func projectOrder(order Order, includePrices bool) gin.H {
+	lines := make([]gin.H, 0, len(order.Lines))
+	for _, line := range order.Lines {
+		projected := gin.H{
+			"id": line.ID, "tenantId": line.TenantID, "purchaseOrderId": line.PurchaseOrderID,
+			"rawMaterialId": line.RawMaterialID, "rawMaterialCode": line.RawMaterialCode, "rawMaterialName": line.RawMaterialName,
+			"baseUnitId": line.BaseUnitID, "baseUnitCode": line.BaseUnitCode, "qtyPerKanbanSnapshot": line.QtyPerKanbanSnapshot,
+			"totalKanban": line.TotalKanban, "orderedBaseQty": line.OrderedBaseQty, "sortPosition": line.SortPosition,
+			"createdBy": line.CreatedBy, "createdAt": line.CreatedAt, "updatedBy": line.UpdatedBy, "updatedAt": line.UpdatedAt,
+		}
+		if includePrices {
+			projected["unitPriceSnapshot"] = line.UnitPriceSnapshot
+			projected["lineTotal"] = line.LineTotal
+		}
+		lines = append(lines, projected)
+	}
+	projected := gin.H{
+		"id": order.ID, "tenantId": order.TenantID, "poNumber": order.PONumber,
+		"supplierId": order.SupplierID, "supplierName": order.SupplierName,
+		"orderDate": order.OrderDate, "expectedDeliveryDate": order.ExpectedDeliveryDate,
+		"currency": order.Currency, "notes": order.Notes, "status": order.Status, "version": order.Version,
+		"sagePurchaseOrderNumber":      order.SagePurchaseOrderNumber,
+		"submittedApproverUserId":      order.SubmittedApproverUserID,
+		"submittedApproverDisplayName": order.SubmittedApproverDisplayName,
+		"submittedApproverEmail":       order.SubmittedApproverEmail,
+		"createdBy":                    order.CreatedBy, "createdAt": order.CreatedAt, "updatedBy": order.UpdatedBy, "updatedAt": order.UpdatedAt,
+		"lines": lines,
+	}
+	if includePrices {
+		projected["totalAmount"] = order.TotalAmount
+	}
+	return projected
+}
+
 func routeID(c *gin.Context) (uuid.UUID, bool) {
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
@@ -256,13 +302,9 @@ func parseOrderDate(value string) (time.Time, error) {
 	}
 	parsed, err := time.Parse(time.DateOnly, value)
 	if err != nil {
-		parsed, err = time.Parse(time.RFC3339, value)
-		if err != nil {
-			return time.Time{}, err
-		}
+		return time.Time{}, err
 	}
-	utc := parsed.UTC()
-	return time.Date(utc.Year(), utc.Month(), utc.Day(), 0, 0, 0, 0, time.UTC), nil
+	return time.Date(parsed.Year(), parsed.Month(), parsed.Day(), 0, 0, 0, 0, time.UTC), nil
 }
 
 func isSupportedStatus(status Status) bool {

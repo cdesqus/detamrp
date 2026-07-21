@@ -51,6 +51,16 @@ func TestOrderInputRejectsNonPositiveOrFractionalKanbanCount(t *testing.T) {
 	}
 }
 
+func TestOrderInputRejectsKanbanCountBeyondNumericCapacity(t *testing.T) {
+	input := validOrderInput()
+	input.Lines[0].TotalKanban = decimal.RequireFromString("100000000000000")
+
+	errs := input.NormalizeAndValidate(false)
+	if got := errs["lines[0].totalKanban"]; got == "" {
+		t.Fatalf("expected numeric capacity error, got %#v", errs)
+	}
+}
+
 func TestOrderLineCalculatesExactDecimalAmounts(t *testing.T) {
 	line := OrderLine{
 		QtyPerKanbanSnapshot: decimal.RequireFromString("0.333333"),

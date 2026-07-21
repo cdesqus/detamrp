@@ -18,34 +18,44 @@ describe('supplier order UI', () => {
   beforeEach(() => { push.mockReset(); vi.stubGlobal('confirm', vi.fn(() => true)); });
 
   it('renders real purchase orders and opens the dedicated create page', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response({ items: [{ id: 'po-1', poNumber: 'PO-202607-00001', supplierId: 'supplier-1', orderDate: '2026-07-21T00:00:00Z', expectedDeliveryDate: '2026-07-25T00:00:00Z', status: 'DRAFT', totalAmount: '12.500000', currency: 'IDR', createdBy: { displayName: 'Admin' } }], total: 1 })));
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response({ items: [{ id: 'po-1', poNumber: 'PO-202607-00001', supplierId: 'supplier-1', supplierName: 'SUP-01 â€” PT Prima', orderDate: '2026-07-21T00:00:00Z', expectedDeliveryDate: '2026-07-25T00:00:00Z', status: 'DRAFT', totalAmount: '12.500000', currency: 'IDR', createdBy: { displayName: 'Admin' } }], total: 1 })));
     const user = userEvent.setup();
-    render(<SupplierOrderIndex />);
+    render(<SupplierOrderIndex permissions={['po.view', 'po.price.view']} />);
     expect(await screen.findByText('PO-202607-00001')).toBeInTheDocument();
+    expect(screen.getByText('SUP-01 â€” PT Prima')).toBeInTheDocument();
+    expect(screen.getByText('IDR 12.500000')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Open PO-202607-00001' })).toBeInTheDocument();
-    expect(fetch).toHaveBeenCalledWith('/api/master-data/suppliers?limit=200', { credentials: 'include' });
+    expect(fetch).not.toHaveBeenCalledWith('/api/master-data/suppliers?limit=200', { credentials: 'include' });
     await user.click(screen.getByRole('button', { name: 'Create order' }));
     expect(push).toHaveBeenCalledWith('/supplier-orders/new');
+  });
+
+  it('does not render price columns for a Viewer', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response({ items: [{ id: 'po-1', poNumber: 'PO-VIEWER', supplierId: 'supplier-1', supplierName: 'PT Prima', orderDate: '2026-07-21', expectedDeliveryDate: '2026-07-25', status: 'APPROVED', currency: 'IDR', createdBy: { displayName: 'Admin' } }], total: 1 })));
+
+    render(<SupplierOrderIndex permissions={['po.view']} />);
+
+    expect(await screen.findByText('PO-VIEWER')).toBeInTheDocument();
+    expect(screen.queryByRole('columnheader', { name: 'Total' })).not.toBeInTheDocument();
+    expect(screen.queryByText(/IDR/)).not.toBeInTheDocument();
   });
 
   it('ignores an out-of-order earlier index response after search changes', async () => {
     vi.useFakeTimers();
     try {
-      const firstOrders = deferred<Response>(); const firstSuppliers = deferred<Response>();
-      const secondOrders = deferred<Response>(); const secondSuppliers = deferred<Response>();
+      const firstOrders = deferred<Response>();
+      const secondOrders = deferred<Response>();
       let request = 0;
-      const fetchMock = vi.fn().mockImplementation(() => [firstOrders, firstSuppliers, secondOrders, secondSuppliers][request++]?.promise);
+      const fetchMock = vi.fn().mockImplementation(() => [firstOrders, secondOrders][request++]?.promise);
       vi.stubGlobal('fetch', fetchMock);
-      render(<SupplierOrderIndex />);
+      render(<SupplierOrderIndex permissions={['po.view']} />);
       await act(async () => { await vi.advanceTimersByTimeAsync(200); });
       fireEvent.change(screen.getByRole('searchbox', { name: 'Search Supplier Orders' }), { target: { value: 'new' } });
       await act(async () => { await vi.advanceTimersByTimeAsync(200); });
       secondOrders.resolve(response({ items: [{ id: 'new', poNumber: 'PO-NEW', supplierId: 'supplier-1', orderDate: '2026-07-21', expectedDeliveryDate: '2026-07-22', status: 'DRAFT', totalAmount: '1', currency: 'IDR' }], total: 1 }));
-      secondSuppliers.resolve(response({ items: [supplier] }));
       await act(async () => {});
       expect(screen.getByText('PO-NEW')).toBeInTheDocument();
       firstOrders.resolve(response({ items: [{ id: 'old', poNumber: 'PO-OLD', supplierId: 'supplier-1', orderDate: '2026-07-21', expectedDeliveryDate: '2026-07-22', status: 'DRAFT', totalAmount: '1', currency: 'IDR' }], total: 1 }));
-      firstSuppliers.resolve(response({ items: [supplier] }));
       await act(async () => {});
       expect(screen.queryByText('PO-OLD')).not.toBeInTheDocument();
       expect(screen.getByText('PO-NEW')).toBeInTheDocument();
@@ -62,7 +72,7 @@ describe('supplier order UI', () => {
       .mockResolvedValueOnce(response({ ...savedOrder, status: 'PENDING_APPROVAL' }));
     vi.stubGlobal('fetch', fetchMock);
     const user = userEvent.setup();
-    render(<SupplierOrderForm />);
+    render(<SupplierOrderForm permissions={['po.price.view']} />);
     const add = screen.getByRole('button', { name: '+ Raw Material' });
     expect(add).toBeDisabled();
     await user.type(screen.getByRole('combobox', { name: 'Supplier' }), 'PT Prima');
@@ -195,6 +205,50 @@ describe('supplier order UI', () => {
     expect(screen.getByRole('spinbutton', { name: 'Total Kanban for Steel Coil' })).toHaveAttribute('aria-describedby', 'kanban-error-0');
   });
 
+  it('promotes approver errors and associates raw material errors with their row', async () => {
+    const order = { id: 'po-1', poNumber: 'PO-1', status: 'DRAFT', supplierId: 'supplier-1', supplierName: 'PT Prima', currency: 'IDR', orderDate: '2026-07-21', expectedDeliveryDate: '2026-07-22', lines: [{ rawMaterialId: 'material-1', rawMaterialCode: 'RM-01', rawMaterialName: 'Steel Coil', baseUnitCode: 'KG', qtyPerKanbanSnapshot: '1', totalKanban: '1', unitPriceSnapshot: '2' }] };
+    vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+      if (url.includes('/submit')) return Promise.resolve(response({ message: 'Purchase order conflicts with its current state', fields: { approver: 'Configure an active PO Approver before submission', 'lines[0].rawMaterialId': 'Raw Material is no longer active for this supplier' } }, false));
+      if (init?.method === 'PUT') return Promise.resolve(response(order));
+      if (url.includes('/suppliers')) return Promise.resolve(response({ items: [supplier] }));
+      return Promise.resolve(response({ items: [material] }));
+    }));
+    const user = userEvent.setup();
+    render(<SupplierOrderForm initialOrder={order} permissions={['po.view', 'po.price.view']} />);
+
+    await user.click(screen.getByRole('button', { name: 'Save & Send for Approval' }));
+
+    expect(await screen.findByText('Configure an active PO Approver before submission')).toBeInTheDocument();
+    expect(screen.getByText('Raw Material is no longer active for this supplier')).toBeInTheDocument();
+    expect(screen.getByText('Raw Material is no longer active for this supplier').closest('td')).toHaveAttribute('aria-describedby', 'material-error-0');
+  });
+
+  it('loads a submitted Director detail from snapshots without editable master lists', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(response({ id: 'po-director', poNumber: 'PO-DIRECTOR', status: 'PENDING_APPROVAL', supplierId: 'supplier-1', supplierName: 'PT Prima snapshot', currency: 'IDR', orderDate: '2026-07-21', expectedDeliveryDate: '2026-07-22', lines: [{ rawMaterialId: 'material-1', rawMaterialCode: 'RM-SNAPSHOT', rawMaterialName: 'Stored Steel', baseUnitCode: 'KG', qtyPerKanbanSnapshot: '3', totalKanban: '2', unitPriceSnapshot: '7' }] }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<SupplierOrderForm orderId="po-director" permissions={['po.view', 'po.price.view', 'po.approve', 'po.reject', 'inventory.view']} />);
+
+    expect(await screen.findByText('PO-DIRECTOR')).toBeInTheDocument();
+    expect(screen.getByText('PT Prima snapshot')).toBeInTheDocument();
+    expect(screen.getByText(/RM-SNAPSHOT/)).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: 'Unit Price' })).toBeInTheDocument();
+    expect(screen.getByText('7.000000')).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledWith('/api/purchase-orders/po-director', { credentials: 'include' });
+    expect(screen.queryByText(/could not be loaded/i)).not.toBeInTheDocument();
+  });
+
+  it('hides price and amount values in Viewer detail instead of rendering zeroes', () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response({ items: [] })));
+    render(<SupplierOrderForm initialOrder={{ id: 'po-viewer', poNumber: 'PO-VIEWER', status: 'APPROVED', supplierId: 'supplier-1', supplierName: 'PT Prima', currency: 'IDR', orderDate: '2026-07-21', expectedDeliveryDate: '2026-07-22', lines: [{ rawMaterialId: 'material-1', rawMaterialCode: 'RM-01', rawMaterialName: 'Steel', baseUnitCode: 'KG', qtyPerKanbanSnapshot: '1', totalKanban: '2', unitPriceSnapshot: '99' }] }} permissions={['po.view']} />);
+
+    expect(screen.queryByRole('columnheader', { name: 'Unit Price' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('columnheader', { name: 'Amount' })).not.toBeInTheDocument();
+    expect(screen.queryByText('99.000000')).not.toBeInTheDocument();
+    expect(screen.queryByText('Order Total')).not.toBeInTheDocument();
+  });
+
   it('shows loading then retryable detail failure without draft actions before the order loads', async () => {
     let detailAttempts = 0;
     vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
@@ -212,7 +266,7 @@ describe('supplier order UI', () => {
     await user.click(await screen.findByRole('button', { name: 'Retry' }));
     expect(await screen.findByText('PO-1')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Save as Draft' })).not.toBeInTheDocument();
-    expect(screen.getByRole('combobox', { name: 'Supplier' })).toBeDisabled();
+    expect(screen.getByRole('status', { name: 'Supplier' })).toHaveTextContent('supplier-1');
   });
 
   it('surfaces failed supplier and material lookups with the detail form intact', async () => {

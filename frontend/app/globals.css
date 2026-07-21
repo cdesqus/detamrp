@@ -59,7 +59,7 @@ button, input, select, textarea { font: inherit; }
 .user-menu-error { margin: 0; padding: 0 11px 10px; color: #b91c1c; font-size: 10px; line-height: 1.35; }
 .notification-trigger { position: relative; width: 30px; height: 30px; display: grid; place-items: center; padding: 0; color: #52525b; background: white; border: 1px solid #e4e4e7; border-radius: 6px; cursor: pointer; }
 .notification-badge { position: absolute; top: -5px; right: -5px; min-width: 16px; height: 16px; display: grid; place-items: center; padding: 0 4px; color: white; background: #dc2626; border: 2px solid white; border-radius: 999px; font-size: 9px; font-weight: 700; }
-.notification-popover { position: absolute; z-index: 30; top: 36px; right: 0; width: 320px; overflow: hidden; color: #27272a; background: white; border: 1px solid #e4e4e7; border-radius: 8px; box-shadow: 0 12px 30px rgb(0 0 0 / 10%); }
+.notification-popover { position: absolute; z-index: 30; top: 36px; right: 0; width: min(320px, calc(100vw - 28px)); overflow: hidden; color: #27272a; background: white; border: 1px solid #e4e4e7; border-radius: 8px; box-shadow: 0 12px 30px rgb(0 0 0 / 10%); }
 .notification-heading { height: 48px; display: flex; align-items: center; justify-content: space-between; padding: 0 12px; border-bottom: 1px solid #f0f0f1; }
 .notification-heading strong { font-size: 12px; font-weight: 600; }
 .notification-heading span { color: #a1a1aa; font-size: 10px; }

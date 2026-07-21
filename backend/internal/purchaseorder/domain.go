@@ -29,6 +29,8 @@ const (
 
 const databaseDecimalPlaces int32 = 6
 
+var maxTotalKanban = decimal.RequireFromString("99999999999999")
+
 type Actor struct {
 	TenantID    uuid.UUID `json:"tenantId"`
 	UserID      uuid.UUID `json:"userId"`
@@ -41,6 +43,7 @@ type Order struct {
 	TenantID                     uuid.UUID       `json:"tenantId"`
 	PONumber                     string          `json:"poNumber"`
 	SupplierID                   uuid.UUID       `json:"supplierId"`
+	SupplierName                 string          `json:"supplierName"`
 	OrderDate                    time.Time       `json:"orderDate"`
 	ExpectedDeliveryDate         time.Time       `json:"expectedDeliveryDate"`
 	Currency                     string          `json:"currency"`
@@ -148,6 +151,8 @@ func (i *OrderInput) NormalizeAndValidate(requireLines bool) FieldErrors {
 		}
 		if !line.TotalKanban.IsPositive() || !line.TotalKanban.Equal(line.TotalKanban.Truncate(0)) {
 			errs[prefix+"totalKanban"] = "Total Kanban must be a positive integer"
+		} else if line.TotalKanban.GreaterThan(maxTotalKanban) {
+			errs[prefix+"totalKanban"] = "Total Kanban cannot exceed 99999999999999"
 		}
 	}
 	return errs

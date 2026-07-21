@@ -2,12 +2,13 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useCurrentUser } from '../app-shell/app-shell';
 
 type Supplier = { id: string; code: string; name: string; currency: string; active: boolean };
 type Material = { id: string; code: string; name: string; supplierId: string; baseUnitCode: string; qtyPerKanban: string; standardUnitPrice: string; active: boolean };
-type OrderLine = { rawMaterialId: string; rawMaterialCode: string; rawMaterialName: string; baseUnitCode: string; qtyPerKanbanSnapshot: string; totalKanban: string; unitPriceSnapshot: string };
-type InitialOrder = { id: string; poNumber?: string; status: string; supplierId: string; currency: string; orderDate: string; expectedDeliveryDate: string; notes?: string; lines: OrderLine[] };
-type Props = { orderId?: string; initialOrder?: InitialOrder };
+type OrderLine = { rawMaterialId: string; rawMaterialCode: string; rawMaterialName: string; baseUnitCode: string; qtyPerKanbanSnapshot: string; totalKanban: string; unitPriceSnapshot?: string };
+type InitialOrder = { id: string; poNumber?: string; status: string; supplierId: string; supplierName?: string; currency: string; orderDate: string; expectedDeliveryDate: string; notes?: string; lines: OrderLine[] };
+type Props = { orderId?: string; initialOrder?: InitialOrder; permissions?: string[] };
 type ApiError = { message?: string; fields?: Record<string, string> };
 type Decimal = { value: bigint; scale: number };
 
@@ -20,6 +21,8 @@ export function localDateISO(date: Date = new Date()) {
 const dateOnly = (value?: string) => (value || '').slice(0, 10);
 const optionLabel = (value: { code: string; name: string }) => `${value.code} — ${value.name}`;
 const fieldKey = (index: number) => `lines[${index}].totalKanban`;
+const materialFieldKey = (index: number) => `lines[${index}].rawMaterialId`;
+const maxTotalKanban = 99999999999999n;
 
 function parseDecimal(input: string | number | undefined): Decimal | null {
   const match = String(input ?? '0').trim().match(/^([+-]?)(\d*)(?:\.(\d*))?$/);
@@ -51,27 +54,30 @@ export function formatDecimal(input: string | number | undefined) {
   return decimal ? formatMicro(roundedMicro(decimal)) : '0.000000';
 }
 
-export function multiplyDecimals(left: string, right: string) {
+export function multiplyDecimals(left: string | number | undefined, right: string | number | undefined) {
   const a = parseDecimal(left); const b = parseDecimal(right);
   return a && b ? formatMicro(roundedMicro({ value: a.value * b.value, scale: a.scale + b.scale })) : '0.000000';
 }
 
-function addDecimals(left: string, right: string) {
+function addDecimals(left: string | number | undefined, right: string | number | undefined) {
   const a = parseDecimal(left); const b = parseDecimal(right);
   return formatMicro((a ? roundedMicro(a) : 0n) + (b ? roundedMicro(b) : 0n));
 }
 
-function isPositiveInteger(value: string) { return /^\d+$/.test(value) && BigInt(value) > 0n; }
+function isValidKanban(value: string) { return /^\d+$/.test(value) && BigInt(value) > 0n && BigInt(value) <= maxTotalKanban; }
 function lineFromMaterial(material: Material): OrderLine { return { rawMaterialId: material.id, rawMaterialCode: material.code, rawMaterialName: material.name, baseUnitCode: material.baseUnitCode, qtyPerKanbanSnapshot: String(material.qtyPerKanban), totalKanban: '1', unitPriceSnapshot: String(material.standardUnitPrice) }; }
 function errorFields(body: ApiError, fallback: string) { return { ...(body.fields ?? {}), _form: body.message ?? body.fields?._form ?? fallback }; }
 
-export function SupplierOrderForm({ orderId, initialOrder }: Props) {
+export function SupplierOrderForm({ orderId, initialOrder, permissions }: Props) {
   const router = useRouter();
+  const currentUser = useCurrentUser();
+  const canViewPrices = (permissions ?? currentUser?.permissions ?? []).includes('po.price.view');
   const [savedId, setSavedId] = useState(initialOrder?.id ?? '');
   const [status, setStatus] = useState(initialOrder?.status ?? 'DRAFT');
   const [poNumber, setPONumber] = useState(initialOrder?.poNumber ?? '');
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [supplierId, setSupplierId] = useState(initialOrder?.supplierId ?? '');
+  const [supplierName, setSupplierName] = useState(initialOrder?.supplierName ?? '');
   const [supplierQuery, setSupplierQuery] = useState('');
   const [materials, setMaterials] = useState<Material[]>([]);
   const [materialText, setMaterialText] = useState('');
@@ -91,7 +97,7 @@ export function SupplierOrderForm({ orderId, initialOrder }: Props) {
   const editable = !detailLoading && !detailError && status === 'DRAFT';
 
   const hydrate = useCallback((order: InitialOrder) => {
-    setSavedId(order.id); setStatus(order.status); setPONumber(order.poNumber ?? ''); setSupplierId(order.supplierId);
+    setSavedId(order.id); setStatus(order.status); setPONumber(order.poNumber ?? ''); setSupplierId(order.supplierId); setSupplierName(order.supplierName ?? '');
     setCurrency(order.currency); setOrderDate(dateOnly(order.orderDate)); setExpectedDeliveryDate(dateOnly(order.expectedDeliveryDate));
     setNotes(order.notes ?? ''); setLines(order.lines ?? []);
   }, []);
@@ -106,12 +112,12 @@ export function SupplierOrderForm({ orderId, initialOrder }: Props) {
     } catch { setSupplierError('Suppliers could not be loaded.'); }
   }, []);
 
-  useEffect(() => { void loadSuppliers(); }, [loadSuppliers]);
+  useEffect(() => { if (editable) void loadSuppliers(); }, [editable, loadSuppliers]);
   useEffect(() => {
-    if (!supplierId) return;
+    if (!editable || !supplierId) return;
     const supplier = suppliers.find(item => item.id === supplierId);
     if (supplier) setSupplierQuery(optionLabel(supplier));
-  }, [supplierId, suppliers]);
+  }, [editable, supplierId, suppliers]);
   useEffect(() => {
     if (!orderId || initialOrder) return;
     let current = true;
@@ -124,7 +130,7 @@ export function SupplierOrderForm({ orderId, initialOrder }: Props) {
     return () => { current = false; };
   }, [detailAttempt, hydrate, initialOrder, orderId]);
   useEffect(() => {
-    if (!supplierId) { setMaterials([]); setMaterialError(''); return; }
+    if (!editable || !supplierId) { setMaterials([]); setMaterialError(''); return; }
     const controller = new AbortController(); let current = true;
     setMaterialError('');
     fetch(`/api/master-data/raw-materials?active=true&limit=200&supplierId=${encodeURIComponent(supplierId)}`, { credentials: 'include', signal: controller.signal })
@@ -132,7 +138,7 @@ export function SupplierOrderForm({ orderId, initialOrder }: Props) {
       .then(data => { if (current) setMaterials(data.items ?? []); })
       .catch(() => { if (current && !controller.signal.aborted) setMaterialError('Raw Materials could not be loaded.'); });
     return () => { current = false; controller.abort(); };
-  }, [supplierId]);
+  }, [editable, supplierId]);
 
   const selectSupplier = useCallback((candidate: Supplier) => {
     if (candidate.id === supplierId) { setSupplierQuery(optionLabel(candidate)); return; }
@@ -141,7 +147,7 @@ export function SupplierOrderForm({ orderId, initialOrder }: Props) {
       setSupplierQuery(existing ? optionLabel(existing) : '');
       return;
     }
-    setSupplierId(candidate.id); setSupplierQuery(optionLabel(candidate)); setCurrency(candidate.currency); setLines([]); setMaterials([]); setMaterialText(''); setSelectedMaterial(null);
+    setSupplierId(candidate.id); setSupplierName(candidate.name); setSupplierQuery(optionLabel(candidate)); setCurrency(candidate.currency); setLines([]); setMaterials([]); setMaterialText(''); setSelectedMaterial(null);
   }, [lines.length, supplierId, suppliers]);
   const changeSupplierText = (text: string) => {
     setSupplierQuery(text);
@@ -170,7 +176,10 @@ export function SupplierOrderForm({ orderId, initialOrder }: Props) {
     if (!orderDate) next.orderDate = 'Order Date is required';
     if (!expectedDeliveryDate) next.expectedDeliveryDate = 'Expected Delivery Date is required';
     else if (orderDate && expectedDeliveryDate < orderDate) next.expectedDeliveryDate = 'Expected Delivery Date cannot precede Order Date';
-    lines.forEach((line, index) => { if (!isPositiveInteger(line.totalKanban)) next[fieldKey(index)] = 'Total Kanban must be a positive integer'; });
+    lines.forEach((line, index) => {
+      if (!/^\d+$/.test(line.totalKanban) || BigInt(line.totalKanban || '0') <= 0n) next[fieldKey(index)] = 'Total Kanban must be a positive integer';
+      else if (!isValidKanban(line.totalKanban)) next[fieldKey(index)] = 'Total Kanban cannot exceed 99999999999999';
+    });
     return next;
   };
   const payload = () => ({ supplierId, orderDate, expectedDeliveryDate, currency, notes, lines: lines.map(line => ({ rawMaterialId: line.rawMaterialId, totalKanban: line.totalKanban })) });
@@ -207,20 +216,22 @@ export function SupplierOrderForm({ orderId, initialOrder }: Props) {
   if (detailLoading) return <section className="supplier-order-form"><div className="table-empty">Loading supplier order...</div></section>;
   if (detailError) return <section className="supplier-order-form"><div className="table-empty"><strong>Could not load supplier order</strong><span>{detailError}</span><button className="table-action" onClick={() => setDetailAttempt(value => value + 1)}>Retry</button></div></section>;
   const availableMaterials = materials.filter(item => !lines.some(line => line.rawMaterialId === item.id));
+  const unplacedErrors = Object.entries(errors).filter(([key]) => key !== '_form' && key !== 'supplierId' && key !== 'orderDate' && key !== 'expectedDeliveryDate' && key !== 'lines' && !/^lines\[\d+\]\.(totalKanban|rawMaterialId)$/.test(key) && !/^lines\[\d+\]$/.test(key));
   return <section className="supplier-order-form">
     <div className="page-title-row"><div><h1>{poNumber || 'New Supplier Order'}</h1><p className="muted">{editable ? 'Complete the order and save it as a draft or send it for approval.' : `This supplier order is ${status.replaceAll('_', ' ').toLowerCase()} and read-only.`}</p></div>{poNumber && <span className="status-pill">{status.replaceAll('_', ' ')}</span>}</div>
     {errors._form && <p className="form-error" role="alert">{errors._form}</p>}
+    {unplacedErrors.length > 0 && <div className="form-error" role="alert"><ul>{unplacedErrors.map(([key, message]) => <li key={key}>{message}</li>)}</ul></div>}
     {supplierError && <p className="form-error" role="alert">{supplierError} <button className="table-action" onClick={() => void loadSuppliers()}>Retry</button></p>}
     <div className="supplier-order-card"><div className="supplier-order-fields">
-      <label>Supplier<input aria-label="Supplier" list="supplier-options" disabled={!editable} value={supplierQuery} onChange={event => changeSupplierText(event.target.value)} onBlur={restoreSupplierQuery} /><datalist id="supplier-options">{suppliers.map(item => <option key={item.id} value={optionLabel(item)} />)}</datalist>{errors.supplierId && <small role="alert">{errors.supplierId}</small>}</label>
+      <label>Supplier{editable ? <><input aria-label="Supplier" list="supplier-options" value={supplierQuery} onChange={event => changeSupplierText(event.target.value)} onBlur={restoreSupplierQuery} /><datalist id="supplier-options">{suppliers.map(item => <option key={item.id} value={optionLabel(item)} />)}</datalist></> : <output aria-label="Supplier">{supplierName || supplierId || '—'}</output>}{errors.supplierId && <small role="alert">{errors.supplierId}</small>}</label>
       <label>Order Date<input type="date" value={orderDate} disabled={!editable} onChange={event => setOrderDate(event.target.value)} />{errors.orderDate && <small role="alert">{errors.orderDate}</small>}</label>
       <label>Expected Delivery Date<input type="date" min={orderDate} value={expectedDeliveryDate} disabled={!editable} onChange={event => setExpectedDeliveryDate(event.target.value)} />{errors.expectedDeliveryDate && <small role="alert">{errors.expectedDeliveryDate}</small>}</label>
       <label>Currency<input value={currency} aria-label="Currency" readOnly /></label>
       <label className="supplier-order-notes">Notes<textarea value={notes} disabled={!editable} onChange={event => setNotes(event.target.value)} /></label>
     </div></div>
-    <div className="supplier-order-card supplier-order-materials"><div className="supplier-order-material-toolbar"><div><strong>Raw Materials</strong><span>Snapshots are read-only after selection.</span></div><div className="material-add"><input aria-label="Raw Material" list="material-options" disabled={!editable || !supplierId} value={materialText} onChange={event => changeMaterialText(event.target.value)} /><datalist id="material-options">{availableMaterials.map(item => <option key={item.id} value={optionLabel(item)} />)}</datalist><button type="button" className="primary-button" disabled={!editable || !supplierId || !selectedMaterial} onClick={addMaterial}>+ Raw Material</button></div></div>
+    <div className="supplier-order-card supplier-order-materials"><div className="supplier-order-material-toolbar"><div><strong>Raw Materials</strong><span>Snapshots are read-only after selection.</span></div>{editable && <div className="material-add"><input aria-label="Raw Material" list="material-options" disabled={!supplierId} value={materialText} onChange={event => changeMaterialText(event.target.value)} /><datalist id="material-options">{availableMaterials.map(item => <option key={item.id} value={optionLabel(item)} />)}</datalist><button type="button" className="primary-button" disabled={!supplierId || !selectedMaterial} onClick={addMaterial}>+ Raw Material</button></div>}</div>
       {materialError && <p className="form-error" role="alert">{materialError}</p>}
-      <div className="table-frame"><table><thead><tr><th>Raw Material</th><th>Base Unit</th><th>Qty / Kanban</th><th>Total Kanban</th><th>Total Quantity</th><th>Unit Price</th><th>Amount</th><th></th></tr></thead><tbody>{lines.length === 0 ? <tr><td colSpan={8}><div className="table-empty">No Raw Materials selected.</div></td></tr> : lines.map((line, index) => { const quantity = multiplyDecimals(line.qtyPerKanbanSnapshot, line.totalKanban || '0'); const amount = multiplyDecimals(quantity, line.unitPriceSnapshot); const lineError = errors[fieldKey(index)]; return <tr key={line.rawMaterialId}><td>{line.rawMaterialCode} — {line.rawMaterialName}</td><td>{line.baseUnitCode}</td><td><output>{formatDecimal(line.qtyPerKanbanSnapshot)}</output></td><td><input aria-label={`Total Kanban for ${line.rawMaterialName}`} aria-describedby={lineError ? `kanban-error-${index}` : undefined} type="number" min="1" step="1" value={line.totalKanban} disabled={!editable} onChange={event => changeKanban(line.rawMaterialId, event.target.value)} />{lineError && <small id={`kanban-error-${index}`} role="alert">{lineError}</small>}</td><td><output>{quantity}</output></td><td><output>{formatDecimal(line.unitPriceSnapshot)}</output></td><td><output>{amount}</output></td><td>{editable && <button type="button" className="table-action" aria-label={`Remove ${line.rawMaterialName}`} onClick={() => setLines(current => current.filter(item => item.rawMaterialId !== line.rawMaterialId))}>Remove</button>}</td></tr>; })}</tbody><tfoot><tr><td colSpan={6}>Order Total</td><td><output>{total}</output></td><td></td></tr></tfoot></table></div></div>
+      <div className="table-frame"><table><thead><tr><th>Raw Material</th><th>Base Unit</th><th>Qty / Kanban</th><th>Total Kanban</th><th>Total Quantity</th>{canViewPrices && <><th>Unit Price</th><th>Amount</th></>}{editable && <th></th>}</tr></thead><tbody>{lines.length === 0 ? <tr><td colSpan={5 + (canViewPrices ? 2 : 0) + (editable ? 1 : 0)}><div className="table-empty">No Raw Materials selected.</div></td></tr> : lines.map((line, index) => { const quantity = multiplyDecimals(line.qtyPerKanbanSnapshot, line.totalKanban || '0'); const amount = multiplyDecimals(quantity, line.unitPriceSnapshot); const lineError = errors[fieldKey(index)]; const rawMaterialError = errors[materialFieldKey(index)] ?? errors[`lines[${index}]`]; return <tr key={line.rawMaterialId}><td aria-describedby={rawMaterialError ? `material-error-${index}` : undefined}>{line.rawMaterialCode} — {line.rawMaterialName}{rawMaterialError && <small id={`material-error-${index}`} role="alert">{rawMaterialError}</small>}</td><td>{line.baseUnitCode}</td><td><output>{formatDecimal(line.qtyPerKanbanSnapshot)}</output></td><td><input aria-label={`Total Kanban for ${line.rawMaterialName}`} aria-describedby={lineError ? `kanban-error-${index}` : undefined} type="number" min="1" max="99999999999999" step="1" value={line.totalKanban} disabled={!editable} onChange={event => changeKanban(line.rawMaterialId, event.target.value)} />{lineError && <small id={`kanban-error-${index}`} role="alert">{lineError}</small>}</td><td><output>{quantity}</output></td>{canViewPrices && <><td><output>{formatDecimal(line.unitPriceSnapshot)}</output></td><td><output>{amount}</output></td></>}{editable && <td><button type="button" className="table-action" aria-label={`Remove ${line.rawMaterialName}`} onClick={() => setLines(current => current.filter(item => item.rawMaterialId !== line.rawMaterialId))}>Remove</button></td>}</tr>; })}</tbody>{canViewPrices && <tfoot><tr><td colSpan={6}>Order Total</td><td><output>{total}</output></td>{editable && <td></td>}</tr></tfoot>}</table></div></div>
     {editable && <div className="supplier-order-actions"><div>{errors.lines && <small role="alert">{errors.lines}</small>}</div><div>{savedId && <button type="button" onClick={cancel} disabled={saving}>Cancel draft</button>}<button type="button" onClick={() => router.push('/supplier-orders')} disabled={saving}>Back</button><button type="button" onClick={() => save(false)} disabled={saving}>Save as Draft</button><button type="button" className="primary-button" onClick={() => save(true)} disabled={saving}>Save &amp; Send for Approval</button></div></div>}
   </section>;
 }

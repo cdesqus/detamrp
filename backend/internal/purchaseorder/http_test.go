@@ -190,6 +190,48 @@ func TestPurchaseOrderRoutesAcceptDateOnlyOrderDates(t *testing.T) {
 	}
 }
 
+func TestPurchaseOrderRoutesRejectRFC3339OrderDates(t *testing.T) {
+	router := purchaseOrderRouter(t, []string{"po.create"}, &httpRepository{})
+	body := `{"supplierId":"` + uuid.New().String() + `","orderDate":"2026-07-21T23:30:00-05:00","expectedDeliveryDate":"2026-07-22","currency":"IDR"}`
+	recorder := serve(router, http.MethodPost, "/purchase-orders", body, "session")
+
+	if recorder.Code != http.StatusBadRequest || !strings.Contains(recorder.Body.String(), `"orderDate"`) {
+		t.Fatalf("unexpected response: %d %s", recorder.Code, recorder.Body.String())
+	}
+}
+
+func TestPurchaseOrderGetResponsesRedactPricesWithoutPricePermission(t *testing.T) {
+	line := OrderLine{RawMaterialID: uuid.New(), UnitPriceSnapshot: decimal.NewFromInt(7), LineTotal: decimal.NewFromInt(21)}
+	order := Order{ID: uuid.New(), SupplierName: "Acme", TotalAmount: decimal.NewFromInt(21), Lines: []OrderLine{line}}
+	for _, test := range []struct {
+		name string
+		path string
+	}{
+		{name: "list", path: "/purchase-orders"},
+		{name: "detail", path: "/purchase-orders/" + order.ID.String()},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			repository := &httpRepository{order: order, orders: []Order{order}, total: 1}
+			viewer := serve(purchaseOrderRouter(t, []string{"po.view"}, repository), http.MethodGet, test.path, "", "session")
+			if viewer.Code != http.StatusOK {
+				t.Fatalf("viewer status = %d: %s", viewer.Code, viewer.Body.String())
+			}
+			for _, forbidden := range []string{`"totalAmount"`, `"unitPriceSnapshot"`, `"lineTotal"`} {
+				if strings.Contains(viewer.Body.String(), forbidden) {
+					t.Errorf("viewer response exposed %s: %s", forbidden, viewer.Body.String())
+				}
+			}
+
+			authorized := serve(purchaseOrderRouter(t, []string{"po.view", "po.price.view"}, repository), http.MethodGet, test.path, "", "session")
+			for _, required := range []string{`"totalAmount"`, `"unitPriceSnapshot"`, `"lineTotal"`} {
+				if !strings.Contains(authorized.Body.String(), required) {
+					t.Errorf("authorized response omitted %s: %s", required, authorized.Body.String())
+				}
+			}
+		})
+	}
+}
+
 func TestPurchaseOrderRoutesReturnFieldErrorsForInvalidDates(t *testing.T) {
 	router := purchaseOrderRouter(t, []string{"po.create"}, &httpRepository{})
 	body := `{"supplierId":"` + uuid.New().String() + `","orderDate":"2026-02-30","expectedDeliveryDate":"not-a-date","currency":"IDR"}`
@@ -203,10 +245,10 @@ func TestPurchaseOrderRoutesReturnFieldErrorsForInvalidDates(t *testing.T) {
 func TestPurchaseOrderResponseModelsUseLowerCamelJSON(t *testing.T) {
 	actor := Actor{TenantID: uuid.New(), UserID: uuid.New(), DisplayName: "Buyer", Email: "buyer@example.test"}
 	line := OrderLine{ID: uuid.New(), TenantID: uuid.New(), PurchaseOrderID: uuid.New(), RawMaterialID: uuid.New(), RawMaterialCode: "RM-1", RawMaterialName: "Resin", BaseUnitID: uuid.New(), BaseUnitCode: "KG", QtyPerKanbanSnapshot: decimal.NewFromInt(2), TotalKanban: decimal.NewFromInt(3), OrderedBaseQty: decimal.NewFromInt(6), UnitPriceSnapshot: decimal.NewFromInt(4), LineTotal: decimal.NewFromInt(24), SortPosition: 1, CreatedBy: actor, CreatedAt: time.Now(), UpdatedBy: actor, UpdatedAt: time.Now()}
-	order := Order{ID: uuid.New(), TenantID: uuid.New(), PONumber: "PO-202607-00001", SupplierID: uuid.New(), OrderDate: time.Now(), ExpectedDeliveryDate: time.Now(), Currency: "IDR", Notes: "notes", Status: StatusDraft, Version: 1, TotalAmount: decimal.NewFromInt(24), SagePurchaseOrderNumber: "SAGE-1", SubmittedApproverUserID: uuid.New(), SubmittedApproverDisplayName: "Director", SubmittedApproverEmail: "director@example.test", CreatedBy: actor, CreatedAt: time.Now(), UpdatedBy: actor, UpdatedAt: time.Now(), Lines: []OrderLine{line}}
+	order := Order{ID: uuid.New(), TenantID: uuid.New(), PONumber: "PO-202607-00001", SupplierID: uuid.New(), SupplierName: "Acme", OrderDate: time.Now(), ExpectedDeliveryDate: time.Now(), Currency: "IDR", Notes: "notes", Status: StatusDraft, Version: 1, TotalAmount: decimal.NewFromInt(24), SagePurchaseOrderNumber: "SAGE-1", SubmittedApproverUserID: uuid.New(), SubmittedApproverDisplayName: "Director", SubmittedApproverEmail: "director@example.test", CreatedBy: actor, CreatedAt: time.Now(), UpdatedBy: actor, UpdatedAt: time.Now(), Lines: []OrderLine{line}}
 	approval := Approval{ID: uuid.New(), TenantID: uuid.New(), PurchaseOrderID: order.ID, PONumber: order.PONumber, SupplierID: order.SupplierID, SupplierName: "Acme", Version: 1, ApproverUserID: uuid.New(), ApproverDisplayName: "Director", ApproverEmail: "director@example.test", Status: ApprovalPending, DecisionReason: "", DecidedByUserID: uuid.New(), CreatedBy: actor, CreatedAt: time.Now(), UpdatedBy: actor, UpdatedAt: time.Now()}
 
-	assertJSONKeys(t, order, []string{"id", "tenantId", "poNumber", "supplierId", "orderDate", "expectedDeliveryDate", "currency", "notes", "status", "version", "totalAmount", "sagePurchaseOrderNumber", "submittedApproverUserId", "submittedApproverDisplayName", "submittedApproverEmail", "createdBy", "createdAt", "updatedBy", "updatedAt", "lines"})
+	assertJSONKeys(t, order, []string{"id", "tenantId", "poNumber", "supplierId", "supplierName", "orderDate", "expectedDeliveryDate", "currency", "notes", "status", "version", "totalAmount", "sagePurchaseOrderNumber", "submittedApproverUserId", "submittedApproverDisplayName", "submittedApproverEmail", "createdBy", "createdAt", "updatedBy", "updatedAt", "lines"})
 	assertJSONKeys(t, line, []string{"id", "tenantId", "purchaseOrderId", "rawMaterialId", "rawMaterialCode", "rawMaterialName", "baseUnitId", "baseUnitCode", "qtyPerKanbanSnapshot", "totalKanban", "orderedBaseQty", "unitPriceSnapshot", "lineTotal", "sortPosition", "createdBy", "createdAt", "updatedBy", "updatedAt"})
 	assertJSONKeys(t, approval, []string{"id", "tenantId", "purchaseOrderId", "poNumber", "supplierId", "supplierName", "version", "approverUserId", "approverDisplayName", "approverEmail", "status", "decisionReason", "decidedAt", "decidedByUserId", "createdBy", "createdAt", "updatedBy", "updatedAt"})
 	assertJSONKeys(t, actor, []string{"tenantId", "userId", "displayName", "email"})
@@ -313,7 +355,7 @@ func serve(router http.Handler, method, path, body, session string) *httptest.Re
 }
 
 func validOrderJSON() string {
-	return `{"supplierId":"` + uuid.New().String() + `","orderDate":"` + time.Date(2026, time.July, 21, 0, 0, 0, 0, time.UTC).Format(time.RFC3339) + `","expectedDeliveryDate":"2026-07-22T00:00:00Z","currency":"IDR","lines":[{"rawMaterialId":"` + uuid.New().String() + `","totalKanban":"` + decimal.NewFromInt(1).String() + `"}]}`
+	return `{"supplierId":"` + uuid.New().String() + `","orderDate":"2026-07-21","expectedDeliveryDate":"2026-07-22","currency":"IDR","lines":[{"rawMaterialId":"` + uuid.New().String() + `","totalKanban":"` + decimal.NewFromInt(1).String() + `"}]}`
 }
 
 func assertJSONKeys(t *testing.T, value any, keys []string) {

@@ -13,7 +13,23 @@ services:
       retries: 10
     volumes:
       - postgres-data:/var/lib/postgresql/data
-      - ./database/migrations:/docker-entrypoint-initdb.d:ro
+  migrate:
+    image: postgres:17-alpine
+    environment:
+      PGHOST: postgres
+      PGPORT: 5432
+      PGDATABASE: nextgen
+      PGUSER: nextgen
+      PGPASSWORD: nextgen
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./database/migrations:/migrations:ro
+      - ./database/migrate.sh:/migration-tools/migrate.sh:ro
+      - ./database/migrate-one.sql:/migration-tools/migrate-one.sql:ro
+    command: ["/bin/sh", "/migration-tools/migrate.sh"]
+    restart: "no"
   backend:
     build: ./backend
     environment:
@@ -26,6 +42,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
   frontend:
     build:
       context: ./frontend

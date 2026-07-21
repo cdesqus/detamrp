@@ -1,11 +1,11 @@
-CREATE TABLE purchase_order_number_sequences (
+CREATE TABLE IF NOT EXISTS purchase_order_number_sequences (
   tenant_id uuid NOT NULL REFERENCES tenants(id),
   year_month char(6) NOT NULL CHECK (year_month ~ '^[0-9]{6}$'),
   next_value integer NOT NULL DEFAULT 1 CHECK (next_value > 0),
   PRIMARY KEY (tenant_id, year_month)
 );
 
-CREATE TABLE purchase_orders (
+CREATE TABLE IF NOT EXISTS purchase_orders (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id uuid NOT NULL REFERENCES tenants(id),
   po_number text NOT NULL,
@@ -34,7 +34,7 @@ CREATE TABLE purchase_orders (
   FOREIGN KEY (tenant_id, updated_by_user_id) REFERENCES users(tenant_id, id)
 );
 
-CREATE TABLE purchase_order_lines (
+CREATE TABLE IF NOT EXISTS purchase_order_lines (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id uuid NOT NULL REFERENCES tenants(id),
   purchase_order_id uuid NOT NULL,
@@ -63,7 +63,7 @@ CREATE TABLE purchase_order_lines (
   FOREIGN KEY (tenant_id, updated_by_user_id) REFERENCES users(tenant_id, id)
 );
 
-CREATE TABLE purchase_order_approvals (
+CREATE TABLE IF NOT EXISTS purchase_order_approvals (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id uuid NOT NULL REFERENCES tenants(id),
   purchase_order_id uuid NOT NULL,
@@ -114,38 +114,60 @@ BEGIN
 END;
 $$;
 
-CREATE TRIGGER purchase_order_line_supplier_check
-BEFORE INSERT OR UPDATE OF tenant_id, purchase_order_id, raw_material_id ON purchase_order_lines
-FOR EACH ROW EXECUTE FUNCTION purchase_order_supplier_matches_material();
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'purchase_order_line_supplier_check' AND tgrelid = 'purchase_order_lines'::regclass) THEN
+    EXECUTE 'CREATE TRIGGER purchase_order_line_supplier_check
+      BEFORE INSERT OR UPDATE OF tenant_id, purchase_order_id, raw_material_id ON purchase_order_lines
+      FOR EACH ROW EXECUTE FUNCTION purchase_order_supplier_matches_material()';
+  END IF;
+END
+$$;
 
-CREATE INDEX purchase_orders_tenant_status_order_date_idx ON purchase_orders (tenant_id, status, order_date DESC);
-CREATE INDEX purchase_orders_tenant_supplier_order_date_idx ON purchase_orders (tenant_id, supplier_id, order_date DESC);
-CREATE INDEX purchase_order_lines_tenant_order_sort_idx ON purchase_order_lines (tenant_id, purchase_order_id, sort_position);
-CREATE INDEX purchase_order_approvals_tenant_approver_status_idx ON purchase_order_approvals (tenant_id, approver_user_id, status, created_at DESC);
+CREATE INDEX IF NOT EXISTS purchase_orders_tenant_status_order_date_idx ON purchase_orders (tenant_id, status, order_date DESC);
+CREATE INDEX IF NOT EXISTS purchase_orders_tenant_supplier_order_date_idx ON purchase_orders (tenant_id, supplier_id, order_date DESC);
+CREATE INDEX IF NOT EXISTS purchase_order_lines_tenant_order_sort_idx ON purchase_order_lines (tenant_id, purchase_order_id, sort_position);
+CREATE INDEX IF NOT EXISTS purchase_order_approvals_tenant_approver_status_idx ON purchase_order_approvals (tenant_id, approver_user_id, status, created_at DESC);
 
 ALTER TABLE purchase_order_number_sequences ENABLE ROW LEVEL SECURITY;
 ALTER TABLE purchase_order_number_sequences FORCE ROW LEVEL SECURITY;
-CREATE POLICY purchase_order_number_sequences_isolation ON purchase_order_number_sequences
-  USING (tenant_id = current_setting('app.tenant_id', true)::uuid)
-  WITH CHECK (tenant_id = current_setting('app.tenant_id', true)::uuid);
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname = 'public' AND tablename = 'purchase_order_number_sequences' AND policyname = 'purchase_order_number_sequences_isolation') THEN
+    EXECUTE 'CREATE POLICY purchase_order_number_sequences_isolation ON purchase_order_number_sequences
+      USING (tenant_id = current_setting(''app.tenant_id'', true)::uuid)
+      WITH CHECK (tenant_id = current_setting(''app.tenant_id'', true)::uuid)';
+  END IF;
+END $$;
 
 ALTER TABLE purchase_orders ENABLE ROW LEVEL SECURITY;
 ALTER TABLE purchase_orders FORCE ROW LEVEL SECURITY;
-CREATE POLICY purchase_orders_isolation ON purchase_orders
-  USING (tenant_id = current_setting('app.tenant_id', true)::uuid)
-  WITH CHECK (tenant_id = current_setting('app.tenant_id', true)::uuid);
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname = 'public' AND tablename = 'purchase_orders' AND policyname = 'purchase_orders_isolation') THEN
+    EXECUTE 'CREATE POLICY purchase_orders_isolation ON purchase_orders
+      USING (tenant_id = current_setting(''app.tenant_id'', true)::uuid)
+      WITH CHECK (tenant_id = current_setting(''app.tenant_id'', true)::uuid)';
+  END IF;
+END $$;
 
 ALTER TABLE purchase_order_lines ENABLE ROW LEVEL SECURITY;
 ALTER TABLE purchase_order_lines FORCE ROW LEVEL SECURITY;
-CREATE POLICY purchase_order_lines_isolation ON purchase_order_lines
-  USING (tenant_id = current_setting('app.tenant_id', true)::uuid)
-  WITH CHECK (tenant_id = current_setting('app.tenant_id', true)::uuid);
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname = 'public' AND tablename = 'purchase_order_lines' AND policyname = 'purchase_order_lines_isolation') THEN
+    EXECUTE 'CREATE POLICY purchase_order_lines_isolation ON purchase_order_lines
+      USING (tenant_id = current_setting(''app.tenant_id'', true)::uuid)
+      WITH CHECK (tenant_id = current_setting(''app.tenant_id'', true)::uuid)';
+  END IF;
+END $$;
 
 ALTER TABLE purchase_order_approvals ENABLE ROW LEVEL SECURITY;
 ALTER TABLE purchase_order_approvals FORCE ROW LEVEL SECURITY;
-CREATE POLICY purchase_order_approvals_isolation ON purchase_order_approvals
-  USING (tenant_id = current_setting('app.tenant_id', true)::uuid)
-  WITH CHECK (tenant_id = current_setting('app.tenant_id', true)::uuid);
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname = 'public' AND tablename = 'purchase_order_approvals' AND policyname = 'purchase_order_approvals_isolation') THEN
+    EXECUTE 'CREATE POLICY purchase_order_approvals_isolation ON purchase_order_approvals
+      USING (tenant_id = current_setting(''app.tenant_id'', true)::uuid)
+      WITH CHECK (tenant_id = current_setting(''app.tenant_id'', true)::uuid)';
+  END IF;
+END $$;
 
 GRANT SELECT, INSERT, UPDATE ON purchase_order_number_sequences, purchase_orders, purchase_order_approvals TO nextgen_app;
 GRANT SELECT, INSERT, UPDATE, DELETE ON purchase_order_lines TO nextgen_app;

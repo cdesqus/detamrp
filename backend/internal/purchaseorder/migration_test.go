@@ -16,10 +16,10 @@ func TestMigrationContainsTenantScopedPurchaseOrderContracts(t *testing.T) {
 
 	sql := strings.ToLower(string(content))
 	for _, fragment := range []string{
-		"create table purchase_order_number_sequences",
-		"create table purchase_orders",
-		"create table purchase_order_lines",
-		"create table purchase_order_approvals",
+		"create table if not exists purchase_order_number_sequences",
+		"create table if not exists purchase_orders",
+		"create table if not exists purchase_order_lines",
+		"create table if not exists purchase_order_approvals",
 		"unique (tenant_id, id)",
 		"unique (tenant_id, po_number)",
 		"unique (tenant_id, purchase_order_id, raw_material_id)",
@@ -40,6 +40,28 @@ func TestMigrationContainsTenantScopedPurchaseOrderContracts(t *testing.T) {
 	} {
 		if !strings.Contains(sql, fragment) {
 			t.Fatalf("migration missing %q", fragment)
+		}
+	}
+}
+
+func TestMigrationCanReconcileAnUntrackedExistingPurchaseOrderSchema(t *testing.T) {
+	path := filepath.Join("..", "..", "..", "database", "migrations", "005_purchase_orders.sql")
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read purchase order migration: %v", err)
+	}
+	sql := strings.ToLower(string(content))
+	for _, fragment := range []string{
+		"create table if not exists purchase_order_number_sequences",
+		"create table if not exists purchase_orders",
+		"create table if not exists purchase_order_lines",
+		"create table if not exists purchase_order_approvals",
+		"create index if not exists purchase_orders_tenant_status_order_date_idx",
+		"if not exists (select 1 from pg_trigger",
+		"if not exists (select 1 from pg_policies",
+	} {
+		if !strings.Contains(sql, fragment) {
+			t.Errorf("repeat-safe migration contract missing %q", fragment)
 		}
 	}
 }

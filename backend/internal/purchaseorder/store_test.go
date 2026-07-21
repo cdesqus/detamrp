@@ -11,6 +11,18 @@ func TestGetOrderHeaderQueryLocksHeaderBeforeLoadingLines(t *testing.T) {
 	}
 }
 
+func TestOrderSelectIncludesSupplierDisplayName(t *testing.T) {
+	query := strings.ToLower(orderSelect)
+	for _, fragment := range []string{
+		"s.name",
+		"join suppliers s on s.tenant_id=p.tenant_id and s.id=p.supplier_id",
+	} {
+		if !strings.Contains(query, fragment) {
+			t.Errorf("order query missing %q", fragment)
+		}
+	}
+}
+
 func TestApprovalSelectIncludesPurchaseOrderAndSupplierDetails(t *testing.T) {
 	query := strings.ToLower(approvalSelect)
 	for _, fragment := range []string{
