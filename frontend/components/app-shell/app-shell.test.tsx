@@ -5,21 +5,33 @@ import { AppShell } from './app-shell';
 
 const replace = vi.fn();
 let currentPath = '/dashboard';
+const director = { username: 'director_demo', displayName: 'Director Demo', permissions: ['po.view', 'po.price.view', 'po.approve', 'po.reject', 'inventory.view'] };
 
 vi.mock('next/navigation', () => ({
   usePathname: () => currentPath,
   useRouter: () => ({ replace })
 }));
 
+function auth(user = { username: 'admin', displayName: 'Administrator', permissions: [] as string[] }) {
+  return { ok: true, json: async () => ({ user }) } as Response;
+}
+
+function approvals(poNumber: string, supplierName: string, total = 1) {
+  return { ok: true, json: async () => ({ items: [{ id: `approval-${poNumber}`, purchaseOrderId: `id-${poNumber}`, poNumber, supplierId: 'supplier-1', supplierName }], total }) } as Response;
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>(done => { resolve = done; });
+  return { promise, resolve };
+}
+
 describe('AppShell', () => {
   beforeEach(() => {
     localStorage.clear();
     currentPath = '/dashboard';
     replace.mockClear();
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({ user: { username: 'admin', displayName: 'Administrator', permissions: [] } })
-    }));
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(auth()));
   });
 
   it('orders master data first and keeps approval and delivery notes out of the sidebar', async () => {
@@ -70,24 +82,66 @@ describe('AppShell', () => {
     expect(screen.getByRole('button', { name: 'Expand sidebar' })).toBeInTheDocument();
   });
 
-  it('loads approval notifications for approvers and refreshes them after a decision event', async () => {
-    let refreshed = false;
-    vi.stubGlobal('fetch', vi.fn((path: string) => Promise.resolve(path === '/api/auth/me'
-      ? { ok: true, json: async () => ({ user: { username: 'director', displayName: 'Director', permissions: ['po.approve', 'po.view', 'master_data.view'] } }) }
-      : path === '/api/purchase-order-approvals' ? { ok: true, json: async () => ({ items: refreshed ? [] : [{ id: 'approval-1', purchaseOrderId: 'po-1' }], total: refreshed ? 0 : 1 }) }
-        : path === '/api/purchase-orders/po-1' ? { ok: true, json: async () => ({ id: 'po-1', poNumber: 'PO-202607-00001', supplierId: 'supplier-1' }) }
-          : { ok: true, json: async () => ({ items: [{ id: 'supplier-1', code: 'SUP-001', name: 'Acme' }] }) })));
+  it('uses enriched approvals and API total with real Director permissions', async () => {
+    const fetchMock = vi.fn((path: string) => Promise.resolve(path === '/api/auth/me' ? auth(director) : approvals('PO-202607-00001', 'Acme', 205)));
+    vi.stubGlobal('fetch', fetchMock);
     const user = userEvent.setup();
     render(<AppShell title="Dashboard"><div>content</div></AppShell>);
 
-    expect(await screen.findByText('Director')).toBeInTheDocument();
-    await waitFor(() => expect(screen.getByTestId('notification-badge')).toHaveTextContent('1'));
+    expect(await screen.findByText('Director Demo')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByTestId('notification-badge')).toHaveTextContent('205'));
     await user.click(screen.getByRole('button', { name: 'Notifications' }));
-    expect(screen.getByRole('link', { name: /PO-202607-00001 awaits approval/ })).toHaveAttribute('href', '/supplier-orders/po-1');
-    expect(screen.getByText('SUP-001 — Acme')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /PO-202607-00001 awaits approval/ })).toHaveAttribute('href', '/supplier-orders/id-PO-202607-00001');
+    expect(screen.getByText('Acme')).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith('/api/purchase-order-approvals?limit=200', expect.objectContaining({ signal: expect.any(AbortSignal) }));
+    expect(fetchMock.mock.calls.filter(([path]) => path === '/api/purchase-order-approvals?limit=200').length).toBeGreaterThan(0);
+    expect(fetchMock.mock.calls.every(([path]) => path === '/api/auth/me' || path === '/api/purchase-order-approvals?limit=200')).toBe(true);
+  });
 
-    refreshed = true;
+  it('ignores and aborts stale notification refreshes', async () => {
+    const stale = deferred<Response>();
+    const signals: AbortSignal[] = [];
+    let approvalRequest = 0;
+    vi.stubGlobal('fetch', vi.fn((path: string, init?: RequestInit) => {
+      if (path === '/api/auth/me') return Promise.resolve(auth(director));
+      signals.push(init?.signal as AbortSignal);
+      approvalRequest += 1;
+      if (approvalRequest === 1) return Promise.resolve(approvals('PO-INITIAL', 'Initial'));
+      if (approvalRequest === 2) return stale.promise;
+      return Promise.resolve(approvals('PO-NEW', 'Newest'));
+    }));
+    const user = userEvent.setup();
+    render(<AppShell title="Dashboard"><div>content</div></AppShell>);
+    await waitFor(() => expect(screen.getByTestId('notification-badge')).toHaveTextContent('1'));
+
     window.dispatchEvent(new Event('purchase-order-approvals:refresh'));
-    await waitFor(() => expect(screen.queryByTestId('notification-badge')).not.toBeInTheDocument());
+    window.dispatchEvent(new Event('purchase-order-approvals:refresh'));
+    expect(signals[1].aborted).toBe(true);
+    await user.click(screen.getByRole('button', { name: 'Notifications' }));
+    expect(await screen.findByText('PO-NEW awaits approval')).toBeInTheDocument();
+
+    stale.resolve(approvals('PO-STALE', 'Stale'));
+    await waitFor(() => expect(screen.queryByText('PO-STALE awaits approval')).not.toBeInTheDocument());
+    expect(screen.getByText('PO-NEW awaits approval')).toBeInTheDocument();
+  });
+
+  it('preserves the last good notification snapshot when refresh fails', async () => {
+    let approvalRequest = 0;
+    const fetchMock = vi.fn((path: string) => {
+      if (path === '/api/auth/me') return Promise.resolve(auth(director));
+      approvalRequest += 1;
+      return Promise.resolve(approvalRequest === 1 ? approvals('PO-GOOD', 'Good Supplier', 4) : { ok: false } as Response);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const user = userEvent.setup();
+    render(<AppShell title="Dashboard"><div>content</div></AppShell>);
+    await waitFor(() => expect(screen.getByTestId('notification-badge')).toHaveTextContent('4'));
+
+    window.dispatchEvent(new Event('purchase-order-approvals:refresh'));
+    await waitFor(() => expect(fetchMock.mock.calls.filter(([path]) => path === '/api/purchase-order-approvals?limit=200').length).toBeGreaterThan(1));
+    await user.click(screen.getByRole('button', { name: 'Notifications' }));
+
+    expect(screen.getByText('PO-GOOD awaits approval')).toBeInTheDocument();
+    expect(screen.getByTestId('notification-badge')).toHaveTextContent('4');
   });
 });

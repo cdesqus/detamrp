@@ -5,9 +5,9 @@ import { useState } from 'react';
 import { Icon } from '../icons';
 import { NotificationItem } from './notification-data';
 
-export function NotificationCenter({ items }: { items: NotificationItem[] }) {
+export function NotificationCenter({ items, total }: { items: NotificationItem[]; total?: number }) {
   const [open, setOpen] = useState(false);
-  const unread = items.filter(item => item.unread).length;
+  const unread = total ?? items.filter(item => item.unread).length;
   return (
     <div className="notification-center">
       <button className="notification-trigger" aria-label="Notifications" aria-expanded={open} onClick={() => setOpen(value => !value)}>

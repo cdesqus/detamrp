@@ -2,16 +2,14 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { createContext, ReactNode, useCallback, useContext, useEffect, useState } from 'react';
+import { createContext, ReactNode, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { Icon } from '../icons';
 import { NotificationCenter } from '../notifications/notification-center';
 import { NotificationItem } from '../notifications/notification-data';
 import { navigationGroups } from './navigation';
 
 export type CurrentUser = { username: string; displayName: string; permissions: string[] };
-type PendingApproval = { id: string; purchaseOrderId: string; version?: number };
-type PurchaseOrder = { id: string; poNumber: string; supplierId: string };
-type Supplier = { id: string; code: string; name: string };
+type PendingApproval = { id: string; purchaseOrderId: string; version?: number; poNumber?: string; supplierId?: string; supplierName?: string };
 const CurrentUserContext = createContext<CurrentUser | null>(null);
 const storageKey = 'order-stock.sidebar-collapsed';
 const approvalRefreshEvent = 'purchase-order-approvals:refresh';
@@ -23,6 +21,8 @@ export function AppShell({ title, children }: { title: string; children: ReactNo
   const router = useRouter();
   const [user, setUser] = useState<CurrentUser | null>(null);
   const [notificationItems, setNotificationItems] = useState<NotificationItem[]>([]);
+  const [notificationTotal, setNotificationTotal] = useState(0);
+  const notificationRequest = useRef<{ generation: number; controller: AbortController | null }>({ generation: 0, controller: null });
   const [collapsed, setCollapsed] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() => Object.fromEntries(navigationGroups.filter(group => group.collapsible && group.label).map(group => [group.label!, group.items.some(item => pathname === item.href || pathname.startsWith(`${item.href}/`))])));
@@ -37,45 +37,45 @@ export function AppShell({ title, children }: { title: string; children: ReactNo
   }, [router]);
 
   const loadApprovalNotifications = useCallback(async () => {
-    if (!user?.permissions.includes('po.approve')) { setNotificationItems([]); return; }
+    notificationRequest.current.controller?.abort();
+    const generation = ++notificationRequest.current.generation;
+    if (!user?.permissions.includes('po.approve')) {
+      setNotificationItems([]);
+      setNotificationTotal(0);
+      return;
+    }
+    const controller = new AbortController();
+    notificationRequest.current.controller = controller;
     try {
-      const response = await fetch('/api/purchase-order-approvals', { credentials: 'include' });
-      if (!response.ok) { setNotificationItems([]); return; }
-      const approvals = (await response.json() as { items?: PendingApproval[] }).items ?? [];
+      const response = await fetch('/api/purchase-order-approvals?limit=200', { credentials: 'include', signal: controller.signal });
+      if (!response.ok) return;
+      const payload = await response.json() as { items?: PendingApproval[]; total?: number };
+      if (generation !== notificationRequest.current.generation || controller.signal.aborted) return;
+      const approvals = payload.items ?? [];
       const canViewPurchaseOrders = user.permissions.includes('po.view');
-      const orders = canViewPurchaseOrders ? await Promise.all(approvals.map(async approval => {
-        try {
-          const orderResponse = await fetch(`/api/purchase-orders/${approval.purchaseOrderId}`, { credentials: 'include' });
-          return orderResponse.ok ? await orderResponse.json() as PurchaseOrder : null;
-        } catch { return null; }
-      })) : [];
-      const ordersByID = new Map(orders.filter((order): order is PurchaseOrder => Boolean(order)).map(order => [order.id, order]));
-      let suppliersByID = new Map<string, Supplier>();
-      if (user.permissions.includes('master_data.view') && ordersByID.size > 0) {
-        try {
-          const supplierResponse = await fetch('/api/master-data/suppliers?limit=200', { credentials: 'include' });
-          if (supplierResponse.ok) suppliersByID = new Map(((await supplierResponse.json() as { items?: Supplier[] }).items ?? []).map(supplier => [supplier.id, supplier]));
-        } catch { /* The approval remains usable when supplier details are unavailable. */ }
-      }
       setNotificationItems(approvals.map(approval => {
-        const order = ordersByID.get(approval.purchaseOrderId); const supplier = order ? suppliersByID.get(order.supplierId) : undefined;
-        const reference = order?.poNumber ?? `PO ${approval.purchaseOrderId}`;
+        const reference = approval.poNumber ?? `PO ${approval.purchaseOrderId}`;
         return {
         id: approval.id,
         title: `${reference} awaits approval`,
-        description: supplier ? `${supplier.code} — ${supplier.name}` : approval.version ? `Approval request v${approval.version}` : 'Approval request is pending',
+        description: approval.supplierName ?? (approval.version ? `Approval request v${approval.version}` : 'Approval request is pending'),
         href: canViewPurchaseOrders ? `/supplier-orders/${approval.purchaseOrderId}` : '/approvals',
         unread: true,
         type: 'approval'
       }; }));
-    } catch { setNotificationItems([]); }
+      setNotificationTotal(payload.total ?? approvals.length);
+    } catch { /* Preserve the last good notification snapshot on refresh failure. */ }
   }, [user]);
 
   useEffect(() => {
     void loadApprovalNotifications();
     const refresh = () => void loadApprovalNotifications();
     window.addEventListener(approvalRefreshEvent, refresh);
-    return () => window.removeEventListener(approvalRefreshEvent, refresh);
+    return () => {
+      window.removeEventListener(approvalRefreshEvent, refresh);
+      notificationRequest.current.controller?.abort();
+      notificationRequest.current.generation += 1;
+    };
   }, [loadApprovalNotifications]);
 
   function toggleSidebar() {
@@ -113,7 +113,7 @@ export function AppShell({ title, children }: { title: string; children: ReactNo
             <button className="mobile-sidebar-toggle" aria-label="Open navigation" onClick={() => setDrawerOpen(true)}><Icon name="menu" /></button>
             <span>{title}</span>
           </div>
-          <div className="header-end"><NotificationCenter items={notificationItems} /><span>{user.displayName}</span></div>
+          <div className="header-end"><NotificationCenter items={notificationItems} total={notificationTotal} /><span>{user.displayName}</span></div>
         </header>
         <main>{children}</main>
       </section>

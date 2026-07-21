@@ -38,8 +38,11 @@ const orderLineSelect = `SELECT l.id,l.tenant_id,l.purchase_order_id,l.raw_mater
 
 const approvalSelect = `SELECT a.id,a.tenant_id,a.purchase_order_id,a.version,a.approver_user_id,a.approver_display_name,
  a.approver_email,a.status,a.decision_reason,a.decided_at,COALESCE(a.decided_by_user_id,'00000000-0000-0000-0000-000000000000'),
- a.created_by_user_id,cu.display_name,cu.email,a.created_at,a.updated_by_user_id,uu.display_name,uu.email,a.updated_at
+ a.created_by_user_id,cu.display_name,cu.email,a.created_at,a.updated_by_user_id,uu.display_name,uu.email,a.updated_at,
+ p.po_number,p.supplier_id,s.name
  FROM purchase_order_approvals a
+	JOIN purchase_orders p ON p.tenant_id=a.tenant_id AND p.id=a.purchase_order_id
+	JOIN suppliers s ON s.tenant_id=p.tenant_id AND s.id=p.supplier_id
  JOIN users cu ON cu.tenant_id=a.tenant_id AND cu.id=a.created_by_user_id
  JOIN users uu ON uu.tenant_id=a.tenant_id AND uu.id=a.updated_by_user_id`
 
@@ -78,6 +81,7 @@ func scanApproval(row pgx.Row) (Approval, error) {
 		&approval.ApproverDisplayName, &approval.ApproverEmail, &approval.Status, &approval.DecisionReason, &approval.DecidedAt,
 		&approval.DecidedByUserID, &approval.CreatedBy.UserID, &approval.CreatedBy.DisplayName, &approval.CreatedBy.Email,
 		&approval.CreatedAt, &approval.UpdatedBy.UserID, &approval.UpdatedBy.DisplayName, &approval.UpdatedBy.Email, &approval.UpdatedAt,
+		&approval.PONumber, &approval.SupplierID, &approval.SupplierName,
 	)
 	approval.CreatedBy.TenantID = approval.TenantID
 	approval.UpdatedBy.TenantID = approval.TenantID
@@ -245,7 +249,7 @@ func (s *SQLStore) ListApprovals(ctx context.Context, actor Actor, query ListQue
  AND ($3='' OR p.po_number ILIKE '%'||$3||'%' OR p.notes ILIKE '%'||$3||'%')`, actor.TenantID, actor.UserID, query.Search).Scan(&total); err != nil {
 			return err
 		}
-		rows, err := tx.Query(ctx, approvalSelect+` JOIN purchase_orders p ON p.tenant_id=a.tenant_id AND p.id=a.purchase_order_id
+		rows, err := tx.Query(ctx, approvalSelect+`
  WHERE a.tenant_id=$1 AND a.approver_user_id=$2 AND a.status='PENDING'
  AND ($3='' OR p.po_number ILIKE '%'||$3||'%' OR p.notes ILIKE '%'||$3||'%')
  ORDER BY a.created_at DESC LIMIT $4 OFFSET $5`, actor.TenantID, actor.UserID, query.Search, query.Limit, query.Offset)

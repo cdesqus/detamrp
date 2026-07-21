@@ -7,9 +7,9 @@ import { emptyNotificationSnapshot } from './notification-data';
 describe('NotificationCenter', () => {
   it('shows the pending approval count and real PO link', async () => {
     const user = userEvent.setup();
-    render(<NotificationCenter items={[{ id: 'approval-1', title: 'PO PO-202607-00001 awaits approval', description: 'Supplier: Acme', href: '/supplier-orders/po-1', unread: true, type: 'approval' }]} />);
+    render(<NotificationCenter total={205} items={[{ id: 'approval-1', title: 'PO PO-202607-00001 awaits approval', description: 'Supplier: Acme', href: '/supplier-orders/po-1', unread: true, type: 'approval' }]} />);
 
-    expect(screen.getByTestId('notification-badge')).toHaveTextContent('1');
+    expect(screen.getByTestId('notification-badge')).toHaveTextContent('205');
     await user.click(screen.getByRole('button', { name: 'Notifications' }));
     expect(screen.getByRole('link', { name: /PO PO-202607-00001 awaits approval/ })).toHaveAttribute('href', '/supplier-orders/po-1');
   });

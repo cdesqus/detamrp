@@ -169,6 +169,9 @@ type Approval struct {
 	ID                  uuid.UUID      `json:"id"`
 	TenantID            uuid.UUID      `json:"tenantId"`
 	PurchaseOrderID     uuid.UUID      `json:"purchaseOrderId"`
+	PONumber            string         `json:"poNumber"`
+	SupplierID          uuid.UUID      `json:"supplierId"`
+	SupplierName        string         `json:"supplierName"`
 	Version             int            `json:"version"`
 	ApproverUserID      uuid.UUID      `json:"approverUserId"`
 	ApproverDisplayName string         `json:"approverDisplayName"`
