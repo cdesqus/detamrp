@@ -21,6 +21,7 @@ func TestComposeRunsVersionedMigrationsBeforeBackend(t *testing.T) {
 		"PGPASSWORD: nextgen",
 		"./database/migrations:/migrations:ro",
 		"./database/migration-bootstrap.sql:/migration-tools/migration-bootstrap.sql:ro",
+		`sed 's/\\r$//' /migration-tools/migrate.sh`,
 	} {
 		if !strings.Contains(content, fragment) {
 			t.Errorf("compose migration contract missing %q", fragment)
