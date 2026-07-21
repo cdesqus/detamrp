@@ -6,6 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"order-stock/backend/internal/auth"
+	"order-stock/backend/internal/masterdata"
 )
 
 type Authenticator interface {
@@ -15,8 +16,9 @@ type Authenticator interface {
 }
 
 type serverConfig struct {
-	authenticator Authenticator
-	cookieSecure  bool
+	authenticator      Authenticator
+	cookieSecure       bool
+	measurementService *masterdata.MeasurementService
 }
 
 type ServerOption func(*serverConfig)
@@ -27,6 +29,10 @@ func WithAuthenticator(authenticator Authenticator) ServerOption {
 
 func WithSecureCookies() ServerOption {
 	return func(config *serverConfig) { config.cookieSecure = true }
+}
+
+func WithMeasurementService(service *masterdata.MeasurementService) ServerOption {
+	return func(config *serverConfig) { config.measurementService = service }
 }
 
 func NewServer(options ...ServerOption) http.Handler {
@@ -41,6 +47,9 @@ func NewServer(options ...ServerOption) http.Handler {
 	})
 	if config.authenticator != nil {
 		registerAuthRoutes(router, config)
+		if config.measurementService != nil {
+			masterdata.RegisterMeasurementRoutes(router, config.measurementService, config.authenticator)
+		}
 	}
 	return router
 }

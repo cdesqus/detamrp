@@ -43,6 +43,9 @@ func (p *pgxTenantTx) Rollback(ctx context.Context) error { return p.tx.Rollback
 func (p *pgxTenantTx) Exec(ctx context.Context, sql string, arguments ...any) (pgconn.CommandTag, error) {
 	return p.tx.Exec(ctx, sql, arguments...)
 }
+func (p *pgxTenantTx) Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error) {
+	return p.tx.Query(ctx, sql, args...)
+}
 func (p *pgxTenantTx) QueryRow(ctx context.Context, sql string, args ...any) pgx.Row {
 	return p.tx.QueryRow(ctx, sql, args...)
 }

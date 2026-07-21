@@ -11,6 +11,7 @@ import (
 	"order-stock/backend/internal/api"
 	"order-stock/backend/internal/auth"
 	"order-stock/backend/internal/database"
+	"order-stock/backend/internal/masterdata"
 )
 
 func main() {
@@ -29,12 +30,14 @@ func main() {
 		log.Fatal(err)
 	}
 	authService := auth.NewService(store, 12*time.Hour)
+	masterDataStore := masterdata.NewSQLStore(db)
+	measurementService := masterdata.NewMeasurementService(masterDataStore)
 	address := os.Getenv("HTTP_ADDR")
 	if address == "" {
 		address = ":8091"
 	}
 	log.Printf("API listening on %s", address)
-	if err := http.ListenAndServe(address, api.NewServer(api.WithAuthenticator(authService))); err != nil {
+	if err := http.ListenAndServe(address, api.NewServer(api.WithAuthenticator(authService), api.WithMeasurementService(measurementService))); err != nil {
 		log.Fatal(err)
 	}
 }

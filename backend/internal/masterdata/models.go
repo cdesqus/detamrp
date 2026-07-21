@@ -11,10 +11,12 @@ import (
 )
 
 type Audit struct {
-	CreatedBy uuid.UUID `json:"createdBy"`
-	CreatedAt time.Time `json:"createdAt"`
-	UpdatedBy uuid.UUID `json:"updatedBy"`
-	UpdatedAt time.Time `json:"updatedAt"`
+	CreatedBy     uuid.UUID `json:"createdBy"`
+	CreatedByName string    `json:"createdByName"`
+	CreatedAt     time.Time `json:"createdAt"`
+	UpdatedBy     uuid.UUID `json:"updatedBy"`
+	UpdatedByName string    `json:"updatedByName"`
+	UpdatedAt     time.Time `json:"updatedAt"`
 }
 
 type Measurement struct {

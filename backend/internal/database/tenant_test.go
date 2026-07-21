@@ -25,7 +25,8 @@ func (f *fakeTenantTx) Rollback(_ context.Context) error { f.rolledBack = true; 
 func (f *fakeTenantTx) Exec(context.Context, string, ...any) (pgconn.CommandTag, error) {
 	return pgconn.CommandTag{}, nil
 }
-func (f *fakeTenantTx) QueryRow(context.Context, string, ...any) pgx.Row { return nil }
+func (f *fakeTenantTx) Query(context.Context, string, ...any) (pgx.Rows, error) { return nil, nil }
+func (f *fakeTenantTx) QueryRow(context.Context, string, ...any) pgx.Row        { return nil }
 
 type fakeTenantBeginner struct{ tx *fakeTenantTx }
 
