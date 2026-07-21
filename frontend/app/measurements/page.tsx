@@ -1,4 +1,4 @@
+'use client';
 import { AppShell } from '../../components/app-shell/app-shell';
-import { ModuleIndex } from '../../components/module-index';
-
-export default function MeasurementsPage() { return <AppShell title="Measurements"><ModuleIndex title="Measurements" description="Unit dasar untuk accounting dan stok fisik." actionLabel="New measurement" columns={['Code','Name','Precision','Status','Created By','Updated At']} searchPlaceholder="Search unit code or name" emptyMessage="Belum ada measurement tambahan." /></AppShell>; }
+import { MasterDataCrud } from '../../components/master-data-crud';
+export default function Page(){return <AppShell title="Measurements"><MasterDataCrud title="Measurements" description="Unit dasar untuk accounting dan stok fisik. Kanban bukan unit dasar." endpoint="/master-data/measurements" singular="measurement" searchPlaceholder="Search unit code or name" initial={{code:'',name:'',decimalAllowed:false,active:true}} columns={[{key:'code',label:'Code'},{key:'name',label:'Name'},{key:'decimalAllowed',label:'Decimal',render:r=>r.decimalAllowed?'Yes':'No'},{key:'active',label:'Status',render:r=>r.active?'Active':'Inactive'},{key:'createdByName',label:'Created By'}]} fields={[{key:'code',label:'Code',required:true},{key:'name',label:'Name',required:true},{key:'decimalAllowed',label:'Allow Decimal',type:'checkbox'},{key:'active',label:'Active',type:'checkbox'}]}/></AppShell>}

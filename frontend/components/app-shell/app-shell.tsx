@@ -17,7 +17,7 @@ export function AppShell({ title, children }: { title: string; children: ReactNo
   const [user, setUser] = useState<CurrentUser | null>(null);
   const [collapsed, setCollapsed] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(pathname.startsWith('/settings'));
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() => Object.fromEntries(navigationGroups.filter(group => group.collapsible && group.label).map(group => [group.label!, group.items.some(item => pathname === item.href || pathname.startsWith(`${item.href}/`))])));
 
   useEffect(() => {
     setCollapsed(localStorage.getItem(storageKey) === 'true');
@@ -44,8 +44,8 @@ export function AppShell({ title, children }: { title: string; children: ReactNo
         <nav>
           {navigationGroups.map((group, groupIndex) => (
             <div className="nav-group" key={group.label ?? groupIndex}>
-              {group.collapsible ? <button className="nav-group-toggle" aria-expanded={settingsOpen} onClick={() => setSettingsOpen(value => !value)}><Icon name={group.icon ?? 'settings'} /><span className="nav-label">{group.label}</span><Icon name={settingsOpen ? 'chevron-left' : 'chevron-right'} /></button> : group.label ? <p>{group.label}</p> : null}
-              {(!group.collapsible || settingsOpen) && group.items.map(item => {
+              {group.collapsible ? <button className="nav-group-toggle" aria-expanded={Boolean(openGroups[group.label!])} onClick={() => setOpenGroups(value => ({...value,[group.label!]:!value[group.label!]}))}><Icon name={group.icon ?? 'settings'} /><span className="nav-label">{group.label}</span><Icon name={openGroups[group.label!] ? 'chevron-left' : 'chevron-right'} /></button> : group.label ? <p>{group.label}</p> : null}
+              {(!group.collapsible || openGroups[group.label!]) && group.items.map(item => {
                 const active = pathname === item.href || (item.href !== '/dashboard' && pathname.startsWith(`${item.href}/`));
                 return (
                   <Link href={item.href} key={item.href} aria-current={active ? 'page' : undefined} title={collapsed ? item.label : undefined} onClick={() => setDrawerOpen(false)}>

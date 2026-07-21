@@ -49,10 +49,12 @@ describe('AppShell', () => {
   });
 
   it('renders live navigation and marks the current route', async () => {
+    const user = userEvent.setup();
     render(<AppShell title="Dashboard"><div>content</div></AppShell>);
 
     expect(await screen.findByText('Administrator')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Dashboard' })).toHaveAttribute('aria-current', 'page');
+    await user.click(screen.getByRole('button', { name: 'Data Master' }));
     expect(screen.getByRole('link', { name: 'Raw Materials' })).toHaveAttribute('href', '/raw-materials');
   });
 

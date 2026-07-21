@@ -1,7 +1,7 @@
 :root { font-family: Inter, ui-sans-serif, system-ui, sans-serif; color: #27272a; font-size: 14px; }
 * { box-sizing: border-box; }
 body { margin: 0; background: #fafafa; }
-button, input { font: inherit; }
+button, input, select, textarea { font: inherit; }
 .login-page { min-height: 100vh; display: grid; place-items: center; padding: 24px; background: #f7f7f8; }
 .login-panel { width: min(360px, 100%); padding: 28px; background: white; border: 1px solid #e4e4e7; border-radius: 10px; box-shadow: 0 8px 28px rgb(0 0 0 / 5%); }
 .brand-mark, .sidebar-brand span { display: grid; place-items: center; width: 30px; height: 30px; color: white; background: #18181b; border-radius: 7px; font-size: 12px; font-weight: 700; }
@@ -67,10 +67,34 @@ button:disabled { cursor: not-allowed; opacity: .48; }
 .table-toolbar input { width: min(280px, 100%); height: 32px; padding: 0 9px; border: 1px solid #d4d4d8; border-radius: 5px; outline: none; }
 .table-toolbar input:focus { border-color: #71717a; box-shadow: 0 0 0 2px rgb(24 24 27 / 7%); }
 .toolbar-actions { display: flex; gap: 6px; }
+.toolbar-actions select { height: 32px; padding: 0 8px; color: #52525b; background: white; border: 1px solid #d4d4d8; border-radius: 5px; }
+.toolbar-actions span { align-self: center; color: #a1a1aa; font-size: 11px; }
 .table-frame { overflow-x: auto; background: white; border: 1px solid #e4e4e7; border-radius: 0 0 7px 7px; }
 .table-frame table { width: 100%; min-width: 760px; border-collapse: collapse; }
 .table-frame th { height: 34px; padding: 0 10px; color: #71717a; background: #fafafa; border-bottom: 1px solid #e4e4e7; font-size: 11px; font-weight: 600; text-align: left; white-space: nowrap; }
 .table-frame td { padding: 0 10px; }
+.table-frame tbody tr:not(:last-child) td { border-bottom: 1px solid #f4f4f5; }
+.table-frame tbody td { height: 38px; color: #52525b; font-size: 11px; white-space: nowrap; }
+.table-action { padding: 3px 7px; color: #3f3f46; background: white; border: 1px solid #d4d4d8; border-radius: 4px; cursor: pointer; font-size: 10px; }
+.crud-scrim { position: fixed; z-index: 39; inset: 0; width: 100%; background: rgb(0 0 0 / 20%); border: 0; }
+.crud-drawer { position: fixed; z-index: 40; inset: 0 0 0 auto; width: min(420px, 100%); overflow-y: auto; padding: 0; background: white; border-left: 1px solid #e4e4e7; box-shadow: -12px 0 30px rgb(0 0 0 / 8%); }
+.crud-drawer-heading { height: 64px; display: flex; align-items: center; justify-content: space-between; padding: 0 16px; border-bottom: 1px solid #e4e4e7; }
+.crud-drawer-heading div { display: grid; gap: 3px; }
+.crud-drawer-heading strong { font-size: 14px; font-weight: 600; }
+.crud-drawer-heading span { color: #a1a1aa; font-size: 10px; }
+.crud-drawer-heading button { width: 28px; height: 28px; color: #71717a; background: white; border: 1px solid #e4e4e7; border-radius: 5px; cursor: pointer; }
+.crud-drawer form { padding: 16px; }
+.crud-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.crud-fields label { display: grid; align-content: start; gap: 5px; color: #52525b; font-size: 11px; }
+.crud-fields input:not([type=checkbox]), .crud-fields select, .crud-fields textarea { width: 100%; min-height: 34px; padding: 0 9px; color: #27272a; background: white; border: 1px solid #d4d4d8; border-radius: 5px; outline: none; }
+.crud-fields textarea { min-height: 70px; padding-block: 8px; resize: vertical; }
+.crud-fields input:focus, .crud-fields select:focus, .crud-fields textarea:focus { border-color: #71717a; box-shadow: 0 0 0 2px rgb(24 24 27 / 7%); }
+.crud-fields label:has(textarea), .crud-fields .check-field { grid-column: 1 / -1; }
+.crud-fields .check-field { display: flex; align-items: center; gap: 8px; }
+.crud-fields small { color: #b91c1c; font-size: 10px; }
+.crud-actions { position: sticky; bottom: 0; display: flex; justify-content: flex-end; gap: 7px; margin: 18px -16px -16px; padding: 12px 16px; background: white; border-top: 1px solid #e4e4e7; }
+.crud-actions button { height: 32px; padding: 0 11px; border: 1px solid #d4d4d8; border-radius: 5px; background: white; cursor: pointer; }
+.crud-actions .primary-button { color: white; border-color: #27272a; background: #27272a; }
 .table-empty { min-height: 220px; display: grid; place-content: center; justify-items: center; gap: 5px; color: #71717a; font-size: 12px; }
 .table-empty strong { color: #3f3f46; font-size: 13px; font-weight: 600; }
 .report-filters { display: grid; grid-template-columns: repeat(4, minmax(150px, 1fr)); gap: 9px; margin-top: 18px; padding: 12px; background: white; border: 1px solid #e4e4e7; border-radius: 7px; }

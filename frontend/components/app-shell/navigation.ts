@@ -5,13 +5,13 @@ export type NavigationGroup = { label?: string; icon?: IconName; collapsible?: b
 
 export const navigationGroups: NavigationGroup[] = [
   { items: [{ label: 'Dashboard', href: '/dashboard', icon: 'dashboard' }] },
-  { label: 'Data Master', items: [
+  { label: 'Data Master', icon: 'units', collapsible: true, items: [
     { label: 'Measurements', href: '/measurements', icon: 'units' },
     { label: 'Suppliers', href: '/suppliers', icon: 'supplier' },
     { label: 'Raw Materials', href: '/raw-materials', icon: 'package' }
   ] },
-  { label: 'Procurement', items: [{ label: 'Supplier Orders', href: '/supplier-orders', icon: 'clipboard' }] },
-  { label: 'Logistics', items: [
+  { label: 'Procurement', icon: 'clipboard', collapsible: true, items: [{ label: 'Supplier Orders', href: '/supplier-orders', icon: 'clipboard' }] },
+  { label: 'Logistics', icon: 'package', collapsible: true, items: [
     { label: 'Receiving', href: '/receiving', icon: 'receiving' },
     { label: 'Outgoing Material', href: '/outgoing-material', icon: 'outgoing' }
   ] },
