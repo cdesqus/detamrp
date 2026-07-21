@@ -63,6 +63,8 @@ describe('ApprovalInbox', () => {
     render(<ApprovalInbox />);
 
     expect(await screen.findByText('1–50 of 205')).toBeInTheDocument();
+    expect(screen.getByRole('navigation', { name: 'Approval pagination' })).toBeInTheDocument();
+    expect(screen.getByText('1–50 of 205')).toHaveAttribute('aria-live', 'polite');
     expect(screen.getByRole('button', { name: 'Previous approval page' })).toBeDisabled();
     for (const range of ['51–100 of 205', '101–150 of 205', '151–200 of 205', '201–205 of 205']) {
       fireEvent.click(screen.getByRole('button', { name: 'Next approval page' }));
