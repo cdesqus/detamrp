@@ -12,11 +12,13 @@ import (
 type Status string
 
 const (
-	StatusDraft           Status = "DRAFT"
-	StatusPendingApproval Status = "PENDING_APPROVAL"
-	StatusApproved        Status = "APPROVED"
-	StatusRejected        Status = "REJECTED"
-	StatusCancelled       Status = "CANCELLED"
+	StatusDraft             Status = "DRAFT"
+	StatusPendingApproval   Status = "PENDING_APPROVAL"
+	StatusApproved          Status = "APPROVED"
+	StatusPartiallyReceived Status = "PARTIALLY_RECEIVED"
+	StatusFullyReceived     Status = "FULLY_RECEIVED"
+	StatusRejected          Status = "REJECTED"
+	StatusCancelled         Status = "CANCELLED"
 )
 
 type ApprovalStatus string

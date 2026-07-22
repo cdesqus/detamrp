@@ -109,6 +109,18 @@ button:disabled { cursor: not-allowed; opacity: .48; }
 .status-pill--blue { color:#1d4ed8; background:#eff6ff; border-color:#bfdbfe; }
 .status-pill--dark-green { color:#14532d; background:#dcfce7; border-color:#86efac; }
 .status-pill--red { color:#991b1b; background:#fef2f2; border-color:#fecaca; }
+.receiving-preview { display:grid; gap:4px; padding:10px; border:1px solid #e4e4e7; border-radius:7px; background:#fafafa; font-size:12px; }
+.receiving-open-session { display:flex; align-items:center; justify-content:space-between; padding:8px 10px; margin-bottom:8px; border:1px solid #bfdbfe; border-radius:7px; background:#eff6ff; font-size:12px; }
+.scan-session { display:grid; gap:14px; }
+.scan-session-header { display:flex; align-items:center; gap:14px; }
+.scan-session-header div { flex:1; }
+.scan-session-header h1 { margin:0; font-size:20px; }
+.scan-session-header p { margin:3px 0 0; color:#71717a; font-size:12px; }
+.scan-focus-zone { max-width:760px; margin:0 auto; width:100%; padding:18px; border:1px solid #d4d4d8; border-radius:10px; background:#fff; box-shadow:0 8px 24px rgba(0,0,0,.05); }
+.scan-focus-zone>span { display:block; margin-bottom:7px; font-size:12px; font-weight:600; }
+.scan-focus-zone form { display:flex; gap:8px; }
+.scan-focus-zone input { flex:1; height:44px; padding:0 12px; border:2px solid #18181b; border-radius:7px; font-size:18px; letter-spacing:.03em; }
+.scan-counters { display:flex; gap:18px; margin-top:10px; color:#52525b; font-size:12px; }
 .supplier-order-form { max-width: 1160px; }
 .supplier-order-back { margin-bottom: 10px; }
 .supplier-order-card { margin-top: 16px; padding: 14px; background: white; border: 1px solid #e4e4e7; border-radius: 7px; }

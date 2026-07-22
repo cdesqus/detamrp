@@ -7,7 +7,9 @@ import (
 	"github.com/gin-gonic/gin"
 	"order-stock/backend/internal/auth"
 	"order-stock/backend/internal/masterdata"
+	"order-stock/backend/internal/outgoing"
 	"order-stock/backend/internal/purchaseorder"
+	"order-stock/backend/internal/receiving"
 	"order-stock/backend/internal/settings"
 )
 
@@ -25,6 +27,8 @@ type serverConfig struct {
 	rawMaterialService   *masterdata.RawMaterialService
 	settingsService      *settings.Service
 	purchaseOrderService *purchaseorder.Service
+	receivingStore       *receiving.Store
+	outgoingStore        *outgoing.Store
 }
 
 type ServerOption func(*serverConfig)
@@ -51,6 +55,12 @@ func WithSettingsService(service *settings.Service) ServerOption {
 }
 func WithPurchaseOrderService(service *purchaseorder.Service) ServerOption {
 	return func(c *serverConfig) { c.purchaseOrderService = service }
+}
+func WithReceivingStore(store *receiving.Store) ServerOption {
+	return func(c *serverConfig) { c.receivingStore = store }
+}
+func WithOutgoingStore(store *outgoing.Store) ServerOption {
+	return func(c *serverConfig) { c.outgoingStore = store }
 }
 
 func NewServer(options ...ServerOption) http.Handler {
@@ -79,6 +89,12 @@ func NewServer(options ...ServerOption) http.Handler {
 		}
 		if config.purchaseOrderService != nil {
 			purchaseorder.RegisterRoutes(router, config.purchaseOrderService, config.authenticator)
+		}
+		if config.receivingStore != nil {
+			receiving.RegisterRoutes(router, config.receivingStore, config.authenticator)
+		}
+		if config.outgoingStore != nil {
+			outgoing.RegisterRoutes(router, config.outgoingStore, config.authenticator)
 		}
 	}
 	return router

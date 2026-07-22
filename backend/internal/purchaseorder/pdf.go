@@ -137,7 +137,9 @@ func RenderPOPDF(order Order, includePrices bool) ([]byte, error) {
 	writePDFSectionTitle(pdf, "APPROVAL")
 	writeKeyValue(pdf, "Created By", order.CreatedBy.DisplayName, 3)
 	approver := order.SubmittedApproverDisplayName
-	if approver == "" { approver = "Pending approval" }
+	if approver == "" {
+		approver = "Pending approval"
+	}
 	writeKeyValue(pdf, "Approver", approver, 3)
 	return outputPDF(pdf)
 }
@@ -465,7 +467,7 @@ func loadOperationalDocumentHeader(ctx context.Context, query documentQuerier, t
 	if err != nil {
 		return documentHeader{}, err
 	}
-	if header.Status != StatusApproved {
+	if header.Status != StatusApproved && header.Status != StatusPartiallyReceived && header.Status != StatusFullyReceived {
 		return documentHeader{}, documentConflict(field, "Purchase order operational documents are unavailable")
 	}
 	err = query.QueryRow(ctx, `SELECT dn.id,dn.delivery_note_number,dn.issued_at

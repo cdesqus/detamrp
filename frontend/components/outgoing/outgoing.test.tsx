@@ -1,0 +1,4 @@
+import{fireEvent,render,screen,waitFor}from'@testing-library/react';import{beforeEach,expect,it,vi}from'vitest';import{OutgoingIndex}from'./outgoing-index';
+const push=vi.fn();vi.mock('next/navigation',()=>({useRouter:()=>({push})}));
+beforeEach(()=>{push.mockReset();global.fetch=vi.fn(async(_i,init)=>init?.method==='POST'?new Response(JSON.stringify({id:'out-1'}),{status:201}):new Response(JSON.stringify({items:[]}),{status:200})) as typeof fetch});
+it('accepts a free text destination and opens scanner',async()=>{render(<OutgoingIndex/>);fireEvent.click(await screen.findByRole('button',{name:'Create outgoing'}));fireEvent.change(screen.getByLabelText('Destination'),{target:{value:'Prototype Line'}});fireEvent.click(screen.getByRole('button',{name:'Start scanning'}));await waitFor(()=>expect(push).toHaveBeenCalledWith('/outgoing-material/out-1'))});

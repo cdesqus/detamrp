@@ -1,0 +1,1 @@
+import{AppShell}from'../../../components/app-shell/app-shell';import{OutgoingSession}from'../../../components/outgoing/outgoing-session';export default async function Page({params}:{params:Promise<{id:string}>}){const{id}=await params;return <AppShell title="Outgoing Session"><OutgoingSession id={id}/></AppShell>}
