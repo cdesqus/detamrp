@@ -295,8 +295,11 @@ describe('supplier order UI', () => {
     expect(screen.getByRole('button', { name: 'Back to Supplier Orders' })).toBeInTheDocument();
     expect(screen.getByText('DN-202607-00001')).toBeInTheDocument();
     expect(screen.getByText('10 Kanban labels')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Print DN' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Print Kanban Labels' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Print DN' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Print DN' })).toHaveAccessibleDescription('Document printing is not available yet.');
+    expect(screen.getByRole('button', { name: 'Print Kanban Labels' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Print Kanban Labels' })).toHaveAccessibleDescription('Document printing is not available yet.');
+    expect(screen.getByText('Document printing is not available yet.')).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Back to Supplier Orders' }));
     expect(push).toHaveBeenCalledWith('/supplier-orders');
