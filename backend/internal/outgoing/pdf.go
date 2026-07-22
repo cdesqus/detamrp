@@ -29,6 +29,20 @@ func RenderPDF(d Document) ([]byte, error) {
 		p.SetFont("OS", "", 9)
 		p.CellFormat(0, 7, x[1], "", 1, "L", false, 0, "")
 	}
+	if len(d.Scans) > 0 {
+		p.Ln(5)
+		p.SetFillColor(244, 244, 245)
+		p.SetFont("OS", "B", 9)
+		p.CellFormat(45, 7, "KANBAN ID", "1", 0, "L", true, 0, "")
+		p.CellFormat(72, 7, "RAW MATERIAL", "1", 0, "L", true, 0, "")
+		p.CellFormat(35, 7, "QUANTITY", "1", 1, "R", true, 0, "")
+		p.SetFont("OS", "", 8)
+		for _, scan := range d.Scans {
+			p.CellFormat(45, 7, scan.KanbanID, "1", 0, "L", false, 0, "")
+			p.CellFormat(72, 7, scan.MaterialCode+" - "+scan.MaterialName, "1", 0, "L", false, 0, "")
+			p.CellFormat(35, 7, scan.Quantity.String()+" "+scan.Unit, "1", 1, "R", false, 0, "")
+		}
+	}
 	var b bytes.Buffer
 	if e := p.Output(&b); e != nil {
 		return nil, e

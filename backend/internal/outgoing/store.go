@@ -164,7 +164,23 @@ func (s *Store) GetDocument(ctx context.Context, a Actor, id uuid.UUID) (Documen
 		if errors.Is(e, pgx.ErrNoRows) {
 			return ErrNotFound
 		}
-		return e
+		if e != nil {
+			return e
+		}
+		rows, e := tx.Query(ctx, `SELECT kl.id,kl.kanban_id,pol.raw_material_code_snapshot,pol.raw_material_name_snapshot,pol.base_unit_code_snapshot,kl.quantity FROM outgoing_kanban_lots okl JOIN kanban_lots kl ON kl.tenant_id=okl.tenant_id AND kl.id=okl.kanban_lot_id JOIN purchase_order_lines pol ON pol.tenant_id=kl.tenant_id AND pol.id=kl.purchase_order_line_id WHERE okl.tenant_id=$1 AND okl.outgoing_id=$2 ORDER BY kl.kanban_id`, a.TenantID, id)
+		if e != nil {
+			return e
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var scan Scan
+			scan.Warehouse, scan.Location = "RAW MATERIAL", "DEFAULT"
+			if e = rows.Scan(&scan.KanbanLotID, &scan.KanbanID, &scan.MaterialCode, &scan.MaterialName, &scan.Unit, &scan.Quantity); e != nil {
+				return e
+			}
+			o.Scans = append(o.Scans, scan)
+		}
+		return rows.Err()
 	})
 	return o, e
 }

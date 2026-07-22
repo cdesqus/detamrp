@@ -42,6 +42,19 @@ func RenderPDF(r Receiving) ([]byte, error) {
 		p.CellFormat(70, 7, f[0], "1", 0, "L", false, 0, "")
 		p.CellFormat(30, 7, f[1], "1", 1, "R", false, 0, "")
 	}
+	if len(r.Scans) > 0 {
+		p.Ln(5)
+		p.SetFont("OS", "B", 9)
+		p.CellFormat(45, 7, "KANBAN ID", "1", 0, "L", true, 0, "")
+		p.CellFormat(72, 7, "RAW MATERIAL", "1", 0, "L", true, 0, "")
+		p.CellFormat(35, 7, "QUANTITY", "1", 1, "R", true, 0, "")
+		p.SetFont("OS", "", 8)
+		for _, scan := range r.Scans {
+			p.CellFormat(45, 7, scan.KanbanID, "1", 0, "L", false, 0, "")
+			p.CellFormat(72, 7, scan.MaterialCode+" - "+scan.MaterialName, "1", 0, "L", false, 0, "")
+			p.CellFormat(35, 7, scan.Quantity.String()+" "+scan.Unit, "1", 1, "R", false, 0, "")
+		}
+	}
 	var b bytes.Buffer
 	if err := p.Output(&b); err != nil {
 		return nil, err

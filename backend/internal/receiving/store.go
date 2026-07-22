@@ -20,7 +20,7 @@ func tenant(a Actor) database.TenantContext {
 
 func (s *Store) Options(ctx context.Context, a Actor, search string) (result []Option, err error) {
 	err = database.WithTenant(ctx, s.db, tenant(a), func(tx database.TenantTx) error {
-		rows, e := tx.Query(ctx, `SELECT dn.id,dn.delivery_note_number,p.po_number,s.name,COUNT(kl.id),COUNT(*) FILTER(WHERE kl.status='IN_STOCK'),COUNT(*) FILTER(WHERE kl.status='ISSUED') FROM delivery_notes dn JOIN purchase_orders p ON p.tenant_id=dn.tenant_id AND p.id=dn.purchase_order_id JOIN suppliers s ON s.tenant_id=p.tenant_id AND s.id=p.supplier_id JOIN delivery_note_lines dnl ON dnl.tenant_id=dn.tenant_id AND dnl.delivery_note_id=dn.id JOIN kanban_lots kl ON kl.tenant_id=dnl.tenant_id AND kl.delivery_note_line_id=dnl.id WHERE dn.tenant_id=$1 AND ($2='' OR dn.delivery_note_number ILIKE '%'||$2||'%' OR p.po_number ILIKE '%'||$2||'%') GROUP BY dn.id,dn.delivery_note_number,p.po_number,s.name HAVING COUNT(*) FILTER(WHERE kl.status='ISSUED')>0 ORDER BY dn.delivery_note_number`, a.TenantID, search)
+		rows, e := tx.Query(ctx, `SELECT dn.id,dn.delivery_note_number,p.po_number,s.name,COUNT(kl.id),COUNT(*) FILTER(WHERE kl.status IN ('IN_STOCK','CONSUMED')),COUNT(*) FILTER(WHERE kl.status='ISSUED') FROM delivery_notes dn JOIN purchase_orders p ON p.tenant_id=dn.tenant_id AND p.id=dn.purchase_order_id JOIN suppliers s ON s.tenant_id=p.tenant_id AND s.id=p.supplier_id JOIN delivery_note_lines dnl ON dnl.tenant_id=dn.tenant_id AND dnl.delivery_note_id=dn.id JOIN kanban_lots kl ON kl.tenant_id=dnl.tenant_id AND kl.delivery_note_line_id=dnl.id WHERE dn.tenant_id=$1 AND ($2='' OR dn.delivery_note_number ILIKE '%'||$2||'%' OR p.po_number ILIKE '%'||$2||'%') GROUP BY dn.id,dn.delivery_note_number,p.po_number,s.name HAVING COUNT(*) FILTER(WHERE kl.status='ISSUED')>0 ORDER BY dn.delivery_note_number`, a.TenantID, search)
 		if e != nil {
 			return e
 		}
@@ -103,7 +103,7 @@ func (s *Store) ListOpenSessions(ctx context.Context, a Actor) (items []Session,
 	return items, nil
 }
 func loadSession(ctx context.Context, tx database.TenantTx, a Actor, id uuid.UUID, out *Session) error {
-	err := tx.QueryRow(ctx, `SELECT rs.id,rs.delivery_note_id,rs.receiving_number,rs.status,rs.receiving_date,dn.delivery_note_number,p.po_number,s.name,u.display_name,COUNT(kl.id),COUNT(*) FILTER(WHERE kl.status='IN_STOCK'),COUNT(*) FILTER(WHERE kl.status='ISSUED') FROM receiving_sessions rs JOIN delivery_notes dn ON dn.tenant_id=rs.tenant_id AND dn.id=rs.delivery_note_id JOIN purchase_orders p ON p.tenant_id=dn.tenant_id AND p.id=dn.purchase_order_id JOIN suppliers s ON s.tenant_id=p.tenant_id AND s.id=p.supplier_id JOIN users u ON u.tenant_id=rs.tenant_id AND u.id=rs.created_by_user_id JOIN delivery_note_lines dnl ON dnl.tenant_id=dn.tenant_id AND dnl.delivery_note_id=dn.id JOIN kanban_lots kl ON kl.tenant_id=dnl.tenant_id AND kl.delivery_note_line_id=dnl.id WHERE rs.tenant_id=$1 AND rs.id=$2 GROUP BY rs.id,dn.delivery_note_number,p.po_number,s.name,u.display_name`, a.TenantID, id).Scan(&out.ID, &out.DeliveryNoteID, &out.ReceivingNumber, &out.Status, &out.ReceivingDate, &out.DeliveryNoteNumber, &out.PONumber, &out.SupplierName, &out.CreatedBy, &out.Planned, &out.PreviouslyReceived, &out.Outstanding)
+	err := tx.QueryRow(ctx, `SELECT rs.id,rs.delivery_note_id,rs.receiving_number,rs.status,rs.receiving_date,dn.delivery_note_number,p.po_number,s.name,u.display_name,COUNT(kl.id),COUNT(*) FILTER(WHERE kl.status IN ('IN_STOCK','CONSUMED')),COUNT(*) FILTER(WHERE kl.status='ISSUED') FROM receiving_sessions rs JOIN delivery_notes dn ON dn.tenant_id=rs.tenant_id AND dn.id=rs.delivery_note_id JOIN purchase_orders p ON p.tenant_id=dn.tenant_id AND p.id=dn.purchase_order_id JOIN suppliers s ON s.tenant_id=p.tenant_id AND s.id=p.supplier_id JOIN users u ON u.tenant_id=rs.tenant_id AND u.id=rs.created_by_user_id JOIN delivery_note_lines dnl ON dnl.tenant_id=dn.tenant_id AND dnl.delivery_note_id=dn.id JOIN kanban_lots kl ON kl.tenant_id=dnl.tenant_id AND kl.delivery_note_line_id=dnl.id WHERE rs.tenant_id=$1 AND rs.id=$2 GROUP BY rs.id,dn.delivery_note_number,p.po_number,s.name,u.display_name`, a.TenantID, id).Scan(&out.ID, &out.DeliveryNoteID, &out.ReceivingNumber, &out.Status, &out.ReceivingDate, &out.DeliveryNoteNumber, &out.PONumber, &out.SupplierName, &out.CreatedBy, &out.Planned, &out.PreviouslyReceived, &out.Outstanding)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ErrNotFound
 	}
@@ -192,7 +192,7 @@ func (s *Store) Complete(ctx context.Context, a Actor, id uuid.UUID) (Receiving,
 		var number string
 		var planned, previous int
 		var status string
-		if e := tx.QueryRow(ctx, `SELECT rs.delivery_note_id,dn.purchase_order_id,rs.receiving_number,rs.status,(SELECT COUNT(*) FROM delivery_note_lines d JOIN kanban_lots k ON k.tenant_id=d.tenant_id AND k.delivery_note_line_id=d.id WHERE d.tenant_id=rs.tenant_id AND d.delivery_note_id=rs.delivery_note_id),(SELECT COUNT(*) FROM delivery_note_lines d JOIN kanban_lots k ON k.tenant_id=d.tenant_id AND k.delivery_note_line_id=d.id WHERE d.tenant_id=rs.tenant_id AND d.delivery_note_id=rs.delivery_note_id AND k.status='IN_STOCK') FROM receiving_sessions rs JOIN delivery_notes dn ON dn.tenant_id=rs.tenant_id AND dn.id=rs.delivery_note_id WHERE rs.tenant_id=$1 AND rs.id=$2 FOR UPDATE`, a.TenantID, id).Scan(&dn, &po, &number, &status, &planned, &previous); e != nil {
+		if e := tx.QueryRow(ctx, `SELECT rs.delivery_note_id,dn.purchase_order_id,rs.receiving_number,rs.status,(SELECT COUNT(*) FROM delivery_note_lines d JOIN kanban_lots k ON k.tenant_id=d.tenant_id AND k.delivery_note_line_id=d.id WHERE d.tenant_id=rs.tenant_id AND d.delivery_note_id=rs.delivery_note_id),(SELECT COUNT(*) FROM delivery_note_lines d JOIN kanban_lots k ON k.tenant_id=d.tenant_id AND k.delivery_note_line_id=d.id WHERE d.tenant_id=rs.tenant_id AND d.delivery_note_id=rs.delivery_note_id AND k.status IN ('IN_STOCK','CONSUMED')) FROM receiving_sessions rs JOIN delivery_notes dn ON dn.tenant_id=rs.tenant_id AND dn.id=rs.delivery_note_id WHERE rs.tenant_id=$1 AND rs.id=$2 FOR UPDATE`, a.TenantID, id).Scan(&dn, &po, &number, &status, &planned, &previous); e != nil {
 			return ErrNotFound
 		}
 		if status == "COMPLETED" {
@@ -273,7 +273,22 @@ func (s *Store) GetReceiving(ctx context.Context, a Actor, id uuid.UUID) (Receiv
 		if errors.Is(e, pgx.ErrNoRows) {
 			return ErrNotFound
 		}
-		return e
+		if e != nil {
+			return e
+		}
+		rows, e := tx.Query(ctx, `SELECT kl.id,kl.kanban_id,pol.raw_material_code_snapshot,pol.raw_material_name_snapshot,pol.base_unit_code_snapshot,kl.quantity FROM receiving_kanban_lots rkl JOIN kanban_lots kl ON kl.tenant_id=rkl.tenant_id AND kl.id=rkl.kanban_lot_id JOIN purchase_order_lines pol ON pol.tenant_id=kl.tenant_id AND pol.id=kl.purchase_order_line_id WHERE rkl.tenant_id=$1 AND rkl.receiving_id=$2 ORDER BY kl.kanban_id`, a.TenantID, id)
+		if e != nil {
+			return e
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var scan Scan
+			if e = rows.Scan(&scan.KanbanLotID, &scan.KanbanID, &scan.MaterialCode, &scan.MaterialName, &scan.Unit, &scan.Quantity); e != nil {
+				return e
+			}
+			o.Scans = append(o.Scans, scan)
+		}
+		return rows.Err()
 	})
 	return o, err
 }
