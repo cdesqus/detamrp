@@ -42,15 +42,17 @@ describe('supplier order UI', () => {
 
   it('shows compact new-tab PDF actions only when each document is available', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response({ items: [
-      { id: 'po-approved', poNumber: 'PO-APPROVED', supplierId: 'supplier-1', supplierName: 'PT Prima', orderDate: '2026-07-21', expectedDeliveryDate: '2026-07-25', status: 'APPROVED', currency: 'IDR', documents: { deliveryNoteId: 'dn-1', deliveryNoteNumber: 'DN-202607-00001', kanbanCount: 10, issuedAt: '2026-07-22T00:00:00Z' } },
+      { id: 'po-approved', poNumber: 'PO-APPROVED', supplierId: 'supplier-1', supplierName: 'PT Prima', orderDate: '2026-07-21', expectedDeliveryDate: '2026-07-25', status: 'APPROVED', currency: 'IDR', documents: { deliveryNoteId: 'dn-1', deliveryNoteNumber: 'DN-202607-00001', kanbanCount: 1000, issuedAt: '2026-07-22T00:00:00Z' } },
       { id: 'po-approved-empty', poNumber: 'PO-APPROVED-EMPTY', supplierId: 'supplier-1', supplierName: 'PT Prima', orderDate: '2026-07-21', expectedDeliveryDate: '2026-07-25', status: 'APPROVED', currency: 'IDR', documents: null },
+      { id: 'po-approved-oversized', poNumber: 'PO-APPROVED-OVERSIZED', supplierId: 'supplier-1', supplierName: 'PT Prima', orderDate: '2026-07-21', expectedDeliveryDate: '2026-07-25', status: 'APPROVED', currency: 'IDR', documents: { deliveryNoteId: 'dn-oversized', deliveryNoteNumber: 'DN-OVERSIZED', kanbanCount: 1001, issuedAt: '2026-07-22T00:00:00Z' } },
       { id: 'po-pending', poNumber: 'PO-PENDING', supplierId: 'supplier-1', supplierName: 'PT Prima', orderDate: '2026-07-21', expectedDeliveryDate: '2026-07-25', status: 'PENDING_APPROVAL', currency: 'IDR', documents: { deliveryNoteId: 'dn-pending', deliveryNoteNumber: 'DN-PENDING', kanbanCount: 2, issuedAt: '2026-07-22T00:00:00Z' } }
-    ], total: 3 })));
+    ], total: 4 })));
 
     render(<SupplierOrderIndex permissions={['po.view']} />);
 
     const approvedRow = (await screen.findByText('PO-APPROVED')).closest('tr')!;
     const approvedEmptyRow = screen.getByText('PO-APPROVED-EMPTY').closest('tr')!;
+    const oversizedRow = screen.getByText('PO-APPROVED-OVERSIZED').closest('tr')!;
     const pendingRow = screen.getByText('PO-PENDING').closest('tr')!;
     expect(screen.getByRole('columnheader', { name: 'PO PDF' })).toBeInTheDocument();
     expect(screen.getByRole('columnheader', { name: 'DN PDF' })).toBeInTheDocument();
@@ -72,6 +74,9 @@ describe('supplier order UI', () => {
     expect(within(approvedEmptyRow).getByRole('link', { name: 'Open PO PDF for PO-APPROVED-EMPTY' })).toHaveAttribute('target', '_blank');
     expect(within(approvedEmptyRow).queryByRole('link', { name: /DN PDF|Kanban labels PDF/ })).not.toBeInTheDocument();
     expect(within(approvedEmptyRow).getAllByText('—')).toHaveLength(3);
+    expect(within(oversizedRow).getByRole('link', { name: 'Open DN PDF for PO-APPROVED-OVERSIZED' })).toBeInTheDocument();
+    expect(within(oversizedRow).queryByRole('link', { name: 'Open Kanban labels PDF for PO-APPROVED-OVERSIZED' })).not.toBeInTheDocument();
+    expect(within(oversizedRow).getAllByText('—')).toHaveLength(2);
     expect(within(pendingRow).getByRole('link', { name: 'Open PO PDF for PO-PENDING' })).toHaveAttribute('target', '_blank');
     expect(within(pendingRow).queryByRole('link', { name: /DN PDF|Kanban labels PDF/ })).not.toBeInTheDocument();
     expect(within(pendingRow).getAllByText('—')).toHaveLength(3);

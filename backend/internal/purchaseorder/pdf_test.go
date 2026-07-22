@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"image"
+	"image/color"
 	"strings"
 	"testing"
 	"time"
@@ -15,6 +16,16 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/shopspring/decimal"
 )
+
+type cancelOnPixelImage struct {
+	image.Image
+	cancel context.CancelFunc
+}
+
+func (image cancelOnPixelImage) At(x, y int) color.Color {
+	image.cancel()
+	return image.Image.At(x, y)
+}
 
 func TestRenderPOPDFIncludesOrRedactsPrices(t *testing.T) {
 	order := Order{
@@ -250,6 +261,24 @@ func TestRenderKanbanLabelsPDFStopsAfterRequestCancellation(t *testing.T) {
 	}
 	if encodeCalls != 1 {
 		t.Fatalf("cancelled render encoded %d barcodes, want one", encodeCalls)
+	}
+}
+
+func TestRenderKanbanLabelsPDFStopsBeforeSerializationAfterLateCancellation(t *testing.T) {
+	document := KanbanLabelDocument{Labels: []KanbanLabel{{KanbanID: "KB-0001"}}}
+	ctx, cancel := context.WithCancel(context.Background())
+	original := encodeKanbanBarcode
+	encodeKanbanBarcode = func(string) (image.Image, error) {
+		return cancelOnPixelImage{Image: image.NewRGBA(image.Rect(0, 0, 420, 72)), cancel: cancel}, nil
+	}
+	t.Cleanup(func() { encodeKanbanBarcode = original })
+
+	result, err := renderKanbanLabelsPDF(ctx, document)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("late-cancelled render error = %v, want context cancellation", err)
+	}
+	if len(result) != 0 {
+		t.Fatalf("late-cancelled render returned %d PDF bytes, want none", len(result))
 	}
 }
 

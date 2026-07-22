@@ -206,6 +206,9 @@ func renderKanbanLabelsPDF(ctx context.Context, document KanbanLabelDocument) ([
 		pdf.RegisterImageOptionsReader(imageName, fpdf.ImageOptions{ImageType: "PNG", ReadDpi: false}, bytes.NewReader(barcodePNG.Bytes()))
 		pdf.ImageOptions(imageName, x+5, y+29, labelWidth-10, 0, false, fpdf.ImageOptions{ImageType: "PNG", ReadDpi: false}, 0, "")
 	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	return outputPDF(pdf)
 }
 
