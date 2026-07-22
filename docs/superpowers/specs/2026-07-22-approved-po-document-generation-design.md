@@ -7,6 +7,9 @@ This change adds navigation back from every Supplier Order detail and implements
 ## User experience
 
 - Every Supplier Order detail shows a compact `Back to Supplier Orders` action above the title.
+- Saving a new or edited PO as draft persists it and immediately returns the user to the Supplier Order index.
+- `Cancel draft` is removed from the create/edit form. Draft rows expose it through a compact `...` action menu with a confirmation dialog.
+- Opening a draft PO from the index remains the way to continue editing or send it for approval.
 - An approved PO detail shows a Documents section containing its DN number, Kanban count, and document actions.
 - The Supplier Order index uses the same generated document data for its DN Documents and Kanban Labels columns.
 - Pending, rejected, cancelled, and draft orders never expose generated inbound documents.
@@ -63,4 +66,5 @@ A migration backfills every existing `APPROVED` PO using the same structure. The
 - Store integration tests verify multi-line generation, exact Kanban counts, idempotency, tenant isolation, and approval rollback.
 - HTTP tests verify the document summary contract.
 - Frontend tests verify Back navigation and approved document visibility.
+- Frontend tests verify draft-save redirection and cancellation from the index action menu.
 - A local smoke test confirms existing approved POs have DN and Kanban records after migration.
