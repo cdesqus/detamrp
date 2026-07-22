@@ -1,24 +1,64 @@
 'use client';
-import { useEffect, useState } from 'react';
+
+import { FormEvent, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
-type Option = { deliveryNoteId:string; deliveryNoteNumber:string; poNumber:string; supplierName:string; planned:number; received:number; outstanding:number };
 type Receiving = { id:string; receivingNumber:string; deliveryNoteNumber:string; poNumber:string; supplierName:string; receivingDate:string; receivedNow:number; outstanding:number; status:string; sageReceiptNumber:string; createdBy:string };
 type OpenSession = { id:string; receivingNumber:string; deliveryNoteNumber:string; status:string; scans?:unknown[] };
-const optionLabel = (o:Option) => `${o.deliveryNoteNumber} — ${o.poNumber} — ${o.supplierName}`;
+
+const validationMessages:Record<string,string> = {
+  DN_INVALID: 'Delivery Note is invalid.',
+  DN_FULLY_RECEIVED: 'Delivery Note has already been fully received.',
+  DN_IN_PROGRESS: 'Delivery Note is currently being received in another session.',
+};
 
 export function ReceivingIndex() {
-  const router=useRouter(); const[items,setItems]=useState<Receiving[]>([]); const[openSessions,setOpenSessions]=useState<OpenSession[]>([]);
-  const[options,setOptions]=useState<Option[]>([]); const[open,setOpen]=useState(false); const[value,setValue]=useState(''); const[busy,setBusy]=useState(false); const[error,setError]=useState('');
-  useEffect(()=>{ Promise.all([fetch('/api/receivings',{credentials:'include'}).then(r=>r.json()),fetch('/api/receiving-sessions',{credentials:'include'}).then(r=>r.json())]).then(([done,sessions])=>{setItems(done.items??[]);setOpenSessions(sessions.items??[])}).catch(()=>setError('Receiving data could not be loaded.')) },[]);
-  useEffect(()=>{if(!open)return;fetch('/api/receiving-options',{credentials:'include'}).then(r=>r.json()).then(d=>setOptions(d.items??[])).catch(()=>setError('Delivery Notes could not be loaded.'))},[open]);
-  const selected=options.find(o=>optionLabel(o)===value);
-  async function create(){if(!selected||busy)return;setBusy(true);setError('');try{const r=await fetch('/api/receiving-sessions',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({deliveryNoteId:selected.deliveryNoteId})});if(!r.ok)throw new Error(r.status===409?'This DN already has an open receiving session.':'Receiving session could not be created.');const session=await r.json();router.push(`/receiving/${session.id}`)}catch(cause){setError(cause instanceof Error?cause.message:'Receiving session could not be created.')}finally{setBusy(false)}}
+  const router = useRouter();
+  const [items,setItems] = useState<Receiving[]>([]);
+  const [openSessions,setOpenSessions] = useState<OpenSession[]>([]);
+  const [open,setOpen] = useState(false);
+  const [value,setValue] = useState('');
+  const [busy,setBusy] = useState(false);
+  const [error,setError] = useState('');
+
+  useEffect(()=>{
+    Promise.all([
+      fetch('/api/receivings',{credentials:'include'}).then(r=>r.json()),
+      fetch('/api/receiving-sessions',{credentials:'include'}).then(r=>r.json()),
+    ]).then(([done,sessions])=>{
+      setItems(done.items??[]);
+      setOpenSessions(sessions.items??[]);
+    }).catch(()=>setError('Receiving data could not be loaded.'));
+  },[]);
+
+  function closeModal(){ setOpen(false); setValue(''); setError(''); }
+
+  async function create(event:FormEvent){
+    event.preventDefault();
+    const deliveryNoteNumber=value.trim().toUpperCase();
+    if(!deliveryNoteNumber||busy)return;
+    setBusy(true);setError('');
+    try{
+      const response=await fetch('/api/receiving-sessions',{
+        method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({deliveryNoteNumber}),
+      });
+      const payload=await response.json().catch(()=>({}));
+      if(!response.ok){
+        throw new Error(validationMessages[payload.code]??'Receiving session could not be created.');
+      }
+      setOpen(false);
+      router.push(`/receiving/${payload.id}`);
+    }catch(cause){
+      setError(cause instanceof Error?cause.message:'Receiving session could not be created.');
+    }finally{setBusy(false)}
+  }
+
   return <section className="module-index">
-    <div className="page-title-row"><div><h1>Receiving</h1><p className="muted">Receive approved Kanban lots against the issued Delivery Note.</p></div><button className="primary-button" onClick={()=>setOpen(true)}>Create receiving</button></div>
-    {error&&<p className="form-error" role="alert">{error}</p>}
-    {openSessions.map(s=><div className="receiving-open-session" key={s.id}><span><b>{s.receivingNumber}</b> · {s.deliveryNoteNumber} · {s.status} · {s.scans?.length??0} scanned</span><button className="table-action" onClick={()=>router.push(`/receiving/${s.id}`)}>Resume session</button></div>)}
-    <div className="table-frame"><table><thead><tr><th>Receiving Number</th><th>DN Number</th><th>PO Number</th><th>Supplier</th><th>Date</th><th>Kanban</th><th>Outstanding</th><th>Status</th><th>Sage Number</th><th>Created By</th><th>Document</th></tr></thead><tbody>{items.length===0?<tr><td colSpan={11}><div className="table-empty">No completed receiving yet.</div></td></tr>:items.map(x=><tr key={x.id}><td>{x.receivingNumber}</td><td>{x.deliveryNoteNumber}</td><td>{x.poNumber}</td><td>{x.supplierName}</td><td>{x.receivingDate?.slice(0,10)}</td><td>{x.receivedNow}</td><td>{x.outstanding}</td><td><span className="status-pill status-pill--green">{x.status}</span></td><td>{x.sageReceiptNumber||'—'}</td><td>{x.createdBy}</td><td><a className="supplier-order-document-link" target="_blank" rel="noopener noreferrer" href={`/api/receivings/${x.id}/document.pdf`}>PDF</a></td></tr>)}</tbody></table></div>
-    {open&&<><button className="crud-scrim" aria-label="Close receiving form" onClick={()=>setOpen(false)}/><div className="crud-modal" role="dialog" aria-modal="true" aria-label="New receiving"><div className="crud-modal-heading"><div><strong>New receiving</strong><span>Select the physical DN attached to the shipment.</span></div><button aria-label="Close receiving form" onClick={()=>setOpen(false)}>×</button></div><div className="crud-fields"><label>Delivery Note<input aria-label="Delivery Note" list="receiving-dns" value={value} onChange={e=>setValue(e.target.value)} autoFocus/><datalist id="receiving-dns">{options.map(o=><option key={o.deliveryNoteId} value={optionLabel(o)}/>)}</datalist></label>{selected&&<div className="receiving-preview"><strong>{selected.deliveryNoteNumber}</strong><span>{selected.poNumber} · {selected.supplierName}</span><span>Planned: {selected.planned} · Previously received: {selected.received}</span><b>Outstanding: {selected.outstanding} Kanban</b></div>}</div><div className="crud-actions"><button onClick={()=>setOpen(false)}>Cancel</button><button className="primary-button" disabled={!selected||busy} onClick={create}>{busy?'Creating...':'Start scanning'}</button></div></div></>}
+    <div className="page-title-row"><div><h1>Receiving</h1><p className="muted">Receive approved Kanban lots against the issued Delivery Note.</p></div><button className="primary-button" onClick={()=>{setOpen(true);setError('')}}>Create receiving</button></div>
+    {!open&&error&&<p className="form-error" role="alert">{error}</p>}
+    {openSessions.map(session=><div className="receiving-open-session" key={session.id}><span><b>{session.receivingNumber}</b> · {session.deliveryNoteNumber} · {session.status} · {session.scans?.length??0} scanned</span><button className="table-action" onClick={()=>router.push(`/receiving/${session.id}`)}>Resume session</button></div>)}
+    <div className="table-frame"><table><thead><tr><th>Receiving Number</th><th>DN Number</th><th>PO Number</th><th>Supplier</th><th>Date</th><th>Kanban</th><th>Outstanding</th><th>Status</th><th>Sage Number</th><th>Created By</th><th>Document</th></tr></thead><tbody>{items.length===0?<tr><td colSpan={11}><div className="table-empty">No completed receiving yet.</div></td></tr>:items.map(item=><tr key={item.id}><td>{item.receivingNumber}</td><td>{item.deliveryNoteNumber}</td><td>{item.poNumber}</td><td>{item.supplierName}</td><td>{item.receivingDate?.slice(0,10)}</td><td>{item.receivedNow}</td><td>{item.outstanding}</td><td><span className="status-pill status-pill--green">{item.status}</span></td><td>{item.sageReceiptNumber||'—'}</td><td>{item.createdBy}</td><td><a className="supplier-order-document-link" target="_blank" rel="noopener noreferrer" href={`/api/receivings/${item.id}/document.pdf`}>PDF</a></td></tr>)}</tbody></table></div>
+    {open&&<><button className="crud-scrim" aria-label="Close receiving form" onClick={closeModal}/><div className="crud-modal" role="dialog" aria-modal="true" aria-label="New receiving"><div className="crud-modal-heading"><div><strong>New receiving</strong><span>Scan the DN attached to the physical shipment.</span></div><button aria-label="Close receiving form" onClick={closeModal}>×</button></div><form onSubmit={create}><div className="crud-fields"><label>Scan or Type DN Number<input aria-label="Scan or Type DN Number" value={value} onChange={event=>setValue(event.target.value)} autoComplete="off" autoFocus/></label>{error&&<p className="form-error" role="alert">{error}</p>}</div><div className="crud-actions"><button type="button" onClick={closeModal}>Cancel</button><button className="primary-button" disabled={!value.trim()||busy}>{busy?'Validating...':'Continue'}</button></div></form></div></>}
   </section>;
 }
