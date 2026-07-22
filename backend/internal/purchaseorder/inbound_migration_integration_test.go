@@ -13,6 +13,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+const migrationRoleResetSQL = "RESET ROLE"
+
 func TestInboundMigrationLiveConstraintsAndChangedSourceRerun(t *testing.T) {
 	databaseURL := os.Getenv("TEST_DATABASE_URL")
 	if databaseURL == "" {
@@ -84,7 +86,7 @@ func TestInboundMigrationLiveConstraintsAndChangedSourceRerun(t *testing.T) {
 	})
 
 	t.Run("rejects moving an existing Kanban beyond the source quota", func(t *testing.T) {
-		tx := beginInboundApplicationTx(t, ctx, db, fixture.tenantA)
+		tx := beginInboundMigrationTx(t, ctx, db)
 		defer tx.Rollback(ctx)
 		_, err := tx.Exec(ctx, `UPDATE kanban_lots SET lot_number=3 WHERE tenant_id=$1 AND purchase_order_line_id=$2 AND lot_number=2`, fixture.tenantA, fixture.line1)
 		assertPostgresCode(t, err, "23514")
@@ -308,6 +310,19 @@ func assertPostgresCode(t *testing.T, err error, want string) {
 	if !errors.As(err, &databaseError) || databaseError.Code != want {
 		t.Fatalf("database error = %T %v, want PostgreSQL code %s", err, err, want)
 	}
+}
+
+func beginInboundMigrationTx(t *testing.T, ctx context.Context, db *pgxpool.Pool) pgx.Tx {
+	t.Helper()
+	tx, err := db.Begin(ctx)
+	if err != nil {
+		t.Fatalf("begin inbound migration transaction: %v", err)
+	}
+	if _, err := tx.Exec(ctx, migrationRoleResetSQL); err != nil {
+		_ = tx.Rollback(ctx)
+		t.Fatalf("reset inbound migration role: %v", err)
+	}
+	return tx
 }
 
 func beginInboundApplicationTx(t *testing.T, ctx context.Context, db *pgxpool.Pool, tenantID uuid.UUID) pgx.Tx {

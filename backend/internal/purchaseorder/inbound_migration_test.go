@@ -42,3 +42,13 @@ func TestInboundMigrationContainsGenerationAndIsolationContracts(t *testing.T) {
 		}
 	}
 }
+
+func TestInboundMigrationKeepsKanbanUpdatesOutOfApplicationGrant(t *testing.T) {
+	sql := strings.ToLower(readMigration(t, "006_inbound_documents.sql"))
+	if strings.Contains(sql, "grant select, insert, update on delivery_note_lines, kanban_lots") {
+		t.Fatal("application role must not receive Kanban lot update permission")
+	}
+	if migrationRoleResetSQL != "RESET ROLE" {
+		t.Fatalf("migration-role mutation reset = %q, want RESET ROLE", migrationRoleResetSQL)
+	}
+}
