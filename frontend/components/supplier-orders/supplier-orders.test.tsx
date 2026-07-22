@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { localDateISO, SupplierOrderForm } from './supplier-order-form';
@@ -38,6 +38,91 @@ describe('supplier order UI', () => {
     expect(await screen.findByText('PO-VIEWER')).toBeInTheDocument();
     expect(screen.queryByRole('columnheader', { name: 'Total' })).not.toBeInTheDocument();
     expect(screen.queryByText(/IDR/)).not.toBeInTheDocument();
+  });
+
+  it('cancels drafts from a compact row menu once and reloads the list', async () => {
+    const orders = [
+      { id: 'po-draft', poNumber: 'PO-DRAFT', supplierId: 'supplier-1', supplierName: 'PT Prima', orderDate: '2026-07-21', expectedDeliveryDate: '2026-07-25', status: 'DRAFT', currency: 'IDR', createdBy: { displayName: 'Admin' } },
+      { id: 'po-approved', poNumber: 'PO-APPROVED', supplierId: 'supplier-1', supplierName: 'PT Prima', orderDate: '2026-07-21', expectedDeliveryDate: '2026-07-25', status: 'APPROVED', currency: 'IDR', createdBy: { displayName: 'Admin' } }
+    ];
+    const cancellation = deferred<Response>();
+    let listLoads = 0;
+    const fetchMock = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+      if (url === '/api/purchase-orders/po-draft/cancel' && init?.method === 'POST') return cancellation.promise;
+      const items = listLoads === 0 ? orders : [{ ...orders[0], status: 'CANCELLED' }, orders[1]];
+      listLoads += 1;
+      return Promise.resolve(response({ items, total: items.length }));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const user = userEvent.setup();
+
+    render(<SupplierOrderIndex permissions={['po.view', 'po.edit_draft']} />);
+
+    const actions = await screen.findByRole('button', { name: 'Actions for PO-DRAFT' });
+    expect(screen.queryByRole('button', { name: 'Actions for PO-APPROVED' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Open PO-DRAFT' })).toBeInTheDocument();
+    await user.click(actions);
+    await user.click(screen.getByRole('menuitem', { name: 'Cancel Draft' }));
+    const dialog = screen.getByRole('dialog', { name: 'Cancel draft PO-DRAFT' });
+    const confirm = screen.getByRole('button', { name: 'Confirm cancellation' });
+    expect(confirm).toHaveFocus();
+    await user.tab();
+    expect(within(dialog).getByRole('button', { name: 'Close cancel draft confirmation' })).toHaveFocus();
+    await user.tab({ shift: true });
+    expect(confirm).toHaveFocus();
+
+    await user.click(confirm);
+    await waitFor(() => expect(dialog).toHaveFocus());
+    await user.tab();
+    expect(dialog).toHaveFocus();
+    await user.click(confirm);
+    expect(fetchMock.mock.calls.filter(([url, init]) => url === '/api/purchase-orders/po-draft/cancel' && (init as RequestInit | undefined)?.method === 'POST')).toHaveLength(1);
+
+    cancellation.resolve(response({ ...orders[0], status: 'CANCELLED' }));
+    await waitFor(() => expect(listLoads).toBe(2));
+    expect(screen.queryByRole('dialog', { name: 'Cancel draft PO-DRAFT' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Actions for PO-DRAFT' })).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Open PO-DRAFT' })).toHaveFocus());
+  });
+
+  it('does not offer draft cancellation without draft-edit permission', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response({ items: [{ id: 'po-draft', poNumber: 'PO-DRAFT', supplierId: 'supplier-1', supplierName: 'PT Prima', orderDate: '2026-07-21', expectedDeliveryDate: '2026-07-25', status: 'DRAFT', currency: 'IDR' }], total: 1 })));
+
+    render(<SupplierOrderIndex permissions={['po.view']} />);
+
+    expect(await screen.findByRole('button', { name: 'Open PO-DRAFT' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Actions for PO-DRAFT' })).not.toBeInTheDocument();
+  });
+
+  it('shows cancellation errors and returns focus when Escape closes the confirmation', async () => {
+    const order = { id: 'po-draft', poNumber: 'PO-DRAFT', supplierId: 'supplier-1', supplierName: 'PT Prima', orderDate: '2026-07-21', expectedDeliveryDate: '2026-07-25', status: 'DRAFT', currency: 'IDR', createdBy: { displayName: 'Admin' } };
+    const fetchMock = vi.fn().mockImplementation((url: string, init?: RequestInit) => Promise.resolve(
+      url === '/api/purchase-orders/po-draft/cancel' && init?.method === 'POST'
+        ? response({ message: 'Draft can no longer be cancelled' }, false)
+        : response({ items: [order], total: 1 })
+    ));
+    vi.stubGlobal('fetch', fetchMock);
+    const user = userEvent.setup();
+
+    render(<SupplierOrderIndex permissions={['po.view', 'po.edit_draft']} />);
+
+    const actions = await screen.findByRole('button', { name: 'Actions for PO-DRAFT' });
+    await user.click(actions);
+    await user.click(screen.getByRole('menuitem', { name: 'Cancel Draft' }));
+    await user.click(screen.getByRole('button', { name: 'Confirm cancellation' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Draft can no longer be cancelled');
+    expect(screen.getByRole('button', { name: 'Confirm cancellation' })).toBeEnabled();
+    const dialog = screen.getByRole('dialog', { name: 'Cancel draft PO-DRAFT' });
+    expect(dialog).toHaveFocus();
+    await user.tab();
+    expect(within(dialog).getByRole('button', { name: 'Close cancel draft confirmation' })).toHaveFocus();
+    dialog.focus();
+    await user.tab({ shift: true });
+    expect(screen.getByRole('button', { name: 'Confirm cancellation' })).toHaveFocus();
+
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('dialog', { name: 'Cancel draft PO-DRAFT' })).not.toBeInTheDocument();
+    expect(actions).toHaveFocus();
   });
 
   it('ignores an out-of-order earlier index response after search changes', async () => {
@@ -94,6 +179,8 @@ describe('supplier order UI', () => {
     await user.click(screen.getByRole('button', { name: 'Save as Draft' }));
     await waitFor(() => expect(fetchMock).toHaveBeenLastCalledWith('/api/purchase-orders', expect.objectContaining({ method: 'POST' })));
     expect(JSON.parse((fetchMock.mock.calls[2][1] as RequestInit).body as string)).toEqual(expect.objectContaining({ supplierId: 'supplier-1', lines: [{ rawMaterialId: 'material-1', totalKanban: '2' }] }));
+    await waitFor(() => expect(push).toHaveBeenCalledWith('/supplier-orders'));
+    expect(screen.queryByRole('button', { name: 'Cancel draft' })).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Save & Send for Approval' }));
     await waitFor(() => expect(fetchMock).toHaveBeenLastCalledWith('/api/purchase-orders/po-1/submit', expect.objectContaining({ method: 'POST' })));
     expect(JSON.parse((fetchMock.mock.calls[3][1] as RequestInit).body as string)).toEqual(expect.objectContaining({ supplierId: 'supplier-1', lines: [{ rawMaterialId: 'material-1', totalKanban: '2' }] }));
@@ -139,7 +226,7 @@ describe('supplier order UI', () => {
     expect(supplierBox).toHaveValue('SUP-01 — PT Prima');
   });
 
-  it('shows server errors, lets a draft be cancelled, and keeps submitted details read-only', async () => {
+  it('shows save errors without offering draft cancellation inside the form', async () => {
     const fetchMock = vi.fn().mockResolvedValue(response({ message: 'Cannot save this order', fields: { expectedDeliveryDate: 'Expected date is invalid' } }, false));
     vi.stubGlobal('fetch', fetchMock);
     const user = userEvent.setup();
@@ -147,9 +234,7 @@ describe('supplier order UI', () => {
     await user.click(screen.getByRole('button', { name: 'Save as Draft' }));
     expect(await screen.findByText('Cannot save this order')).toBeInTheDocument();
     expect(screen.getByText('Expected date is invalid')).toBeInTheDocument();
-    fetchMock.mockResolvedValueOnce(response({ id: 'po-1', status: 'CANCELLED' }));
-    await user.click(screen.getByRole('button', { name: 'Cancel draft' }));
-    await waitFor(() => expect(fetchMock).toHaveBeenLastCalledWith('/api/purchase-orders/po-1/cancel', expect.objectContaining({ method: 'POST' })));
+    expect(screen.queryByRole('button', { name: 'Cancel draft' })).not.toBeInTheDocument();
   });
 
   it('rounds decimal display and calculations half away from zero at six decimal places', () => {
