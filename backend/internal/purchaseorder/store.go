@@ -29,6 +29,13 @@ const orderSelect = `SELECT p.id,p.tenant_id,p.po_number,p.supplier_id,s.name,p.
 
 const getOrderHeaderQuery = orderSelect + ` WHERE p.tenant_id=$1 AND p.id=$2 FOR SHARE`
 
+const documentSummarySelect = `SELECT dn.purchase_order_id,dn.id,dn.delivery_note_number,COUNT(kl.id),dn.issued_at
+ FROM delivery_notes dn
+ JOIN delivery_note_lines dnl ON dnl.tenant_id=dn.tenant_id AND dnl.delivery_note_id=dn.id AND dnl.purchase_order_id=dn.purchase_order_id
+ JOIN kanban_lots kl ON kl.tenant_id=dnl.tenant_id AND kl.delivery_note_line_id=dnl.id AND kl.purchase_order_line_id=dnl.purchase_order_line_id
+ WHERE dn.tenant_id=$1 AND dn.purchase_order_id=ANY($2::uuid[])
+ GROUP BY dn.purchase_order_id,dn.id,dn.delivery_note_number,dn.issued_at`
+
 const orderLineSelect = `SELECT l.id,l.tenant_id,l.purchase_order_id,l.raw_material_id,l.raw_material_code_snapshot,
  l.raw_material_name_snapshot,l.base_unit_id,l.base_unit_code_snapshot,l.qty_per_kanban_snapshot,l.total_kanban,
  l.ordered_base_qty,l.unit_price_snapshot,l.line_total,l.sort_position,l.created_by_user_id,cu.display_name,cu.email,
@@ -89,6 +96,41 @@ func scanApproval(row pgx.Row) (Approval, error) {
 	return approval, err
 }
 
+type documentSummaryQuerier interface {
+	Query(context.Context, string, ...any) (pgx.Rows, error)
+}
+
+func loadDocumentSummaries(ctx context.Context, tx documentSummaryQuerier, tenantID uuid.UUID, orderIDs []uuid.UUID) (map[uuid.UUID]DocumentSummary, error) {
+	summaries := make(map[uuid.UUID]DocumentSummary, len(orderIDs))
+	if len(orderIDs) == 0 {
+		return summaries, nil
+	}
+	rows, err := tx.Query(ctx, documentSummarySelect, tenantID, orderIDs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var orderID uuid.UUID
+		var summary DocumentSummary
+		if err := rows.Scan(&orderID, &summary.DeliveryNoteID, &summary.DeliveryNoteNumber, &summary.KanbanCount, &summary.IssuedAt); err != nil {
+			return nil, err
+		}
+		summaries[orderID] = summary
+	}
+	return summaries, rows.Err()
+}
+
+func attachDocumentSummary(order *Order, summaries map[uuid.UUID]DocumentSummary) {
+	order.Documents = nil
+	if order.Status != StatusApproved {
+		return
+	}
+	if summary, found := summaries[order.ID]; found {
+		order.Documents = &summary
+	}
+}
+
 func (s *SQLStore) ListOrders(ctx context.Context, actor Actor, query ListQuery) (items []Order, total int, err error) {
 	err = database.WithTenant(ctx, s.db, tenantContext(actor), func(tx database.TenantTx) error {
 		if err := tx.QueryRow(ctx, `SELECT count(*) FROM purchase_orders p WHERE p.tenant_id=$1
@@ -113,7 +155,22 @@ func (s *SQLStore) ListOrders(ctx context.Context, actor Actor, query ListQuery)
 			}
 			items = append(items, order)
 		}
-		return rows.Err()
+		if err := rows.Err(); err != nil {
+			return err
+		}
+		rows.Close()
+		orderIDs := make([]uuid.UUID, len(items))
+		for index := range items {
+			orderIDs[index] = items[index].ID
+		}
+		summaries, err := loadDocumentSummaries(ctx, tx, actor.TenantID, orderIDs)
+		if err != nil {
+			return err
+		}
+		for index := range items {
+			attachDocumentSummary(&items[index], summaries)
+		}
+		return nil
 	})
 	return
 }
@@ -146,7 +203,16 @@ func getOrder(ctx context.Context, tx database.TenantTx, tenantID, id uuid.UUID)
 		}
 		order.Lines = append(order.Lines, line)
 	}
-	return order, rows.Err()
+	if err := rows.Err(); err != nil {
+		return Order{}, err
+	}
+	rows.Close()
+	summaries, err := loadDocumentSummaries(ctx, tx, tenantID, []uuid.UUID{id})
+	if err != nil {
+		return Order{}, err
+	}
+	attachDocumentSummary(&order, summaries)
+	return order, nil
 }
 
 func (s *SQLStore) CreateOrder(ctx context.Context, actor Actor, input OrderInput) (order Order, err error) {

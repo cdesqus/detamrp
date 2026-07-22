@@ -181,6 +181,10 @@ func hasPermission(c *gin.Context, permission string) bool {
 // projectOrder is the public read model. Commercial fields are added only
 // after explicit authorization so omitted prices cannot be mistaken for zero.
 func projectOrder(order Order, includePrices bool) gin.H {
+	documents := order.Documents
+	if order.Status != StatusApproved {
+		documents = nil
+	}
 	lines := make([]gin.H, 0, len(order.Lines))
 	for _, line := range order.Lines {
 		projected := gin.H{
@@ -206,7 +210,7 @@ func projectOrder(order Order, includePrices bool) gin.H {
 		"submittedApproverDisplayName": order.SubmittedApproverDisplayName,
 		"submittedApproverEmail":       order.SubmittedApproverEmail,
 		"createdBy":                    order.CreatedBy, "createdAt": order.CreatedAt, "updatedBy": order.UpdatedBy, "updatedAt": order.UpdatedAt,
-		"lines": lines,
+		"lines": lines, "documents": documents,
 	}
 	if includePrices {
 		projected["totalAmount"] = order.TotalAmount

@@ -192,6 +192,15 @@ func TestSQLStoreApprovalGeneratesDocuments(t *testing.T) {
 		t.Fatalf("approve order: %v", err)
 	}
 	assertApprovedDocumentCounts(t, ctx, admin, fixture.tenantA, order.ID, 1, 2, 5)
+	assertHydratedDocumentSummary(t, ctx, store, buyer, order.ID, true)
+
+	if _, err := admin.Exec(ctx, `UPDATE purchase_orders SET status='DRAFT' WHERE tenant_id=$1 AND id=$2`, fixture.tenantA, order.ID); err != nil {
+		t.Fatalf("create stale non-approved document fixture: %v", err)
+	}
+	assertHydratedDocumentSummary(t, ctx, store, buyer, order.ID, false)
+	if _, err := admin.Exec(ctx, `UPDATE purchase_orders SET status='APPROVED' WHERE tenant_id=$1 AND id=$2`, fixture.tenantA, order.ID); err != nil {
+		t.Fatalf("restore approved document fixture: %v", err)
+	}
 
 	if err := database.WithTenant(ctx, appDB, tenantContext(approver), func(tx database.TenantTx) error {
 		if err := tx.QueryRow(ctx, `SELECT id FROM purchase_orders WHERE tenant_id=$1 AND id=$2 FOR UPDATE`, fixture.tenantA, order.ID).Scan(&order.ID); err != nil {
@@ -243,6 +252,32 @@ func TestSQLStoreApprovalGeneratesDocuments(t *testing.T) {
 	}
 	if approvalStatus != ApprovalPending || orderStatus != StatusPendingApproval || failedDocumentCount != 0 {
 		t.Fatalf("forced-error state = approval %s, order %s, documents %d", approvalStatus, orderStatus, failedDocumentCount)
+	}
+}
+
+func assertHydratedDocumentSummary(t *testing.T, ctx context.Context, store *SQLStore, actor Actor, orderID uuid.UUID, wantDocuments bool) {
+	t.Helper()
+	detail, err := store.GetOrder(ctx, actor, orderID)
+	if err != nil {
+		t.Fatalf("get order document summary: %v", err)
+	}
+	items, total, err := store.ListOrders(ctx, actor, ListQuery{Limit: 50})
+	if err != nil {
+		t.Fatalf("list order document summaries: %v", err)
+	}
+	if total != 1 || len(items) != 1 || items[0].ID != orderID {
+		t.Fatalf("list order document summaries = %d/%d %#v", len(items), total, items)
+	}
+	for _, result := range []Order{detail, items[0]} {
+		if !wantDocuments {
+			if result.Documents != nil {
+				t.Fatalf("non-approved documents = %#v, want nil", result.Documents)
+			}
+			continue
+		}
+		if result.Documents == nil || result.Documents.DeliveryNoteID == uuid.Nil || result.Documents.DeliveryNoteNumber == "" || result.Documents.KanbanCount != 5 || result.Documents.IssuedAt.IsZero() {
+			t.Fatalf("approved documents = %#v, want generated summary", result.Documents)
+		}
 	}
 }
 

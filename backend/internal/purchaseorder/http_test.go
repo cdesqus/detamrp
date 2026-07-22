@@ -285,10 +285,86 @@ func TestPurchaseOrderResponseModelsUseLowerCamelJSON(t *testing.T) {
 	order := Order{ID: uuid.New(), TenantID: uuid.New(), PONumber: "PO-202607-00001", SupplierID: uuid.New(), SupplierName: "Acme", OrderDate: time.Now(), ExpectedDeliveryDate: time.Now(), Currency: "IDR", Notes: "notes", Status: StatusDraft, Version: 1, TotalAmount: decimal.NewFromInt(24), SagePurchaseOrderNumber: "SAGE-1", SubmittedApproverUserID: uuid.New(), SubmittedApproverDisplayName: "Director", SubmittedApproverEmail: "director@example.test", CreatedBy: actor, CreatedAt: time.Now(), UpdatedBy: actor, UpdatedAt: time.Now(), Lines: []OrderLine{line}}
 	approval := Approval{ID: uuid.New(), TenantID: uuid.New(), PurchaseOrderID: order.ID, PONumber: order.PONumber, SupplierID: order.SupplierID, SupplierName: "Acme", Version: 1, ApproverUserID: uuid.New(), ApproverDisplayName: "Director", ApproverEmail: "director@example.test", Status: ApprovalPending, DecisionReason: "", DecidedByUserID: uuid.New(), CreatedBy: actor, CreatedAt: time.Now(), UpdatedBy: actor, UpdatedAt: time.Now()}
 
-	assertJSONKeys(t, order, []string{"id", "tenantId", "poNumber", "supplierId", "supplierName", "orderDate", "expectedDeliveryDate", "currency", "notes", "status", "version", "totalAmount", "sagePurchaseOrderNumber", "submittedApproverUserId", "submittedApproverDisplayName", "submittedApproverEmail", "createdBy", "createdAt", "updatedBy", "updatedAt", "lines"})
+	assertJSONKeys(t, order, []string{"id", "tenantId", "poNumber", "supplierId", "supplierName", "orderDate", "expectedDeliveryDate", "currency", "notes", "status", "version", "totalAmount", "sagePurchaseOrderNumber", "submittedApproverUserId", "submittedApproverDisplayName", "submittedApproverEmail", "createdBy", "createdAt", "updatedBy", "updatedAt", "lines", "documents"})
 	assertJSONKeys(t, line, []string{"id", "tenantId", "purchaseOrderId", "rawMaterialId", "rawMaterialCode", "rawMaterialName", "baseUnitId", "baseUnitCode", "qtyPerKanbanSnapshot", "totalKanban", "orderedBaseQty", "unitPriceSnapshot", "lineTotal", "sortPosition", "createdBy", "createdAt", "updatedBy", "updatedAt"})
 	assertJSONKeys(t, approval, []string{"id", "tenantId", "purchaseOrderId", "poNumber", "supplierId", "supplierName", "version", "approverUserId", "approverDisplayName", "approverEmail", "status", "decisionReason", "decidedAt", "decidedByUserId", "createdBy", "createdAt", "updatedBy", "updatedAt"})
 	assertJSONKeys(t, actor, []string{"tenantId", "userId", "displayName", "email"})
+}
+
+func TestDomainJSONContract(t *testing.T) {
+	deliveryNoteID := uuid.MustParse("10000000-0000-0000-0000-000000000001")
+	issuedAt := time.Date(2026, time.July, 22, 0, 0, 0, 0, time.UTC)
+	approved := Order{
+		Status: StatusApproved,
+		Documents: &DocumentSummary{
+			DeliveryNoteID:     deliveryNoteID,
+			DeliveryNoteNumber: "DN-202607-00001",
+			KanbanCount:        10,
+			IssuedAt:           issuedAt,
+		},
+	}
+
+	encoded, err := json.Marshal(approved)
+	if err != nil {
+		t.Fatalf("marshal approved order: %v", err)
+	}
+	var response map[string]json.RawMessage
+	if err := json.Unmarshal(encoded, &response); err != nil {
+		t.Fatalf("decode approved order: %v", err)
+	}
+	want := `{"deliveryNoteId":"10000000-0000-0000-0000-000000000001","deliveryNoteNumber":"DN-202607-00001","kanbanCount":10,"issuedAt":"2026-07-22T00:00:00Z"}`
+	if got := string(response["documents"]); got != want {
+		t.Fatalf("approved documents = %s, want %s", got, want)
+	}
+
+	encoded, err = json.Marshal(Order{Status: StatusDraft})
+	if err != nil {
+		t.Fatalf("marshal draft order: %v", err)
+	}
+	if err := json.Unmarshal(encoded, &response); err != nil {
+		t.Fatalf("decode draft order: %v", err)
+	}
+	if got := string(response["documents"]); got != "null" {
+		t.Fatalf("draft documents = %s, want null", got)
+	}
+}
+
+func TestPurchaseOrderDocumentSummaryResponses(t *testing.T) {
+	order := Order{
+		ID:     uuid.New(),
+		Status: StatusApproved,
+		Documents: &DocumentSummary{
+			DeliveryNoteID:     uuid.MustParse("10000000-0000-0000-0000-000000000001"),
+			DeliveryNoteNumber: "DN-202607-00001",
+			KanbanCount:        10,
+			IssuedAt:           time.Date(2026, time.July, 22, 0, 0, 0, 0, time.UTC),
+		},
+	}
+	repository := &httpRepository{order: order, orders: []Order{order}, total: 1}
+	router := purchaseOrderRouter(t, []string{"po.view"}, repository)
+
+	for _, path := range []string{"/purchase-orders", "/purchase-orders/" + order.ID.String()} {
+		response := serve(router, http.MethodGet, path, "", "session")
+		if response.Code != http.StatusOK {
+			t.Fatalf("GET %s status = %d: %s", path, response.Code, response.Body.String())
+		}
+		for _, fragment := range []string{
+			`"documents":{"deliveryNoteId":"10000000-0000-0000-0000-000000000001"`,
+			`"deliveryNoteNumber":"DN-202607-00001"`,
+			`"kanbanCount":10`,
+			`"issuedAt":"2026-07-22T00:00:00Z"`,
+		} {
+			if !strings.Contains(response.Body.String(), fragment) {
+				t.Errorf("GET %s omitted %s: %s", path, fragment, response.Body.String())
+			}
+		}
+	}
+
+	draft := Order{ID: uuid.New(), Status: StatusDraft, Documents: order.Documents}
+	draftResponse := serve(purchaseOrderRouter(t, []string{"po.view"}, &httpRepository{order: draft}), http.MethodGet, "/purchase-orders/"+draft.ID.String(), "", "session")
+	if !strings.Contains(draftResponse.Body.String(), `"documents":null`) {
+		t.Fatalf("draft response documents were not null: %s", draftResponse.Body.String())
+	}
 }
 
 func TestPurchaseOrderRoutesReturnExpectedSuccessCodes(t *testing.T) {

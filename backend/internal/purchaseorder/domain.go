@@ -39,27 +39,35 @@ type Actor struct {
 }
 
 type Order struct {
-	ID                           uuid.UUID       `json:"id"`
-	TenantID                     uuid.UUID       `json:"tenantId"`
-	PONumber                     string          `json:"poNumber"`
-	SupplierID                   uuid.UUID       `json:"supplierId"`
-	SupplierName                 string          `json:"supplierName"`
-	OrderDate                    time.Time       `json:"orderDate"`
-	ExpectedDeliveryDate         time.Time       `json:"expectedDeliveryDate"`
-	Currency                     string          `json:"currency"`
-	Notes                        string          `json:"notes"`
-	Status                       Status          `json:"status"`
-	Version                      int             `json:"version"`
-	TotalAmount                  decimal.Decimal `json:"totalAmount"`
-	SagePurchaseOrderNumber      string          `json:"sagePurchaseOrderNumber"`
-	SubmittedApproverUserID      uuid.UUID       `json:"submittedApproverUserId"`
-	SubmittedApproverDisplayName string          `json:"submittedApproverDisplayName"`
-	SubmittedApproverEmail       string          `json:"submittedApproverEmail"`
-	CreatedBy                    Actor           `json:"createdBy"`
-	CreatedAt                    time.Time       `json:"createdAt"`
-	UpdatedBy                    Actor           `json:"updatedBy"`
-	UpdatedAt                    time.Time       `json:"updatedAt"`
-	Lines                        []OrderLine     `json:"lines"`
+	ID                           uuid.UUID        `json:"id"`
+	TenantID                     uuid.UUID        `json:"tenantId"`
+	PONumber                     string           `json:"poNumber"`
+	SupplierID                   uuid.UUID        `json:"supplierId"`
+	SupplierName                 string           `json:"supplierName"`
+	OrderDate                    time.Time        `json:"orderDate"`
+	ExpectedDeliveryDate         time.Time        `json:"expectedDeliveryDate"`
+	Currency                     string           `json:"currency"`
+	Notes                        string           `json:"notes"`
+	Status                       Status           `json:"status"`
+	Version                      int              `json:"version"`
+	TotalAmount                  decimal.Decimal  `json:"totalAmount"`
+	SagePurchaseOrderNumber      string           `json:"sagePurchaseOrderNumber"`
+	SubmittedApproverUserID      uuid.UUID        `json:"submittedApproverUserId"`
+	SubmittedApproverDisplayName string           `json:"submittedApproverDisplayName"`
+	SubmittedApproverEmail       string           `json:"submittedApproverEmail"`
+	CreatedBy                    Actor            `json:"createdBy"`
+	CreatedAt                    time.Time        `json:"createdAt"`
+	UpdatedBy                    Actor            `json:"updatedBy"`
+	UpdatedAt                    time.Time        `json:"updatedAt"`
+	Lines                        []OrderLine      `json:"lines"`
+	Documents                    *DocumentSummary `json:"documents"`
+}
+
+type DocumentSummary struct {
+	DeliveryNoteID     uuid.UUID `json:"deliveryNoteId"`
+	DeliveryNoteNumber string    `json:"deliveryNoteNumber"`
+	KanbanCount        int64     `json:"kanbanCount"`
+	IssuedAt           time.Time `json:"issuedAt"`
 }
 
 type OrderLine struct {
