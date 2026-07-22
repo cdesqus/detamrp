@@ -62,6 +62,7 @@ describe('supplier order UI', () => {
     expect(screen.queryByRole('button', { name: 'Actions for PO-APPROVED' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Open PO-DRAFT' })).toBeInTheDocument();
     await user.click(actions);
+    expect(screen.getByRole('menu')).toHaveClass('supplier-order-row-menu-popover--upward');
     await user.click(screen.getByRole('menuitem', { name: 'Cancel Draft' }));
     const dialog = screen.getByRole('dialog', { name: 'Cancel draft PO-DRAFT' });
     const confirm = screen.getByRole('button', { name: 'Confirm cancellation' });
