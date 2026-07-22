@@ -37,18 +37,42 @@ func (s *Store) Options(ctx context.Context, a Actor, search string) (result []O
 	return
 }
 
-func (s *Store) CreateSession(ctx context.Context, a Actor, dnID uuid.UUID) (Session, error) {
+func (s *Store) CreateSession(ctx context.Context, a Actor, deliveryNoteNumber string) (Session, error) {
+	deliveryNoteNumber, err := normalizeDeliveryNoteNumber(deliveryNoteNumber)
+	if err != nil {
+		return Session{}, ErrDeliveryNoteInvalid
+	}
 	var out Session
-	err := database.WithTenant(ctx, s.db, tenant(a), func(tx database.TenantTx) error {
+	err = database.WithTenant(ctx, s.db, tenant(a), func(tx database.TenantTx) error {
 		_, _ = tx.Exec(ctx, `UPDATE receiving_sessions SET status='EXPIRED',updated_at=now() WHERE tenant_id=$1 AND status='ACTIVE' AND expires_at<now()`, a.TenantID)
+		var dnID uuid.UUID
+		var poStatus string
+		lookupErr := tx.QueryRow(ctx, `SELECT dn.id,p.status FROM delivery_notes dn JOIN purchase_orders p ON p.tenant_id=dn.tenant_id AND p.id=dn.purchase_order_id WHERE dn.tenant_id=$1 AND upper(dn.delivery_note_number)=$2 FOR UPDATE OF dn`, a.TenantID, deliveryNoteNumber).Scan(&dnID, &poStatus)
+		if errors.Is(lookupErr, pgx.ErrNoRows) || (lookupErr == nil && poStatus != "APPROVED" && poStatus != "PARTIALLY_RECEIVED") {
+			return ErrDeliveryNoteInvalid
+		}
+		if lookupErr != nil {
+			return lookupErr
+		}
+		var outstanding int
+		if e := tx.QueryRow(ctx, `SELECT COUNT(*) FILTER(WHERE kl.status='ISSUED') FROM delivery_note_lines dnl JOIN kanban_lots kl ON kl.tenant_id=dnl.tenant_id AND kl.delivery_note_line_id=dnl.id WHERE dnl.tenant_id=$1 AND dnl.delivery_note_id=$2`, a.TenantID, dnID).Scan(&outstanding); e != nil {
+			return e
+		}
+		if outstanding == 0 {
+			return ErrDeliveryNoteFullyReceived
+		}
+		var open bool
+		if e := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM receiving_sessions WHERE tenant_id=$1 AND delivery_note_id=$2 AND status IN ('ACTIVE','PAUSED'))`, a.TenantID, dnID).Scan(&open); e != nil {
+			return e
+		}
+		if open {
+			return ErrDeliveryNoteInProgress
+		}
 		number := "RCV-" + time.Now().Format("060102") + "-" + stringsUpper(uuid.NewString()[:6])
 		id := uuid.New()
-		err := tx.QueryRow(ctx, `INSERT INTO receiving_sessions(id,tenant_id,delivery_note_id,receiving_number,created_by_user_id,updated_by_user_id) SELECT $1,$2,dn.id,$3,$4,$4 FROM delivery_notes dn WHERE dn.tenant_id=$2 AND dn.id=$5 RETURNING id,delivery_note_id,receiving_number,status,receiving_date`, id, a.TenantID, number, a.UserID, dnID).Scan(&out.ID, &out.DeliveryNoteID, &out.ReceivingNumber, &out.Status, &out.ReceivingDate)
-		if errors.Is(err, pgx.ErrNoRows) {
-			return ErrNotFound
-		}
-		if err != nil {
-			return ErrConflict
+		insertErr := tx.QueryRow(ctx, `INSERT INTO receiving_sessions(id,tenant_id,delivery_note_id,receiving_number,created_by_user_id,updated_by_user_id) VALUES($1,$2,$3,$4,$5,$5) RETURNING id,delivery_note_id,receiving_number,status,receiving_date`, id, a.TenantID, dnID, number, a.UserID).Scan(&out.ID, &out.DeliveryNoteID, &out.ReceivingNumber, &out.Status, &out.ReceivingDate)
+		if insertErr != nil {
+			return ErrDeliveryNoteInProgress
 		}
 		return nil
 	})
@@ -103,6 +127,7 @@ func (s *Store) ListOpenSessions(ctx context.Context, a Actor) (items []Session,
 	return items, nil
 }
 func loadSession(ctx context.Context, tx database.TenantTx, a Actor, id uuid.UUID, out *Session) error {
+	out.Scans = []Scan{}
 	err := tx.QueryRow(ctx, `SELECT rs.id,rs.delivery_note_id,rs.receiving_number,rs.status,rs.receiving_date,dn.delivery_note_number,p.po_number,s.name,u.display_name,COUNT(kl.id),COUNT(*) FILTER(WHERE kl.status IN ('IN_STOCK','CONSUMED')),COUNT(*) FILTER(WHERE kl.status='ISSUED') FROM receiving_sessions rs JOIN delivery_notes dn ON dn.tenant_id=rs.tenant_id AND dn.id=rs.delivery_note_id JOIN purchase_orders p ON p.tenant_id=dn.tenant_id AND p.id=dn.purchase_order_id JOIN suppliers s ON s.tenant_id=p.tenant_id AND s.id=p.supplier_id JOIN users u ON u.tenant_id=rs.tenant_id AND u.id=rs.created_by_user_id JOIN delivery_note_lines dnl ON dnl.tenant_id=dn.tenant_id AND dnl.delivery_note_id=dn.id JOIN kanban_lots kl ON kl.tenant_id=dnl.tenant_id AND kl.delivery_note_line_id=dnl.id WHERE rs.tenant_id=$1 AND rs.id=$2 GROUP BY rs.id,dn.delivery_note_number,p.po_number,s.name,u.display_name`, a.TenantID, id).Scan(&out.ID, &out.DeliveryNoteID, &out.ReceivingNumber, &out.Status, &out.ReceivingDate, &out.DeliveryNoteNumber, &out.PONumber, &out.SupplierName, &out.CreatedBy, &out.Planned, &out.PreviouslyReceived, &out.Outstanding)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ErrNotFound

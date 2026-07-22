@@ -17,3 +17,29 @@ func TestDestinationIsNotPartOfReceiving(t *testing.T) {
 		t.Fatal("session states must be distinct")
 	}
 }
+
+func TestNormalizeDeliveryNoteNumberRequiresCompleteValue(t *testing.T) {
+	if _, err := normalizeDeliveryNoteNumber("   "); err == nil {
+		t.Fatal("empty Delivery Note accepted")
+	}
+	got, err := normalizeDeliveryNoteNumber(" dn-202607-00003 ")
+	if err != nil || got != "DN-202607-00003" {
+		t.Fatalf("got %q, %v", got, err)
+	}
+}
+
+func TestReceivingErrorCodeUsesStableBusinessCodes(t *testing.T) {
+	tests := []struct {
+		err  error
+		code string
+	}{
+		{ErrDeliveryNoteInvalid, "DN_INVALID"},
+		{ErrDeliveryNoteFullyReceived, "DN_FULLY_RECEIVED"},
+		{ErrDeliveryNoteInProgress, "DN_IN_PROGRESS"},
+	}
+	for _, tc := range tests {
+		if got := receivingErrorCode(tc.err); got != tc.code {
+			t.Errorf("receivingErrorCode(%v) = %q, want %q", tc.err, got, tc.code)
+		}
+	}
+}

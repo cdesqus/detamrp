@@ -48,14 +48,22 @@ func RegisterRoutes(router *gin.Engine, store *Store, authn Authenticator) {
 			return false
 		}
 		code := 500
-		if errors.Is(e, ErrNotFound) {
+		if errors.Is(e, ErrDeliveryNoteInvalid) {
+			code = 422
+		} else if errors.Is(e, ErrDeliveryNoteFullyReceived) || errors.Is(e, ErrDeliveryNoteInProgress) {
+			code = 409
+		} else if errors.Is(e, ErrNotFound) {
 			code = 404
 		} else if errors.Is(e, ErrConflict) {
 			code = 409
 		} else if errors.Is(e, ErrValidation) {
 			code = 422
 		}
-		c.JSON(code, gin.H{"error": e.Error()})
+		body := gin.H{"error": e.Error()}
+		if businessCode := receivingErrorCode(e); businessCode != "" {
+			body["code"] = businessCode
+		}
+		c.JSON(code, body)
 		return true
 	}
 	options := router.Group("/receiving-options", mw, rbac.RequirePermissions("receiving.view"))
@@ -82,13 +90,13 @@ func RegisterRoutes(router *gin.Engine, store *Store, authn Authenticator) {
 	})
 	sessions.POST("", rbac.RequirePermissions("receiving.create"), func(c *gin.Context) {
 		var in struct {
-			DeliveryNoteID uuid.UUID `json:"deliveryNoteId" binding:"required"`
+			DeliveryNoteNumber string `json:"deliveryNoteNumber" binding:"required"`
 		}
 		if c.ShouldBindJSON(&in) != nil {
-			c.JSON(400, gin.H{"error": "deliveryNoteId is required"})
+			c.JSON(400, gin.H{"error": "deliveryNoteNumber is required", "code": "DN_INVALID"})
 			return
 		}
-		x, e := store.CreateSession(c, actor(c), in.DeliveryNoteID)
+		x, e := store.CreateSession(c, actor(c), in.DeliveryNoteNumber)
 		if write(c, e) {
 			return
 		}

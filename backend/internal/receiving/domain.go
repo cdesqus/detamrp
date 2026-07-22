@@ -12,6 +12,9 @@ import (
 var ErrNotFound = errors.New("record not found")
 var ErrConflict = errors.New("transaction conflict")
 var ErrValidation = errors.New("validation failed")
+var ErrDeliveryNoteInvalid = errors.New("Delivery Note is invalid.")
+var ErrDeliveryNoteFullyReceived = errors.New("Delivery Note has already been fully received.")
+var ErrDeliveryNoteInProgress = errors.New("Delivery Note is currently being received in another session.")
 
 const SessionActive = "ACTIVE"
 const SessionPaused = "PAUSED"
@@ -75,4 +78,25 @@ func normalizeKanban(value string) (string, error) {
 		return "", ErrValidation
 	}
 	return value, nil
+}
+
+func normalizeDeliveryNoteNumber(value string) (string, error) {
+	value = strings.ToUpper(strings.TrimSpace(value))
+	if value == "" {
+		return "", ErrValidation
+	}
+	return value, nil
+}
+
+func receivingErrorCode(err error) string {
+	switch {
+	case errors.Is(err, ErrDeliveryNoteInvalid):
+		return "DN_INVALID"
+	case errors.Is(err, ErrDeliveryNoteFullyReceived):
+		return "DN_FULLY_RECEIVED"
+	case errors.Is(err, ErrDeliveryNoteInProgress):
+		return "DN_IN_PROGRESS"
+	default:
+		return ""
+	}
 }
