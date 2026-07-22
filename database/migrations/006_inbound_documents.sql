@@ -24,6 +24,7 @@ CREATE TABLE IF NOT EXISTS delivery_notes (
   updated_by_user_id uuid NOT NULL,
   updated_at timestamptz NOT NULL DEFAULT now(),
   UNIQUE (tenant_id, id),
+  CONSTRAINT delivery_notes_tenant_id_purchase_order_key UNIQUE (tenant_id, id, purchase_order_id),
   UNIQUE (tenant_id, purchase_order_id),
   UNIQUE (tenant_id, delivery_note_number),
   FOREIGN KEY (tenant_id, purchase_order_id) REFERENCES purchase_orders(tenant_id, id),
@@ -31,10 +32,24 @@ CREATE TABLE IF NOT EXISTS delivery_notes (
   FOREIGN KEY (tenant_id, updated_by_user_id) REFERENCES users(tenant_id, id)
 );
 
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'purchase_order_lines_tenant_order_line_key') THEN
+    ALTER TABLE purchase_order_lines ADD CONSTRAINT purchase_order_lines_tenant_order_line_key
+      UNIQUE (tenant_id, purchase_order_id, id);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'delivery_notes_tenant_id_purchase_order_key') THEN
+    ALTER TABLE delivery_notes ADD CONSTRAINT delivery_notes_tenant_id_purchase_order_key
+      UNIQUE (tenant_id, id, purchase_order_id);
+  END IF;
+END
+$$;
+
 CREATE TABLE IF NOT EXISTS delivery_note_lines (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id uuid NOT NULL REFERENCES tenants(id),
   delivery_note_id uuid NOT NULL,
+  purchase_order_id uuid NOT NULL,
   purchase_order_line_id uuid NOT NULL,
   created_by_user_id uuid NOT NULL,
   created_at timestamptz NOT NULL DEFAULT now(),
@@ -43,11 +58,39 @@ CREATE TABLE IF NOT EXISTS delivery_note_lines (
   UNIQUE (tenant_id, id),
   UNIQUE (tenant_id, delivery_note_id, purchase_order_line_id),
   UNIQUE (tenant_id, id, purchase_order_line_id),
-  FOREIGN KEY (tenant_id, delivery_note_id) REFERENCES delivery_notes(tenant_id, id),
-  FOREIGN KEY (tenant_id, purchase_order_line_id) REFERENCES purchase_order_lines(tenant_id, id),
+  CONSTRAINT delivery_note_lines_header_order_fk
+    FOREIGN KEY (tenant_id, delivery_note_id, purchase_order_id)
+    REFERENCES delivery_notes(tenant_id, id, purchase_order_id),
+  CONSTRAINT delivery_note_lines_order_line_fk
+    FOREIGN KEY (tenant_id, purchase_order_id, purchase_order_line_id)
+    REFERENCES purchase_order_lines(tenant_id, purchase_order_id, id),
   FOREIGN KEY (tenant_id, created_by_user_id) REFERENCES users(tenant_id, id),
   FOREIGN KEY (tenant_id, updated_by_user_id) REFERENCES users(tenant_id, id)
 );
+
+ALTER TABLE delivery_note_lines ADD COLUMN IF NOT EXISTS purchase_order_id uuid;
+UPDATE delivery_note_lines dnl
+SET purchase_order_id = pol.purchase_order_id
+FROM purchase_order_lines pol
+WHERE pol.tenant_id = dnl.tenant_id
+  AND pol.id = dnl.purchase_order_line_id
+  AND dnl.purchase_order_id IS NULL;
+ALTER TABLE delivery_note_lines ALTER COLUMN purchase_order_id SET NOT NULL;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'delivery_note_lines_header_order_fk') THEN
+    ALTER TABLE delivery_note_lines ADD CONSTRAINT delivery_note_lines_header_order_fk
+      FOREIGN KEY (tenant_id, delivery_note_id, purchase_order_id)
+      REFERENCES delivery_notes(tenant_id, id, purchase_order_id);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'delivery_note_lines_order_line_fk') THEN
+    ALTER TABLE delivery_note_lines ADD CONSTRAINT delivery_note_lines_order_line_fk
+      FOREIGN KEY (tenant_id, purchase_order_id, purchase_order_line_id)
+      REFERENCES purchase_order_lines(tenant_id, purchase_order_id, id);
+  END IF;
+END
+$$;
 
 CREATE TABLE IF NOT EXISTS kanban_lots (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -71,16 +114,150 @@ CREATE TABLE IF NOT EXISTS kanban_lots (
   FOREIGN KEY (tenant_id, updated_by_user_id) REFERENCES users(tenant_id, id)
 );
 
-WITH ranked_orders AS (
+CREATE OR REPLACE FUNCTION delivery_note_line_matches_purchase_order()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+DECLARE
+  delivery_note_purchase_order_id uuid;
+  line_purchase_order_id uuid;
+BEGIN
+  SELECT purchase_order_id INTO delivery_note_purchase_order_id
+  FROM delivery_notes
+  WHERE tenant_id = NEW.tenant_id AND id = NEW.delivery_note_id;
+
+  SELECT purchase_order_id INTO line_purchase_order_id
+  FROM purchase_order_lines
+  WHERE tenant_id = NEW.tenant_id AND id = NEW.purchase_order_line_id;
+
+  IF delivery_note_purchase_order_id IS NULL OR
+     line_purchase_order_id IS NULL OR
+     delivery_note_purchase_order_id <> NEW.purchase_order_id OR
+     line_purchase_order_id <> NEW.purchase_order_id OR
+     delivery_note_purchase_order_id <> line_purchase_order_id THEN
+    RAISE EXCEPTION 'delivery note line must belong to the delivery note purchase order'
+      USING ERRCODE = '23514';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'delivery_note_line_purchase_order_check' AND tgrelid = 'delivery_note_lines'::regclass) THEN
+    EXECUTE 'CREATE TRIGGER delivery_note_line_purchase_order_check
+      BEFORE INSERT OR UPDATE OF tenant_id, delivery_note_id, purchase_order_id, purchase_order_line_id ON delivery_note_lines
+      FOR EACH ROW EXECUTE FUNCTION delivery_note_line_matches_purchase_order()';
+  END IF;
+END
+$$;
+
+CREATE OR REPLACE FUNCTION purchase_order_line_preserves_kanban_quantity()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM kanban_lots
+    WHERE tenant_id = OLD.tenant_id
+      AND purchase_order_line_id = OLD.id
+      AND quantity <> NEW.qty_per_kanban_snapshot
+  ) THEN
+    RAISE EXCEPTION 'purchase order line quantity snapshot must equal existing Kanban lot quantities'
+      USING ERRCODE = '23514';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'purchase_order_line_kanban_quantity_check' AND tgrelid = 'purchase_order_lines'::regclass) THEN
+    EXECUTE 'CREATE TRIGGER purchase_order_line_kanban_quantity_check
+      BEFORE UPDATE OF qty_per_kanban_snapshot ON purchase_order_lines
+      FOR EACH ROW EXECUTE FUNCTION purchase_order_line_preserves_kanban_quantity()';
+  END IF;
+END
+$$;
+
+CREATE OR REPLACE FUNCTION kanban_lot_quantity_matches_purchase_order_line()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+DECLARE
+  delivery_note_line_purchase_order_line_id uuid;
+  expected_quantity numeric(20,6);
+BEGIN
+  SELECT purchase_order_line_id INTO delivery_note_line_purchase_order_line_id
+  FROM delivery_note_lines
+  WHERE tenant_id = NEW.tenant_id AND id = NEW.delivery_note_line_id;
+
+  SELECT qty_per_kanban_snapshot INTO expected_quantity
+  FROM purchase_order_lines
+  WHERE tenant_id = NEW.tenant_id AND id = NEW.purchase_order_line_id;
+
+  IF delivery_note_line_purchase_order_line_id IS NULL OR
+     expected_quantity IS NULL OR
+     delivery_note_line_purchase_order_line_id <> NEW.purchase_order_line_id OR
+     expected_quantity <> NEW.quantity THEN
+    RAISE EXCEPTION 'Kanban lot quantity must equal the purchase order line quantity snapshot'
+      USING ERRCODE = '23514';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'kanban_lot_quantity_check' AND tgrelid = 'kanban_lots'::regclass) THEN
+    EXECUTE 'CREATE TRIGGER kanban_lot_quantity_check
+      BEFORE INSERT OR UPDATE OF tenant_id, delivery_note_line_id, purchase_order_line_id, quantity ON kanban_lots
+      FOR EACH ROW EXECUTE FUNCTION kanban_lot_quantity_matches_purchase_order_line()';
+  END IF;
+END
+$$;
+
+-- Reconcile sequence state before allocating missing backfill rows. Allocation
+-- then advances next_value as one block per tenant/month, so reruns never
+-- renumber existing documents when an earlier source order appears later.
+INSERT INTO delivery_note_number_sequences (tenant_id, year_month, next_value)
+SELECT
+  tenant_id,
+  to_char(issued_at AT TIME ZONE 'UTC', 'YYYYMM'),
+  max(right(delivery_note_number, 5)::integer) + 1
+FROM delivery_notes
+GROUP BY tenant_id, to_char(issued_at AT TIME ZONE 'UTC', 'YYYYMM')
+ON CONFLICT (tenant_id, year_month) DO UPDATE
+SET next_value = greatest(delivery_note_number_sequences.next_value, EXCLUDED.next_value);
+
+WITH missing_orders AS (
   SELECT
     p.*,
-    to_char(p.updated_at AT TIME ZONE 'UTC', 'YYYYMM') AS year_month,
-    row_number() OVER (
-      PARTITION BY p.tenant_id, to_char(p.updated_at AT TIME ZONE 'UTC', 'YYYYMM')
-      ORDER BY p.updated_at, p.po_number, p.id
-    ) AS ordinal
+    to_char(p.updated_at AT TIME ZONE 'UTC', 'YYYYMM') AS year_month
   FROM purchase_orders p
-  WHERE p.status = 'APPROVED'
+  LEFT JOIN delivery_notes dn
+    ON dn.tenant_id = p.tenant_id AND dn.purchase_order_id = p.id
+  WHERE p.status = 'APPROVED' AND dn.id IS NULL
+), ranked_missing_orders AS (
+  SELECT
+    p.*,
+    row_number() OVER (
+      PARTITION BY p.tenant_id, p.year_month
+      ORDER BY p.updated_at, p.po_number, p.id
+    )::integer AS missing_ordinal
+  FROM missing_orders p
+), missing_order_counts AS (
+  SELECT tenant_id, year_month, count(*)::integer AS missing_count
+  FROM ranked_missing_orders
+  GROUP BY tenant_id, year_month
+), allocated_delivery_note_ranges AS (
+  INSERT INTO delivery_note_number_sequences (tenant_id, year_month, next_value)
+  SELECT tenant_id, year_month, missing_count + 1
+  FROM missing_order_counts
+  ON CONFLICT (tenant_id, year_month) DO UPDATE
+  SET next_value = delivery_note_number_sequences.next_value + EXCLUDED.next_value - 1
+  RETURNING tenant_id, year_month, next_value
 )
 INSERT INTO delivery_notes (
   tenant_id,
@@ -96,19 +273,24 @@ INSERT INTO delivery_notes (
 SELECT
   p.tenant_id,
   p.id,
-  'DN-' || p.year_month || '-' || lpad(p.ordinal::text, 5, '0'),
+  'DN-' || p.year_month || '-' || lpad((r.next_value - c.missing_count + p.missing_ordinal - 1)::text, 5, '0'),
   'ISSUED',
   p.updated_at,
   p.updated_by_user_id,
   p.updated_at,
   p.updated_by_user_id,
   p.updated_at
-FROM ranked_orders p
-ON CONFLICT DO NOTHING;
+FROM ranked_missing_orders p
+JOIN missing_order_counts c
+  ON c.tenant_id = p.tenant_id AND c.year_month = p.year_month
+JOIN allocated_delivery_note_ranges r
+  ON r.tenant_id = p.tenant_id AND r.year_month = p.year_month
+ON CONFLICT (tenant_id, purchase_order_id) DO NOTHING;
 
 INSERT INTO delivery_note_lines (
   tenant_id,
   delivery_note_id,
+  purchase_order_id,
   purchase_order_line_id,
   created_by_user_id,
   created_at,
@@ -118,6 +300,7 @@ INSERT INTO delivery_note_lines (
 SELECT
   p.tenant_id,
   dn.id,
+  p.id,
   pol.id,
   p.updated_by_user_id,
   p.updated_at,
@@ -128,10 +311,24 @@ JOIN delivery_notes dn
   ON dn.tenant_id = p.tenant_id AND dn.purchase_order_id = p.id
 JOIN purchase_order_lines pol
   ON pol.tenant_id = p.tenant_id AND pol.purchase_order_id = p.id
-WHERE p.status = 'APPROVED'
+LEFT JOIN delivery_note_lines dnl
+  ON dnl.tenant_id = p.tenant_id
+ AND dnl.delivery_note_id = dn.id
+ AND dnl.purchase_order_line_id = pol.id
+WHERE p.status = 'APPROVED' AND dnl.id IS NULL
 ON CONFLICT (tenant_id, delivery_note_id, purchase_order_line_id) DO NOTHING;
 
-WITH ranked_lots AS (
+INSERT INTO kanban_number_sequences (tenant_id, year_month, next_value)
+SELECT
+  tenant_id,
+  substring(kanban_id FROM 4 FOR 6),
+  max(right(kanban_id, 6)::integer) + 1
+FROM kanban_lots
+GROUP BY tenant_id, substring(kanban_id FROM 4 FOR 6)
+ON CONFLICT (tenant_id, year_month) DO UPDATE
+SET next_value = greatest(kanban_number_sequences.next_value, EXCLUDED.next_value);
+
+WITH expected_lots AS (
   SELECT
     pol.tenant_id,
     dnl.id AS delivery_note_line_id,
@@ -142,11 +339,7 @@ WITH ranked_lots AS (
     dn.created_at,
     dn.updated_by_user_id,
     dn.updated_at,
-    to_char(dn.issued_at AT TIME ZONE 'UTC', 'YYYYMM') AS year_month,
-    row_number() OVER (
-      PARTITION BY pol.tenant_id, to_char(dn.issued_at AT TIME ZONE 'UTC', 'YYYYMM')
-      ORDER BY dn.issued_at, dn.delivery_note_number, pol.sort_position, pol.id, lot_no
-    ) AS ordinal
+    to_char(dn.issued_at AT TIME ZONE 'UTC', 'YYYYMM') AS year_month
   FROM purchase_orders p
   JOIN delivery_notes dn
     ON dn.tenant_id = p.tenant_id AND dn.purchase_order_id = p.id
@@ -157,7 +350,31 @@ WITH ranked_lots AS (
    AND dnl.delivery_note_id = dn.id
    AND dnl.purchase_order_line_id = pol.id
   CROSS JOIN LATERAL generate_series(1, pol.total_kanban::bigint) lot_no
-  WHERE p.status = 'APPROVED'
+  LEFT JOIN kanban_lots existing_lot
+    ON existing_lot.tenant_id = pol.tenant_id
+   AND existing_lot.delivery_note_line_id = dnl.id
+   AND existing_lot.purchase_order_line_id = pol.id
+   AND existing_lot.lot_number = lot_no
+  WHERE p.status = 'APPROVED' AND existing_lot.id IS NULL
+), ranked_missing_lots AS (
+  SELECT
+    expected_lots.*,
+    row_number() OVER (
+      PARTITION BY tenant_id, year_month
+      ORDER BY created_at, delivery_note_line_id, purchase_order_line_id, lot_number
+    )::integer AS missing_ordinal
+  FROM expected_lots
+), missing_lot_counts AS (
+  SELECT tenant_id, year_month, count(*)::integer AS missing_count
+  FROM ranked_missing_lots
+  GROUP BY tenant_id, year_month
+), allocated_kanban_ranges AS (
+  INSERT INTO kanban_number_sequences (tenant_id, year_month, next_value)
+  SELECT tenant_id, year_month, missing_count + 1
+  FROM missing_lot_counts
+  ON CONFLICT (tenant_id, year_month) DO UPDATE
+  SET next_value = kanban_number_sequences.next_value + EXCLUDED.next_value - 1
+  RETURNING tenant_id, year_month, next_value
 )
 INSERT INTO kanban_lots (
   tenant_id,
@@ -172,40 +389,22 @@ INSERT INTO kanban_lots (
   updated_at
 )
 SELECT
-  tenant_id,
-  delivery_note_line_id,
-  purchase_order_line_id,
-  'KB-' || year_month || '-' || lpad(ordinal::text, 6, '0'),
-  lot_number,
-  quantity,
-  created_by_user_id,
-  created_at,
-  updated_by_user_id,
-  updated_at
-FROM ranked_lots
+  k.tenant_id,
+  k.delivery_note_line_id,
+  k.purchase_order_line_id,
+  'KB-' || k.year_month || '-' || lpad((r.next_value - c.missing_count + k.missing_ordinal - 1)::text, 6, '0'),
+  k.lot_number,
+  k.quantity,
+  k.created_by_user_id,
+  k.created_at,
+  k.updated_by_user_id,
+  k.updated_at
+FROM ranked_missing_lots k
+JOIN missing_lot_counts c
+  ON c.tenant_id = k.tenant_id AND c.year_month = k.year_month
+JOIN allocated_kanban_ranges r
+  ON r.tenant_id = k.tenant_id AND r.year_month = k.year_month
 ON CONFLICT (tenant_id, delivery_note_line_id, purchase_order_line_id, lot_number) DO NOTHING;
-
--- next_value is one greater than the largest generated ordinal, matching the
--- allocation convention used by purchase_order_number_sequences.
-INSERT INTO delivery_note_number_sequences (tenant_id, year_month, next_value)
-SELECT
-  tenant_id,
-  to_char(issued_at AT TIME ZONE 'UTC', 'YYYYMM'),
-  max(right(delivery_note_number, 5)::integer) + 1
-FROM delivery_notes
-GROUP BY tenant_id, to_char(issued_at AT TIME ZONE 'UTC', 'YYYYMM')
-ON CONFLICT (tenant_id, year_month) DO UPDATE
-SET next_value = greatest(delivery_note_number_sequences.next_value, EXCLUDED.next_value);
-
-INSERT INTO kanban_number_sequences (tenant_id, year_month, next_value)
-SELECT
-  tenant_id,
-  substring(kanban_id FROM 4 FOR 6),
-  max(right(kanban_id, 6)::integer) + 1
-FROM kanban_lots
-GROUP BY tenant_id, substring(kanban_id FROM 4 FOR 6)
-ON CONFLICT (tenant_id, year_month) DO UPDATE
-SET next_value = greatest(kanban_number_sequences.next_value, EXCLUDED.next_value);
 
 CREATE INDEX IF NOT EXISTS delivery_notes_tenant_status_issued_at_idx
   ON delivery_notes (tenant_id, status, issued_at DESC);
