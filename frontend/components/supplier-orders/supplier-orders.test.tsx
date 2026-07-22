@@ -73,13 +73,13 @@ describe('supplier order UI', () => {
 
     expect(within(approvedEmptyRow).getByRole('link', { name: 'Open PO PDF for PO-APPROVED-EMPTY' })).toHaveAttribute('target', '_blank');
     expect(within(approvedEmptyRow).queryByRole('link', { name: /DN PDF|Kanban labels PDF/ })).not.toBeInTheDocument();
-    expect(within(approvedEmptyRow).getAllByText('—')).toHaveLength(3);
+    expect(within(approvedEmptyRow).getAllByText('—')).toHaveLength(4);
     expect(within(oversizedRow).getByRole('link', { name: 'Open DN PDF for PO-APPROVED-OVERSIZED' })).toBeInTheDocument();
     expect(within(oversizedRow).queryByRole('link', { name: 'Open Kanban labels PDF for PO-APPROVED-OVERSIZED' })).not.toBeInTheDocument();
-    expect(within(oversizedRow).getAllByText('—')).toHaveLength(2);
+    expect(within(oversizedRow).getAllByText('—')).toHaveLength(3);
     expect(within(pendingRow).getByRole('link', { name: 'Open PO PDF for PO-PENDING' })).toHaveAttribute('target', '_blank');
     expect(within(pendingRow).queryByRole('link', { name: /DN PDF|Kanban labels PDF/ })).not.toBeInTheDocument();
-    expect(within(pendingRow).getAllByText('—')).toHaveLength(3);
+    expect(within(pendingRow).getAllByText('—')).toHaveLength(4);
   });
 
   it('cancels drafts from a compact row menu once and reloads the list', async () => {
@@ -390,7 +390,7 @@ describe('supplier order UI', () => {
     await user.click(screen.getByRole('button', { name: 'Approve order' }));
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/purchase-order-approvals/approval-1/approve', expect.objectContaining({ method: 'POST', body: '{}' })));
-    expect(await screen.findByText('APPROVED')).toBeInTheDocument();
+    expect(await screen.findByText('Approved')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Approve PO-DIRECTOR' })).not.toBeInTheDocument();
   });
 

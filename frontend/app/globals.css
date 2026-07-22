@@ -103,6 +103,12 @@ button:disabled { cursor: not-allowed; opacity: .48; }
 .supplier-order-row-menu-popover button { width: 100%; height: 29px; padding: 0 9px; color: #991b1b; background: white; border: 0; cursor: pointer; font-size: 10px; text-align: left; white-space: nowrap; }
 .supplier-order-row-menu-popover button:hover, .supplier-order-row-menu-popover button:focus-visible { background: #fef2f2; outline: none; }
 .status-pill { display: inline-flex; align-items: center; height: 21px; padding: 0 7px; color: #52525b; background: #f4f4f5; border: 1px solid #e4e4e7; border-radius: 999px; font-size: 10px; font-weight: 600; }
+.status-pill--neutral { color:#52525b; background:#f4f4f5; border-color:#e4e4e7; }
+.status-pill--amber { color:#92400e; background:#fffbeb; border-color:#fde68a; }
+.status-pill--green { color:#166534; background:#f0fdf4; border-color:#bbf7d0; }
+.status-pill--blue { color:#1d4ed8; background:#eff6ff; border-color:#bfdbfe; }
+.status-pill--dark-green { color:#14532d; background:#dcfce7; border-color:#86efac; }
+.status-pill--red { color:#991b1b; background:#fef2f2; border-color:#fecaca; }
 .supplier-order-form { max-width: 1160px; }
 .supplier-order-back { margin-bottom: 10px; }
 .supplier-order-card { margin-top: 16px; padding: 14px; background: white; border: 1px solid #e4e4e7; border-radius: 7px; }

@@ -86,18 +86,27 @@ func outputPDF(pdf *fpdf.Fpdf) ([]byte, error) {
 func RenderPOPDF(order Order, includePrices bool) ([]byte, error) {
 	pdf := newA4PDF(order.PONumber)
 	pdf.AddPage()
-	pdf.SetFont(pdfFontFamily, "B", 16)
-	pdf.CellFormat(0, 9, "PURCHASE ORDER", "", 1, "C", false, 0, "")
-	pdf.SetFont(pdfFontFamily, "", 10)
-	writeKeyValue(pdf, "PO Number", order.PONumber, 3)
-	writeKeyValue(pdf, "Status", string(order.Status), 3)
+	pdf.SetFillColor(24, 24, 27)
+	pdf.Rect(0, 0, 210, 31, "F")
+	pdf.SetTextColor(255, 255, 255)
+	pdf.SetXY(12, 8)
+	pdf.SetFont(pdfFontFamily, "B", 18)
+	pdf.CellFormat(115, 8, "PURCHASE ORDER", "", 0, "L", false, 0, "")
+	pdf.SetFont(pdfFontFamily, "B", 11)
+	pdf.CellFormat(71, 8, order.PONumber, "", 1, "R", false, 0, "")
+	pdf.SetX(12)
+	pdf.SetFont(pdfFontFamily, "", 8)
+	pdf.CellFormat(115, 5, "ORDER STOCK  /  PROCUREMENT", "", 0, "L", false, 0, "")
+	pdf.CellFormat(71, 5, string(order.Status), "", 1, "R", false, 0, "")
+	pdf.SetTextColor(24, 24, 27)
+	pdf.SetY(37)
+	writePDFSectionTitle(pdf, "SUPPLIER DETAILS")
 	writeKeyValue(pdf, "Supplier", order.SupplierName, 3)
-	writeKeyValue(pdf, "Order Date", formatPDFDate(order.OrderDate), 3)
-	writeKeyValue(pdf, "Expected Delivery", formatPDFDate(order.ExpectedDeliveryDate), 3)
-	writeKeyValue(pdf, "Currency", order.Currency, 3)
-	writeKeyValue(pdf, "Created By", order.CreatedBy.DisplayName, 3)
-	writeKeyValue(pdf, "Notes", order.Notes, 8)
-	pdf.Ln(3)
+	writePDFSectionTitle(pdf, "ORDER DETAILS")
+	writeKeyValue(pdf, "Order Date", formatPDFDate(order.OrderDate), 2)
+	writeKeyValue(pdf, "Expected Delivery", formatPDFDate(order.ExpectedDeliveryDate), 2)
+	writeKeyValue(pdf, "Currency", order.Currency, 2)
+	pdf.Ln(2)
 
 	widths := []float64{23, 47, 15, 24, 20, 27}
 	headings := []string{"Material", "Description", "Unit", "Qty/Kanban", "Kanbans", "Total Qty"}
@@ -117,11 +126,29 @@ func RenderPOPDF(order Order, includePrices bool) ([]byte, error) {
 	}
 	writePDFTable(pdf, widths, headings, rows)
 	pdf.Ln(3)
+	writePDFSectionTitle(pdf, "ORDER SUMMARY")
 	writeKeyValue(pdf, "Total Base Quantity", totalBaseQty.String(), 3)
 	if includePrices {
 		writeKeyValue(pdf, "Total Amount", order.TotalAmount.String(), 3)
 	}
+	if strings.TrimSpace(order.Notes) != "" {
+		writeKeyValue(pdf, "Notes", order.Notes, 8)
+	}
+	writePDFSectionTitle(pdf, "APPROVAL")
+	writeKeyValue(pdf, "Created By", order.CreatedBy.DisplayName, 3)
+	approver := order.SubmittedApproverDisplayName
+	if approver == "" { approver = "Pending approval" }
+	writeKeyValue(pdf, "Approver", approver, 3)
 	return outputPDF(pdf)
+}
+
+func writePDFSectionTitle(pdf *fpdf.Fpdf, title string) {
+	ensurePDFPageRoom(pdf, 9)
+	pdf.SetFillColor(244, 244, 245)
+	pdf.SetTextColor(39, 39, 42)
+	pdf.SetFont(pdfFontFamily, "B", 8)
+	pdf.CellFormat(0, 7, "  "+title, "", 1, "L", true, 0, "")
+	pdf.Ln(1)
 }
 
 func RenderDeliveryNotePDF(document DeliveryNoteDocument) ([]byte, error) {

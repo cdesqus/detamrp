@@ -55,6 +55,15 @@ func TestRenderPOPDFIncludesOrRedactsPrices(t *testing.T) {
 	}
 }
 
+func TestRenderPOPDFUsesModernBusinessSections(t *testing.T) {
+	order := Order{PONumber: "PO-MODERN", SupplierName: "PT Modern", Status: StatusApproved, CreatedBy: Actor{DisplayName: "Buyer"}, SubmittedApproverDisplayName: "Director", Notes: "Deliver carefully"}
+	result, err := RenderPOPDF(order, false)
+	if err != nil { t.Fatal(err) }
+	for _, heading := range []string{"SUPPLIER DETAILS", "ORDER DETAILS", "APPROVAL", "ORDER SUMMARY"} {
+		if !pdfContainsText(result, heading) { t.Errorf("missing modern section %q", heading) }
+	}
+}
+
 func TestRenderDeliveryNotePDFIncludesEveryLine(t *testing.T) {
 	document := DeliveryNoteDocument{
 		DeliveryNoteNumber: "DN-202607-00001", PONumber: "PO-202607-00001", SupplierName: "PT Material",

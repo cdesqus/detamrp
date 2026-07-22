@@ -3,11 +3,12 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useCurrentUser } from '../app-shell/app-shell';
+import { OrderStatusBadge } from './order-status';
 
 type Supplier = { id: string; code: string; name: string; currency: string; active: boolean };
 type Material = { id: string; code: string; name: string; supplierId: string; baseUnitCode: string; qtyPerKanban: string; standardUnitPrice: string; active: boolean };
 type OrderLine = { rawMaterialId: string; rawMaterialCode: string; rawMaterialName: string; baseUnitCode: string; qtyPerKanbanSnapshot: string; totalKanban: string; unitPriceSnapshot?: string };
-type InitialOrder = { id: string; poNumber?: string; status: string; supplierId: string; supplierName?: string; currency: string; orderDate: string; expectedDeliveryDate: string; notes?: string; lines: OrderLine[]; documents?: { deliveryNoteId: string; deliveryNoteNumber: string; kanbanCount: number; issuedAt: string } | null };
+type InitialOrder = { id: string; poNumber?: string; status: string; supplierId: string; supplierName?: string; currency: string; sagePurchaseOrderNumber?: string; orderDate: string; expectedDeliveryDate: string; notes?: string; lines: OrderLine[]; documents?: { deliveryNoteId: string; deliveryNoteNumber: string; kanbanCount: number; issuedAt: string } | null };
 type Props = { orderId?: string; initialOrder?: InitialOrder; permissions?: string[] };
 type ApiError = { message?: string; fields?: Record<string, string> };
 type Decimal = { value: bigint; scale: number };
@@ -79,6 +80,7 @@ export function SupplierOrderForm({ orderId, initialOrder, permissions }: Props)
   const [savedId, setSavedId] = useState(initialOrder?.id ?? '');
   const [status, setStatus] = useState(initialOrder?.status ?? 'DRAFT');
   const [poNumber, setPONumber] = useState(initialOrder?.poNumber ?? '');
+  const [sageNumber, setSageNumber] = useState(initialOrder?.sagePurchaseOrderNumber ?? '');
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [supplierId, setSupplierId] = useState(initialOrder?.supplierId ?? '');
   const [supplierName, setSupplierName] = useState(initialOrder?.supplierName ?? '');
@@ -107,7 +109,7 @@ export function SupplierOrderForm({ orderId, initialOrder, permissions }: Props)
   const editable = !detailLoading && !detailError && status === 'DRAFT';
 
   const hydrate = useCallback((order: InitialOrder) => {
-    setSavedId(order.id); setStatus(order.status); setPONumber(order.poNumber ?? ''); setSupplierId(order.supplierId); setSupplierName(order.supplierName ?? '');
+    setSavedId(order.id); setStatus(order.status); setPONumber(order.poNumber ?? ''); setSageNumber(order.sagePurchaseOrderNumber ?? ''); setSupplierId(order.supplierId); setSupplierName(order.supplierName ?? '');
     setCurrency(order.currency); setOrderDate(dateOnly(order.orderDate)); setExpectedDeliveryDate(dateOnly(order.expectedDeliveryDate));
     setNotes(order.notes ?? ''); setLines(order.lines ?? []);
   }, []);
@@ -249,7 +251,7 @@ export function SupplierOrderForm({ orderId, initialOrder, permissions }: Props)
   const unplacedErrors = Object.entries(errors).filter(([key]) => key !== '_form' && key !== 'supplierId' && key !== 'orderDate' && key !== 'expectedDeliveryDate' && key !== 'lines' && !/^lines\[\d+\]\.(totalKanban|rawMaterialId)$/.test(key) && !/^lines\[\d+\]$/.test(key));
   return <section className="supplier-order-form">
     {detailBack}
-    <div className="page-title-row"><div><h1>{poNumber || 'New Supplier Order'}</h1><p className="muted">{editable ? 'Complete the order and save it as a draft or send it for approval.' : `This supplier order is ${status.replaceAll('_', ' ').toLowerCase()} and read-only.`}</p></div>{poNumber && <span className="status-pill">{status.replaceAll('_', ' ')}</span>}</div>
+    <div className="page-title-row"><div><h1>{poNumber || 'New Supplier Order'}</h1><p className="muted">{editable ? 'Complete the order and save it as a draft or send it for approval.' : `This supplier order is ${status.replaceAll('_', ' ').toLowerCase()} and read-only.`}</p></div>{poNumber && <OrderStatusBadge status={status} />}</div>
     {errors._form && <p className="form-error" role="alert">{errors._form}</p>}
     {unplacedErrors.length > 0 && <div className="form-error" role="alert"><ul>{unplacedErrors.map(([key, message]) => <li key={key}>{message}</li>)}</ul></div>}
     {supplierError && <p className="form-error" role="alert">{supplierError} <button className="table-action" onClick={() => void loadSuppliers()}>Retry</button></p>}
@@ -258,6 +260,7 @@ export function SupplierOrderForm({ orderId, initialOrder, permissions }: Props)
       <label>Order Date<input type="date" value={orderDate} disabled={!editable} onChange={event => setOrderDate(event.target.value)} />{errors.orderDate && <small role="alert">{errors.orderDate}</small>}</label>
       <label>Expected Delivery Date<input type="date" min={orderDate} value={expectedDeliveryDate} disabled={!editable} onChange={event => setExpectedDeliveryDate(event.target.value)} />{errors.expectedDeliveryDate && <small role="alert">{errors.expectedDeliveryDate}</small>}</label>
       <label>Currency<input value={currency} aria-label="Currency" readOnly /></label>
+      {poNumber && <label>Sage PO Number<output aria-label="Sage PO Number">{sageNumber || '—'}</output></label>}
       <label className="supplier-order-notes">Notes<textarea value={notes} disabled={!editable} onChange={event => setNotes(event.target.value)} /></label>
     </div></div>
     <div className="supplier-order-card supplier-order-materials"><div className="supplier-order-material-toolbar"><div><strong>Raw Materials</strong><span>Snapshots are read-only after selection.</span></div>{editable && <div className="material-add"><input aria-label="Raw Material" list="material-options" disabled={!supplierId} value={materialText} onChange={event => changeMaterialText(event.target.value)} /><datalist id="material-options">{availableMaterials.map(item => <option key={item.id} value={optionLabel(item)} />)}</datalist><button type="button" className="primary-button" disabled={!supplierId || !selectedMaterial} onClick={addMaterial}>+ Raw Material</button></div>}</div>
