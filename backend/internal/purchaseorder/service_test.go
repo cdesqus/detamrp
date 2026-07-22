@@ -11,13 +11,15 @@ import (
 )
 
 type fakeRepository struct {
-	order       Order
-	createInput OrderInput
-	updateInput OrderInput
-	listQuery   ListQuery
-	decision    DecisionInput
-	called      string
-	err         error
+	order        Order
+	deliveryNote DeliveryNoteDocument
+	kanbanLabels KanbanLabelDocument
+	createInput  OrderInput
+	updateInput  OrderInput
+	listQuery    ListQuery
+	decision     DecisionInput
+	called       string
+	err          error
 }
 
 func (r *fakeRepository) ListOrders(_ context.Context, _ Actor, q ListQuery) ([]Order, int, error) {
@@ -27,6 +29,14 @@ func (r *fakeRepository) ListOrders(_ context.Context, _ Actor, q ListQuery) ([]
 func (r *fakeRepository) GetOrder(_ context.Context, _ Actor, _ uuid.UUID) (Order, error) {
 	r.called = "get"
 	return r.order, r.err
+}
+func (r *fakeRepository) LoadDeliveryNoteDocument(_ context.Context, _ Actor, _ uuid.UUID) (DeliveryNoteDocument, error) {
+	r.called = "delivery-note"
+	return r.deliveryNote, r.err
+}
+func (r *fakeRepository) LoadKanbanLabelDocument(_ context.Context, _ Actor, _ uuid.UUID) (KanbanLabelDocument, error) {
+	r.called = "kanban-labels"
+	return r.kanbanLabels, r.err
 }
 func (r *fakeRepository) CreateOrder(_ context.Context, _ Actor, in OrderInput) (Order, error) {
 	r.called, r.createInput = "create", in
@@ -69,6 +79,76 @@ func TestServiceNormalizesBeforeCreatingDraft(t *testing.T) {
 	}
 	if repo.called != "create" || repo.createInput.Currency != "IDR" || repo.createInput.Notes != "notes" {
 		t.Fatalf("repository input = %#v", repo.createInput)
+	}
+}
+
+func TestServiceRendersPurchaseOrderPDFWithRequestedPriceVisibility(t *testing.T) {
+	id := uuid.New()
+	repo := &fakeRepository{order: Order{ID: id, PONumber: "PO-1"}}
+	service := NewService(repo)
+	var gotOrder Order
+	var gotIncludePrices bool
+	service.renderPOPDF = func(order Order, includePrices bool) ([]byte, error) {
+		gotOrder, gotIncludePrices = order, includePrices
+		return []byte("%PDF-test"), nil
+	}
+
+	document, err := service.PurchaseOrderPDF(context.Background(), serviceActor(), id, true)
+	if err != nil {
+		t.Fatalf("PurchaseOrderPDF() error = %v", err)
+	}
+	if repo.called != "get" || gotOrder.ID != id || !gotIncludePrices {
+		t.Fatalf("renderer received order=%s includePrices=%t after %q", gotOrder.ID, gotIncludePrices, repo.called)
+	}
+	if string(document.Content) != "%PDF-test" || document.Filename != "PO-1.pdf" {
+		t.Fatalf("document = %#v", document)
+	}
+}
+
+func TestServiceLoadsOperationalDocumentsBeforeRenderingPDF(t *testing.T) {
+	id := uuid.New()
+	repo := &fakeRepository{
+		deliveryNote: DeliveryNoteDocument{PurchaseOrderID: id, DeliveryNoteNumber: "DN-1"},
+		kanbanLabels: KanbanLabelDocument{PurchaseOrderID: id, DeliveryNoteNumber: "DN-1"},
+	}
+	service := NewService(repo)
+	service.renderDeliveryNotePDF = func(document DeliveryNoteDocument) ([]byte, error) {
+		if document.PurchaseOrderID != id {
+			t.Fatalf("delivery note PO = %s", document.PurchaseOrderID)
+		}
+		return []byte("delivery-note"), nil
+	}
+	service.renderKanbanLabelsPDF = func(document KanbanLabelDocument) ([]byte, error) {
+		if document.PurchaseOrderID != id {
+			t.Fatalf("labels PO = %s", document.PurchaseOrderID)
+		}
+		return []byte("labels"), nil
+	}
+
+	deliveryNote, err := service.DeliveryNotePDF(context.Background(), serviceActor(), id)
+	if err != nil || repo.called != "delivery-note" || deliveryNote.Filename != "DN-1.pdf" {
+		t.Fatalf("DeliveryNotePDF() = %#v, %v after %q", deliveryNote, err, repo.called)
+	}
+	labels, err := service.KanbanLabelsPDF(context.Background(), serviceActor(), id)
+	if err != nil || repo.called != "kanban-labels" || labels.Filename != "KANBAN-DN-1.pdf" {
+		t.Fatalf("KanbanLabelsPDF() = %#v, %v after %q", labels, err, repo.called)
+	}
+}
+
+func TestServiceWrapsPDFRendererFailuresWithDocumentContext(t *testing.T) {
+	id := uuid.New()
+	cause := errors.New("render failed")
+	repo := &fakeRepository{order: Order{ID: id, PONumber: "PO-1"}}
+	service := NewService(repo)
+	service.renderPOPDF = func(Order, bool) ([]byte, error) { return nil, cause }
+
+	_, err := service.PurchaseOrderPDF(context.Background(), serviceActor(), id, false)
+	var failure DocumentRenderError
+	if !errors.As(err, &failure) || !errors.Is(err, cause) {
+		t.Fatalf("PurchaseOrderPDF() error = %v, want wrapped renderer error", err)
+	}
+	if failure.PurchaseOrderID != id || failure.DocumentType != "purchase_order" {
+		t.Fatalf("renderer failure context = %#v", failure)
 	}
 }
 

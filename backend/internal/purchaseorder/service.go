@@ -2,6 +2,8 @@ package purchaseorder
 
 import (
 	"context"
+	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 )
@@ -18,11 +20,42 @@ type Repository interface {
 	ListApprovals(context.Context, Actor, ListQuery) ([]Approval, int, error)
 	Approve(context.Context, Actor, uuid.UUID, DecisionInput) (Approval, error)
 	Reject(context.Context, Actor, uuid.UUID, DecisionInput) (Approval, error)
+	LoadDeliveryNoteDocument(context.Context, Actor, uuid.UUID) (DeliveryNoteDocument, error)
+	LoadKanbanLabelDocument(context.Context, Actor, uuid.UUID) (KanbanLabelDocument, error)
 }
 
-type Service struct{ repo Repository }
+type PDFDocument struct {
+	Content  []byte
+	Filename string
+}
 
-func NewService(repo Repository) *Service { return &Service{repo: repo} }
+type DocumentRenderError struct {
+	PurchaseOrderID uuid.UUID
+	DocumentType    string
+	Err             error
+}
+
+func (e DocumentRenderError) Error() string {
+	return fmt.Sprintf("%s PDF rendering failed", e.DocumentType)
+}
+
+func (e DocumentRenderError) Unwrap() error { return e.Err }
+
+type Service struct {
+	repo                  Repository
+	renderPOPDF           func(Order, bool) ([]byte, error)
+	renderDeliveryNotePDF func(DeliveryNoteDocument) ([]byte, error)
+	renderKanbanLabelsPDF func(KanbanLabelDocument) ([]byte, error)
+}
+
+func NewService(repo Repository) *Service {
+	return &Service{
+		repo:                  repo,
+		renderPOPDF:           RenderPOPDF,
+		renderDeliveryNotePDF: RenderDeliveryNotePDF,
+		renderKanbanLabelsPDF: RenderKanbanLabelsPDF,
+	}
+}
 
 func (s *Service) List(ctx context.Context, actor Actor, query ListQuery) ([]Order, int, error) {
 	query.Normalize()
@@ -31,6 +64,66 @@ func (s *Service) List(ctx context.Context, actor Actor, query ListQuery) ([]Ord
 
 func (s *Service) Get(ctx context.Context, actor Actor, id uuid.UUID) (Order, error) {
 	return s.repo.GetOrder(ctx, actor, id)
+}
+
+func (s *Service) PurchaseOrderPDF(ctx context.Context, actor Actor, id uuid.UUID, includePrices bool) (PDFDocument, error) {
+	order, err := s.repo.GetOrder(ctx, actor, id)
+	if err != nil {
+		return PDFDocument{}, err
+	}
+	content, err := s.renderPOPDF(order, includePrices)
+	if err != nil {
+		return PDFDocument{}, documentRenderError(id, "purchase_order", err)
+	}
+	return PDFDocument{Content: content, Filename: safePDFFilename(order.PONumber)}, nil
+}
+
+func (s *Service) DeliveryNotePDF(ctx context.Context, actor Actor, id uuid.UUID) (PDFDocument, error) {
+	document, err := s.repo.LoadDeliveryNoteDocument(ctx, actor, id)
+	if err != nil {
+		return PDFDocument{}, err
+	}
+	content, err := s.renderDeliveryNotePDF(document)
+	if err != nil {
+		return PDFDocument{}, documentRenderError(id, "delivery_note", err)
+	}
+	return PDFDocument{Content: content, Filename: safePDFFilename(document.DeliveryNoteNumber)}, nil
+}
+
+func (s *Service) KanbanLabelsPDF(ctx context.Context, actor Actor, id uuid.UUID) (PDFDocument, error) {
+	document, err := s.repo.LoadKanbanLabelDocument(ctx, actor, id)
+	if err != nil {
+		return PDFDocument{}, err
+	}
+	content, err := s.renderKanbanLabelsPDF(document)
+	if err != nil {
+		return PDFDocument{}, documentRenderError(id, "kanban_labels", err)
+	}
+	return PDFDocument{Content: content, Filename: safePDFFilename("KANBAN-" + document.DeliveryNoteNumber)}, nil
+}
+
+func documentRenderError(id uuid.UUID, documentType string, err error) DocumentRenderError {
+	return DocumentRenderError{PurchaseOrderID: id, DocumentType: documentType, Err: err}
+}
+
+func safePDFFilename(documentNumber string) string {
+	var filename strings.Builder
+	separator := false
+	for _, character := range strings.TrimSpace(documentNumber) {
+		safe := character >= 'a' && character <= 'z' || character >= 'A' && character <= 'Z' || character >= '0' && character <= '9' || character == '-' || character == '_'
+		if safe {
+			filename.WriteRune(character)
+			separator = false
+		} else if filename.Len() > 0 && !separator {
+			filename.WriteByte('-')
+			separator = true
+		}
+	}
+	stem := strings.Trim(filename.String(), "-_")
+	if stem == "" {
+		stem = "document"
+	}
+	return stem + ".pdf"
 }
 
 func (s *Service) Create(ctx context.Context, actor Actor, input OrderInput) (Order, error) {

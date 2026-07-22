@@ -28,15 +28,17 @@ func (a httpAuthenticator) Authenticate(context.Context, string) (auth.User, err
 }
 
 type httpRepository struct {
-	order     Order
-	approval  Approval
-	orders    []Order
-	approvals []Approval
-	total     int
-	err       error
-	called    string
-	create    OrderInput
-	update    OrderInput
+	order        Order
+	deliveryNote DeliveryNoteDocument
+	kanbanLabels KanbanLabelDocument
+	approval     Approval
+	orders       []Order
+	approvals    []Approval
+	total        int
+	err          error
+	called       string
+	create       OrderInput
+	update       OrderInput
 }
 
 func (r *httpRepository) ListOrders(context.Context, Actor, ListQuery) ([]Order, int, error) {
@@ -46,6 +48,14 @@ func (r *httpRepository) ListOrders(context.Context, Actor, ListQuery) ([]Order,
 func (r *httpRepository) GetOrder(context.Context, Actor, uuid.UUID) (Order, error) {
 	r.called = "get"
 	return r.order, r.err
+}
+func (r *httpRepository) LoadDeliveryNoteDocument(context.Context, Actor, uuid.UUID) (DeliveryNoteDocument, error) {
+	r.called = "delivery-note"
+	return r.deliveryNote, r.err
+}
+func (r *httpRepository) LoadKanbanLabelDocument(context.Context, Actor, uuid.UUID) (KanbanLabelDocument, error) {
+	r.called = "kanban-labels"
+	return r.kanbanLabels, r.err
 }
 func (r *httpRepository) CreateOrder(_ context.Context, _ Actor, input OrderInput) (Order, error) {
 	r.called = "create"
@@ -117,6 +127,156 @@ func TestPurchaseOrderRoutesEnforcePermissions(t *testing.T) {
 			allowed := serve(allowedRouter, test.method, test.path, test.body, "session")
 			if allowed.Code == http.StatusForbidden {
 				t.Fatalf("%s permission did not grant access", test.permission)
+			}
+		})
+	}
+}
+
+func TestPurchaseOrderPDFRoutesRequireAuthenticationAndPOView(t *testing.T) {
+	id := uuid.New()
+	paths := []string{
+		"/purchase-orders/" + id.String() + "/documents/po.pdf",
+		"/purchase-orders/" + id.String() + "/documents/delivery-note.pdf",
+		"/purchase-orders/" + id.String() + "/documents/kanban-labels.pdf",
+	}
+	for _, path := range paths {
+		withoutSession := serve(purchaseOrderRouter(t, []string{"po.view"}, &httpRepository{}), http.MethodGet, path, "", "")
+		if withoutSession.Code != http.StatusUnauthorized {
+			t.Errorf("GET %s without session status = %d, want %d", path, withoutSession.Code, http.StatusUnauthorized)
+		}
+		withoutPermission := serve(purchaseOrderRouter(t, []string{"unrelated.permission"}, &httpRepository{}), http.MethodGet, path, "", "session")
+		if withoutPermission.Code != http.StatusForbidden {
+			t.Errorf("GET %s without po.view status = %d, want %d", path, withoutPermission.Code, http.StatusForbidden)
+		}
+	}
+}
+
+func TestPurchaseOrderPDFRoutesStreamInlinePDFsWithSafeFilenames(t *testing.T) {
+	id := uuid.New()
+	repository := &httpRepository{
+		order: Order{ID: id, PONumber: "PO-202607-00001", SupplierName: "Acme", Status: StatusDraft},
+		deliveryNote: DeliveryNoteDocument{
+			PurchaseOrderID: id, PONumber: "PO-202607-00001", DeliveryNoteNumber: "DN-202607-00001",
+			Lines: []DeliveryNoteLine{{RawMaterialCode: "RM-1"}},
+		},
+		kanbanLabels: KanbanLabelDocument{
+			PurchaseOrderID: id, PONumber: "PO-202607-00001", DeliveryNoteNumber: "DN-202607-00001",
+			Labels: []KanbanLabel{{KanbanID: "KB-202607-00001", RawMaterialCode: "RM-1", LotNumber: 1}},
+		},
+	}
+	router := purchaseOrderRouter(t, []string{"po.view"}, repository)
+	for _, test := range []struct {
+		path, disposition string
+	}{
+		{"/purchase-orders/" + id.String() + "/documents/po.pdf", `inline; filename="PO-202607-00001.pdf"`},
+		{"/purchase-orders/" + id.String() + "/documents/delivery-note.pdf", `inline; filename="DN-202607-00001.pdf"`},
+		{"/purchase-orders/" + id.String() + "/documents/kanban-labels.pdf", `inline; filename="KANBAN-DN-202607-00001.pdf"`},
+	} {
+		response := serve(router, http.MethodGet, test.path, "", "session")
+		if response.Code != http.StatusOK {
+			t.Fatalf("GET %s status = %d: %s", test.path, response.Code, response.Body.String())
+		}
+		if got := response.Header().Get("Content-Type"); !strings.Contains(got, "application/pdf") {
+			t.Errorf("GET %s Content-Type = %q", test.path, got)
+		}
+		if got := response.Header().Get("Content-Disposition"); got != test.disposition {
+			t.Errorf("GET %s Content-Disposition = %q, want %q", test.path, got, test.disposition)
+		}
+		if !bytes.HasPrefix(response.Body.Bytes(), []byte("%PDF-")) {
+			t.Errorf("GET %s body does not begin with PDF signature", test.path)
+		}
+	}
+
+	repository.order.PONumber = "../PO\r\n\"unsafe/2026"
+	unsafeResponse := serve(purchaseOrderRouter(t, []string{"po.view"}, repository), http.MethodGet, "/purchase-orders/"+id.String()+"/documents/po.pdf", "", "session")
+	disposition := unsafeResponse.Header().Get("Content-Disposition")
+	if strings.ContainsAny(disposition, "\r\n/\\") || strings.Count(disposition, `"`) != 2 || !strings.HasPrefix(disposition, `inline; filename="`) || !strings.HasSuffix(disposition, `.pdf"`) {
+		t.Fatalf("unsafe Content-Disposition = %q", disposition)
+	}
+}
+
+func TestPurchaseOrderPDFRouteIncludesPricesOnlyWithPermission(t *testing.T) {
+	id := uuid.New()
+	order := Order{
+		ID: id, PONumber: "PO-PRICE-CHECK", SupplierName: "Acme", Status: StatusDraft,
+		TotalAmount: decimal.NewFromInt(183654),
+		Lines:       []OrderLine{{RawMaterialCode: "RM-1", UnitPriceSnapshot: decimal.NewFromInt(918273), LineTotal: decimal.NewFromInt(183654)}},
+	}
+	path := "/purchase-orders/" + id.String() + "/documents/po.pdf"
+	withoutPrice := serve(purchaseOrderRouter(t, []string{"po.view"}, &httpRepository{order: order}), http.MethodGet, path, "", "session")
+	withPrice := serve(purchaseOrderRouter(t, []string{"po.view", "po.price.view"}, &httpRepository{order: order}), http.MethodGet, path, "", "session")
+
+	if strings.Contains(withoutPrice.Body.String(), "Unit Price") || strings.Contains(withoutPrice.Body.String(), "918273") {
+		t.Fatalf("PO PDF exposed price without po.price.view")
+	}
+	if !strings.Contains(withPrice.Body.String(), "Unit Price") || !strings.Contains(withPrice.Body.String(), "918273") {
+		t.Fatalf("PO PDF omitted price with po.price.view")
+	}
+}
+
+func TestOperationalDocumentEndpointsReturnTypedFailures(t *testing.T) {
+	id := uuid.New()
+	for _, test := range []struct {
+		name, path, wantError string
+		err                   error
+		wantStatus            int
+	}{
+		{"missing delivery note", "/purchase-orders/" + id.String() + "/documents/delivery-note.pdf", "conflict", ConflictError{Fields: FieldErrors{"deliveryNote": "Operational document is unavailable"}}, http.StatusConflict},
+		{"missing labels", "/purchase-orders/" + id.String() + "/documents/kanban-labels.pdf", "not_found", NotFoundError{Resource: "purchase order"}, http.StatusNotFound},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			response := serve(purchaseOrderRouter(t, []string{"po.view"}, &httpRepository{err: test.err}), http.MethodGet, test.path, "", "session")
+			if response.Code != test.wantStatus || !strings.Contains(response.Body.String(), `"error":"`+test.wantError+`"`) {
+				t.Fatalf("response = %d %s", response.Code, response.Body.String())
+			}
+		})
+	}
+}
+
+func TestPDFDocumentEndpointSanitizesRendererFailuresAndLogsContext(t *testing.T) {
+	actor := auth.User{ID: uuid.New(), TenantID: uuid.New(), DisplayName: "Buyer", Permissions: []string{"po.view"}}
+	purchaseOrderID := uuid.New()
+	cause := errors.New("renderer exposed secret details")
+
+	for _, test := range []struct {
+		path, documentType string
+		fail               func(*Service)
+	}{
+		{"/purchase-orders/" + purchaseOrderID.String() + "/documents/po.pdf", "purchase_order", func(service *Service) {
+			service.renderPOPDF = func(Order, bool) ([]byte, error) { return nil, cause }
+		}},
+		{"/purchase-orders/" + purchaseOrderID.String() + "/documents/delivery-note.pdf", "delivery_note", func(service *Service) {
+			service.renderDeliveryNotePDF = func(DeliveryNoteDocument) ([]byte, error) { return nil, cause }
+		}},
+		{"/purchase-orders/" + purchaseOrderID.String() + "/documents/kanban-labels.pdf", "kanban_labels", func(service *Service) {
+			service.renderKanbanLabelsPDF = func(KanbanLabelDocument) ([]byte, error) { return nil, cause }
+		}},
+	} {
+		t.Run(test.documentType, func(t *testing.T) {
+			var logs bytes.Buffer
+			previous := slog.Default()
+			slog.SetDefault(slog.New(slog.NewJSONHandler(&logs, nil)))
+			defer slog.SetDefault(previous)
+
+			repository := &httpRepository{
+				order:        Order{ID: purchaseOrderID, PONumber: "PO-1"},
+				deliveryNote: DeliveryNoteDocument{PurchaseOrderID: purchaseOrderID, DeliveryNoteNumber: "DN-1"},
+				kanbanLabels: KanbanLabelDocument{PurchaseOrderID: purchaseOrderID, DeliveryNoteNumber: "DN-1"},
+			}
+			service := NewService(repository)
+			test.fail(service)
+			gin.SetMode(gin.TestMode)
+			router := gin.New()
+			RegisterRoutes(router, service, httpAuthenticator{user: actor})
+			response := serve(router, http.MethodGet, test.path, "", "session")
+
+			if response.Code != http.StatusInternalServerError || !strings.Contains(response.Body.String(), `"error":"internal_error"`) || strings.Contains(response.Body.String(), cause.Error()) {
+				t.Fatalf("unsanitized response = %d %s", response.Code, response.Body.String())
+			}
+			for _, value := range []string{actor.TenantID.String(), actor.ID.String(), purchaseOrderID.String(), `"document_type":"` + test.documentType + `"`, cause.Error()} {
+				if !strings.Contains(logs.String(), value) {
+					t.Errorf("structured log missing %q: %s", value, logs.String())
+				}
 			}
 		})
 	}

@@ -54,6 +54,39 @@ func RegisterRoutes(router *gin.Engine, service *Service, authenticator Authenti
 		}
 		c.JSON(http.StatusOK, projectOrder(order, hasPermission(c, "po.price.view")))
 	})
+	orders.GET("/:id/documents/po.pdf", rbac.RequirePermissions("po.view"), func(c *gin.Context) {
+		id, ok := routeID(c)
+		if !ok {
+			return
+		}
+		document, err := service.PurchaseOrderPDF(c.Request.Context(), actorFrom(c), id, hasPermission(c, "po.price.view"))
+		if writeHTTPError(c, err) {
+			return
+		}
+		writePDF(c, document)
+	})
+	orders.GET("/:id/documents/delivery-note.pdf", rbac.RequirePermissions("po.view"), func(c *gin.Context) {
+		id, ok := routeID(c)
+		if !ok {
+			return
+		}
+		document, err := service.DeliveryNotePDF(c.Request.Context(), actorFrom(c), id)
+		if writeHTTPError(c, err) {
+			return
+		}
+		writePDF(c, document)
+	})
+	orders.GET("/:id/documents/kanban-labels.pdf", rbac.RequirePermissions("po.view"), func(c *gin.Context) {
+		id, ok := routeID(c)
+		if !ok {
+			return
+		}
+		document, err := service.KanbanLabelsPDF(c.Request.Context(), actorFrom(c), id)
+		if writeHTTPError(c, err) {
+			return
+		}
+		writePDF(c, document)
+	})
 	orders.POST("", rbac.RequirePermissions("po.create"), func(c *gin.Context) {
 		input, ok := orderInput(c)
 		if !ok {
@@ -177,6 +210,11 @@ func hasPermission(c *gin.Context, permission string) bool {
 	value, exists := c.Get(rbac.ContextPermissionsKey)
 	permissions, valid := value.([]string)
 	return exists && valid && rbac.Allows(permissions, permission)
+}
+
+func writePDF(c *gin.Context, document PDFDocument) {
+	c.Header("Content-Disposition", `inline; filename="`+document.Filename+`"`)
+	c.Data(http.StatusOK, "application/pdf", document.Content)
 }
 
 // projectOrder is the public read model. Commercial fields are added only
@@ -351,11 +389,15 @@ func writeHTTPError(c *gin.Context, err error) bool {
 	var capacity CapacityError
 	var missing NotFoundError
 	var documentFailure ApprovalDocumentError
+	var renderFailure DocumentRenderError
 	isDocumentFailure := errors.As(err, &documentFailure)
-	if isDocumentFailure {
+	isRenderFailure := errors.As(err, &renderFailure)
+	if isDocumentFailure || isRenderFailure {
 		logUnexpectedHTTPError(c, err)
 	}
 	switch {
+	case isRenderFailure:
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal_error", "message": "Request could not be completed"})
 	case errors.As(err, &validation):
 		c.JSON(http.StatusBadRequest, gin.H{"error": "validation_failed", "message": "Please correct the highlighted fields", "fields": validation.Fields})
 	case errors.As(err, &conflict):
@@ -365,7 +407,7 @@ func writeHTTPError(c *gin.Context, err error) bool {
 	case errors.As(err, &missing):
 		c.JSON(http.StatusNotFound, gin.H{"error": "not_found", "message": missing.Error()})
 	default:
-		if !isDocumentFailure {
+		if !isDocumentFailure && !isRenderFailure {
 			logUnexpectedHTTPError(c, err)
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal_error", "message": "Request could not be completed"})
@@ -377,8 +419,13 @@ func logUnexpectedHTTPError(c *gin.Context, err error) {
 	actor := actorFrom(c)
 	loggedError := err
 	var documentFailure ApprovalDocumentError
-	if errors.As(err, &documentFailure) {
+	var renderFailure DocumentRenderError
+	isDocumentFailure := errors.As(err, &documentFailure)
+	isRenderFailure := errors.As(err, &renderFailure)
+	if isDocumentFailure {
 		loggedError = documentFailure.Err
+	} else if isRenderFailure {
+		loggedError = renderFailure.Err
 	}
 	attributes := []any{
 		"tenant_id", actor.TenantID,
@@ -387,7 +434,7 @@ func logUnexpectedHTTPError(c *gin.Context, err error) {
 		"route", c.FullPath(),
 		"error", loggedError,
 	}
-	if errors.As(err, &documentFailure) {
+	if isDocumentFailure {
 		attributes = append(attributes,
 			"approval_id", documentFailure.ApprovalID,
 			"purchase_order_id", documentFailure.PurchaseOrderID,
@@ -396,6 +443,11 @@ func logUnexpectedHTTPError(c *gin.Context, err error) {
 		if errors.As(documentFailure.Err, &capacity) {
 			attributes = append(attributes, "capacity_message", capacity.Message)
 		}
+	} else if isRenderFailure {
+		attributes = append(attributes,
+			"purchase_order_id", renderFailure.PurchaseOrderID,
+			"document_type", renderFailure.DocumentType,
+		)
 	} else if id := c.Param("id"); id != "" {
 		if strings.Contains(c.FullPath(), "purchase-order-approvals") {
 			attributes = append(attributes, "approval_id", id)
