@@ -83,6 +83,13 @@ func TestInboundMigrationLiveConstraintsAndChangedSourceRerun(t *testing.T) {
 		assertPostgresCode(t, err, "23514")
 	})
 
+	t.Run("rejects moving an existing Kanban beyond the source quota", func(t *testing.T) {
+		tx := beginInboundApplicationTx(t, ctx, db, fixture.tenantA)
+		defer tx.Rollback(ctx)
+		_, err := tx.Exec(ctx, `UPDATE kanban_lots SET lot_number=3 WHERE tenant_id=$1 AND purchase_order_line_id=$2 AND lot_number=2`, fixture.tenantA, fixture.line1)
+		assertPostgresCode(t, err, "23514")
+	})
+
 	t.Run("rejects moving a DN header away from its lines", func(t *testing.T) {
 		tx := beginInboundApplicationTx(t, ctx, db, fixture.tenantA)
 		defer tx.Rollback(ctx)

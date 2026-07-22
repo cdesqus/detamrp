@@ -1,6 +1,10 @@
 package purchaseorder
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/google/uuid"
+)
 
 type FieldErrors map[string]string
 
@@ -22,3 +26,12 @@ type CapacityError struct {
 }
 
 func (e CapacityError) Error() string { return "document numbering capacity exceeded" }
+
+type ApprovalDocumentError struct {
+	ApprovalID      uuid.UUID
+	PurchaseOrderID uuid.UUID
+	Err             error
+}
+
+func (e ApprovalDocumentError) Error() string { return "approval document generation failed" }
+func (e ApprovalDocumentError) Unwrap() error { return e.Err }

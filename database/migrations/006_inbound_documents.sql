@@ -216,15 +216,10 @@ BEGIN
 END;
 $$;
 
-DO $$
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'kanban_lot_quantity_check' AND tgrelid = 'kanban_lots'::regclass) THEN
-    EXECUTE 'CREATE TRIGGER kanban_lot_quantity_check
-      BEFORE INSERT OR UPDATE OF tenant_id, delivery_note_line_id, purchase_order_line_id, quantity ON kanban_lots
-      FOR EACH ROW EXECUTE FUNCTION kanban_lot_quantity_matches_purchase_order_line()';
-  END IF;
-END
-$$;
+DROP TRIGGER IF EXISTS kanban_lot_quantity_check ON kanban_lots;
+CREATE TRIGGER kanban_lot_quantity_check
+  BEFORE INSERT OR UPDATE OF tenant_id, delivery_note_line_id, purchase_order_line_id, lot_number, quantity ON kanban_lots
+  FOR EACH ROW EXECUTE FUNCTION kanban_lot_quantity_matches_purchase_order_line();
 
 -- Reconcile sequence state before allocating missing backfill rows. Allocation
 -- then advances next_value as one block per tenant/month, so reruns never

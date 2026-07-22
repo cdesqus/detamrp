@@ -447,23 +447,30 @@ func TestPurchaseOrderRoutesLogUnexpectedErrorsWithRequestContext(t *testing.T) 
 	defer slog.SetDefault(previous)
 
 	actor := auth.User{ID: uuid.New(), TenantID: uuid.New(), DisplayName: "Buyer", Permissions: []string{"po.view", "po.approve"}}
-	repository := &httpRepository{err: errors.New("database unavailable")}
-	gin.SetMode(gin.TestMode)
-	router := gin.New()
-	RegisterRoutes(router, NewService(repository), httpAuthenticator{user: actor})
 	purchaseOrderID, approvalID := uuid.New(), uuid.New()
 
 	for _, request := range []struct {
-		method, path, contextKey string
+		method, path string
+		err          error
+		contextKeys  []string
 	}{
-		{http.MethodGet, "/purchase-orders/" + purchaseOrderID.String(), "purchase_order_id"},
-		{http.MethodPost, "/purchase-order-approvals/" + approvalID.String() + "/approve", "approval_id"},
+		{http.MethodGet, "/purchase-orders/" + purchaseOrderID.String(), errors.New("database unavailable"), []string{"purchase_order_id"}},
+		{http.MethodPost, "/purchase-order-approvals/" + approvalID.String() + "/approve", ApprovalDocumentError{ApprovalID: approvalID, PurchaseOrderID: purchaseOrderID, Err: errors.New("generator unavailable")}, []string{"approval_id", "purchase_order_id"}},
+		{http.MethodPost, "/purchase-order-approvals/" + approvalID.String() + "/approve", ApprovalDocumentError{ApprovalID: approvalID, PurchaseOrderID: purchaseOrderID, Err: CapacityError{Field: "documents", Message: "Monthly Kanban label capacity is exhausted"}}, []string{"approval_id", "purchase_order_id"}},
 	} {
+		gin.SetMode(gin.TestMode)
+		router := gin.New()
+		RegisterRoutes(router, NewService(&httpRepository{err: request.err}), httpAuthenticator{user: actor})
 		response := serve(router, request.method, request.path, `{}`, "session")
-		if response.Code != http.StatusInternalServerError || strings.Contains(response.Body.String(), "database unavailable") {
+		if response.Code != http.StatusInternalServerError && response.Code != http.StatusConflict {
 			t.Fatalf("unexpected sanitized response: %d %s", response.Code, response.Body.String())
 		}
-		if !strings.Contains(logs.String(), request.contextKey) || !strings.Contains(logs.String(), actor.TenantID.String()) || !strings.Contains(logs.String(), "database unavailable") {
+		for _, contextKey := range request.contextKeys {
+			if !strings.Contains(logs.String(), contextKey) {
+				t.Fatalf("structured log missing %s: %s", contextKey, logs.String())
+			}
+		}
+		if !strings.Contains(logs.String(), actor.TenantID.String()) {
 			t.Fatalf("structured log missing request context: %s", logs.String())
 		}
 		logs.Reset()

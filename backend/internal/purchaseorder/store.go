@@ -376,7 +376,7 @@ func (s *SQLStore) decide(ctx context.Context, actor Actor, id uuid.UUID, input 
 		}
 		if orderStatus == StatusApproved {
 			if err = validateApprovalDocumentCapacity(ctx, tx, actor, purchaseOrderID); err != nil {
-				return err
+				return ApprovalDocumentError{ApprovalID: id, PurchaseOrderID: purchaseOrderID, Err: err}
 			}
 		}
 		if _, err = tx.Exec(ctx, `UPDATE purchase_order_approvals SET status=$3,decision_reason=$4,decided_at=now(),decided_by_user_id=$5,
@@ -388,7 +388,7 @@ func (s *SQLStore) decide(ctx context.Context, actor Actor, id uuid.UUID, input 
 		}
 		if orderStatus == StatusApproved {
 			if err = ensureApprovedDocuments(ctx, tx, actor, purchaseOrderID); err != nil {
-				return err
+				return ApprovalDocumentError{ApprovalID: id, PurchaseOrderID: purchaseOrderID, Err: err}
 			}
 		}
 		approval, err = getApproval(ctx, tx, actor.TenantID, id)

@@ -350,6 +350,11 @@ func writeHTTPError(c *gin.Context, err error) bool {
 	var conflict ConflictError
 	var capacity CapacityError
 	var missing NotFoundError
+	var documentFailure ApprovalDocumentError
+	isDocumentFailure := errors.As(err, &documentFailure)
+	if isDocumentFailure {
+		logUnexpectedHTTPError(c, err)
+	}
 	switch {
 	case errors.As(err, &validation):
 		c.JSON(http.StatusBadRequest, gin.H{"error": "validation_failed", "message": "Please correct the highlighted fields", "fields": validation.Fields})
@@ -360,7 +365,9 @@ func writeHTTPError(c *gin.Context, err error) bool {
 	case errors.As(err, &missing):
 		c.JSON(http.StatusNotFound, gin.H{"error": "not_found", "message": missing.Error()})
 	default:
-		logUnexpectedHTTPError(c, err)
+		if !isDocumentFailure {
+			logUnexpectedHTTPError(c, err)
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal_error", "message": "Request could not be completed"})
 	}
 	return true
@@ -375,7 +382,13 @@ func logUnexpectedHTTPError(c *gin.Context, err error) {
 		"route", c.FullPath(),
 		"error", err,
 	}
-	if id := c.Param("id"); id != "" {
+	var documentFailure ApprovalDocumentError
+	if errors.As(err, &documentFailure) {
+		attributes = append(attributes,
+			"approval_id", documentFailure.ApprovalID,
+			"purchase_order_id", documentFailure.PurchaseOrderID,
+		)
+	} else if id := c.Param("id"); id != "" {
 		if strings.Contains(c.FullPath(), "purchase-order-approvals") {
 			attributes = append(attributes, "approval_id", id)
 		} else {

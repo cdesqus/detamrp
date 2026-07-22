@@ -33,6 +33,7 @@ func TestInboundMigrationContainsGenerationAndIsolationContracts(t *testing.T) {
 		"generate_series",
 		"new.lot_number > expected_total_kanban",
 		"before update of qty_per_kanban_snapshot, total_kanban",
+		"before insert or update of tenant_id, delivery_note_line_id, purchase_order_line_id, lot_number, quantity",
 		"inbound document capacity preflight failed",
 	}
 	for _, fragment := range required {
