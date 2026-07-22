@@ -167,19 +167,24 @@ BEGIN
     RAISE EXCEPTION 'purchase order line quantity snapshot must equal existing Kanban lot quantities'
       USING ERRCODE = '23514';
   END IF;
+  IF EXISTS (
+    SELECT 1
+    FROM kanban_lots
+    WHERE tenant_id = OLD.tenant_id
+      AND purchase_order_line_id = OLD.id
+      AND lot_number > NEW.total_kanban
+  ) THEN
+    RAISE EXCEPTION 'purchase order line Kanban quota cannot be lower than existing lot ordinals'
+      USING ERRCODE = '23514';
+  END IF;
   RETURN NEW;
 END;
 $$;
 
-DO $$
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'purchase_order_line_kanban_quantity_check' AND tgrelid = 'purchase_order_lines'::regclass) THEN
-    EXECUTE 'CREATE TRIGGER purchase_order_line_kanban_quantity_check
-      BEFORE UPDATE OF qty_per_kanban_snapshot ON purchase_order_lines
-      FOR EACH ROW EXECUTE FUNCTION purchase_order_line_preserves_kanban_quantity()';
-  END IF;
-END
-$$;
+DROP TRIGGER IF EXISTS purchase_order_line_kanban_quantity_check ON purchase_order_lines;
+CREATE TRIGGER purchase_order_line_kanban_quantity_check
+  BEFORE UPDATE OF qty_per_kanban_snapshot, total_kanban ON purchase_order_lines
+  FOR EACH ROW EXECUTE FUNCTION purchase_order_line_preserves_kanban_quantity();
 
 CREATE OR REPLACE FUNCTION kanban_lot_quantity_matches_purchase_order_line()
 RETURNS trigger
@@ -188,19 +193,22 @@ AS $$
 DECLARE
   delivery_note_line_purchase_order_line_id uuid;
   expected_quantity numeric(20,6);
+  expected_total_kanban numeric(20,6);
 BEGIN
   SELECT purchase_order_line_id INTO delivery_note_line_purchase_order_line_id
   FROM delivery_note_lines
   WHERE tenant_id = NEW.tenant_id AND id = NEW.delivery_note_line_id;
 
-  SELECT qty_per_kanban_snapshot INTO expected_quantity
+  SELECT qty_per_kanban_snapshot, total_kanban INTO expected_quantity, expected_total_kanban
   FROM purchase_order_lines
   WHERE tenant_id = NEW.tenant_id AND id = NEW.purchase_order_line_id;
 
   IF delivery_note_line_purchase_order_line_id IS NULL OR
      expected_quantity IS NULL OR
+     expected_total_kanban IS NULL OR
      delivery_note_line_purchase_order_line_id <> NEW.purchase_order_line_id OR
-     expected_quantity <> NEW.quantity THEN
+     expected_quantity <> NEW.quantity OR
+     NEW.lot_number > expected_total_kanban THEN
     RAISE EXCEPTION 'Kanban lot quantity must equal the purchase order line quantity snapshot'
       USING ERRCODE = '23514';
   END IF;
@@ -327,6 +335,46 @@ FROM kanban_lots
 GROUP BY tenant_id, substring(kanban_id FROM 4 FOR 6)
 ON CONFLICT (tenant_id, year_month) DO UPDATE
 SET next_value = greatest(kanban_number_sequences.next_value, EXCLUDED.next_value);
+
+DO $$
+BEGIN
+  IF EXISTS (
+    WITH line_capacity AS (
+      SELECT
+        pol.tenant_id,
+        to_char(dn.issued_at AT TIME ZONE 'UTC', 'YYYYMM') AS year_month,
+        greatest(pol.total_kanban::bigint - count(kl.id), 0) AS missing_count
+      FROM purchase_orders p
+      JOIN delivery_notes dn
+        ON dn.tenant_id = p.tenant_id AND dn.purchase_order_id = p.id
+      JOIN purchase_order_lines pol
+        ON pol.tenant_id = p.tenant_id AND pol.purchase_order_id = p.id
+      JOIN delivery_note_lines dnl
+        ON dnl.tenant_id = pol.tenant_id
+       AND dnl.delivery_note_id = dn.id
+       AND dnl.purchase_order_line_id = pol.id
+      LEFT JOIN kanban_lots kl
+        ON kl.tenant_id = dnl.tenant_id
+       AND kl.delivery_note_line_id = dnl.id
+       AND kl.purchase_order_line_id = pol.id
+      WHERE p.status = 'APPROVED'
+      GROUP BY pol.tenant_id, dn.issued_at, pol.id, pol.total_kanban
+    ), monthly_capacity AS (
+      SELECT tenant_id, year_month, sum(missing_count)::bigint AS missing_count
+      FROM line_capacity
+      GROUP BY tenant_id, year_month
+    )
+    SELECT 1
+    FROM monthly_capacity c
+    LEFT JOIN kanban_number_sequences s
+      ON s.tenant_id = c.tenant_id AND s.year_month = c.year_month
+    WHERE coalesce(s.next_value, 1)::bigint + c.missing_count - 1 > 999999
+  ) THEN
+    RAISE EXCEPTION 'inbound document capacity preflight failed: six-digit Kanban range exhausted'
+      USING ERRCODE = '23514';
+  END IF;
+END
+$$;
 
 WITH expected_lots AS (
   SELECT

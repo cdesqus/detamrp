@@ -31,6 +31,9 @@ func TestInboundMigrationContainsGenerationAndIsolationContracts(t *testing.T) {
 		"force row level security",
 		"where p.status = 'approved'",
 		"generate_series",
+		"new.lot_number > expected_total_kanban",
+		"before update of qty_per_kanban_snapshot, total_kanban",
+		"inbound document capacity preflight failed",
 	}
 	for _, fragment := range required {
 		if !strings.Contains(strings.ToLower(sql), fragment) {

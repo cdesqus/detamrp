@@ -374,6 +374,11 @@ func (s *SQLStore) decide(ctx context.Context, actor Actor, id uuid.UUID, input 
 		if currentStatus != StatusPendingApproval || currentVersion != version {
 			return ConflictError{Fields: FieldErrors{"status": "Purchase order is no longer awaiting this approval"}}
 		}
+		if orderStatus == StatusApproved {
+			if err = validateApprovalDocumentCapacity(ctx, tx, actor, purchaseOrderID); err != nil {
+				return err
+			}
+		}
 		if _, err = tx.Exec(ctx, `UPDATE purchase_order_approvals SET status=$3,decision_reason=$4,decided_at=now(),decided_by_user_id=$5,
  updated_by_user_id=$5,updated_at=now() WHERE tenant_id=$1 AND id=$2`, actor.TenantID, id, approvalStatus, input.Reason, actor.UserID); err != nil {
 			return err

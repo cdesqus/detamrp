@@ -238,6 +238,11 @@ func TestSQLStoreApprovalGeneratesDocuments(t *testing.T) {
 	}
 	if _, err := store.Approve(ctx, approver, failedApprovals[0].ID, DecisionInput{}); err == nil {
 		t.Fatal("approval with forced generator error unexpectedly succeeded")
+	} else {
+		var capacity CapacityError
+		if !errors.As(err, &capacity) || capacity.Field != "documents" {
+			t.Fatalf("forced generator error = %T %v, want typed document capacity error", err, err)
+		}
 	}
 
 	var approvalStatus ApprovalStatus
@@ -253,6 +258,96 @@ func TestSQLStoreApprovalGeneratesDocuments(t *testing.T) {
 	if approvalStatus != ApprovalPending || orderStatus != StatusPendingApproval || failedDocumentCount != 0 {
 		t.Fatalf("forced-error state = approval %s, order %s, documents %d", approvalStatus, orderStatus, failedDocumentCount)
 	}
+}
+
+func TestSQLStoreConcurrentApprovalsAllocateUniqueDocumentsAndRejectDuplicateDecision(t *testing.T) {
+	adminURL := os.Getenv("TEST_DATABASE_URL")
+	if adminURL == "" {
+		t.Skip("TEST_DATABASE_URL is not configured")
+	}
+	ctx := context.Background()
+	admin, err := pgxpool.New(ctx, adminURL)
+	if err != nil {
+		t.Fatalf("open admin pool: %v", err)
+	}
+	fixture := newLiveFixture()
+	if err := fixture.insert(ctx, admin); err != nil {
+		admin.Close()
+		t.Fatalf("insert fixture: %v", err)
+	}
+	defer func() {
+		if err := fixture.cleanup(ctx, admin); err != nil {
+			t.Errorf("cleanup fixture: %v", err)
+		}
+		admin.Close()
+	}()
+
+	appDB, err := database.Open(ctx, applicationDatabaseURL(t, adminURL))
+	if err != nil {
+		t.Fatalf("open application pool: %v", err)
+	}
+	defer appDB.Close()
+	store := NewSQLStore(appDB)
+	buyer := Actor{TenantID: fixture.tenantA, UserID: fixture.buyer, DisplayName: "Live Buyer"}
+	approver := Actor{TenantID: fixture.tenantA, UserID: fixture.approver, DisplayName: "Live Director"}
+	var orders []Order
+	for index, count := range []int64{2, 3} {
+		order, err := store.CreateOrder(ctx, buyer, OrderInput{
+			SupplierID: fixture.supplier, OrderDate: time.Date(2026, time.July, 21+index, 0, 0, 0, 0, time.UTC),
+			ExpectedDeliveryDate: time.Date(2026, time.July, 25, 0, 0, 0, 0, time.UTC), Currency: "IDR",
+			Lines: []LineInput{{RawMaterialID: fixture.material, TotalKanban: decimal.NewFromInt(count)}},
+		})
+		if err != nil {
+			t.Fatalf("create concurrent order %d: %v", index, err)
+		}
+		if _, err := store.SubmitOrder(ctx, buyer, order.ID); err != nil {
+			t.Fatalf("submit concurrent order %d: %v", index, err)
+		}
+		orders = append(orders, order)
+	}
+	approvals, total, err := store.ListApprovals(ctx, approver, ListQuery{Limit: 50})
+	if err != nil || total != 2 || len(approvals) != 2 {
+		t.Fatalf("list concurrent approvals = %d/%d, err %v", len(approvals), total, err)
+	}
+
+	errorsByApproval := make(chan error, len(approvals))
+	var wait sync.WaitGroup
+	for _, approval := range approvals {
+		wait.Add(1)
+		go func(approvalID uuid.UUID) {
+			defer wait.Done()
+			_, approveErr := store.Approve(ctx, approver, approvalID, DecisionInput{})
+			errorsByApproval <- approveErr
+		}(approval.ID)
+	}
+	wait.Wait()
+	close(errorsByApproval)
+	for approveErr := range errorsByApproval {
+		if approveErr != nil {
+			t.Fatalf("concurrent approval: %v", approveErr)
+		}
+	}
+	assertApprovedDocumentCounts(t, ctx, admin, fixture.tenantA, orders[0].ID, 1, 1, 2)
+	assertApprovedDocumentCounts(t, ctx, admin, fixture.tenantA, orders[1].ID, 1, 1, 3)
+	var distinctDNs, distinctKanbans int
+	if err := admin.QueryRow(ctx, `SELECT count(DISTINCT delivery_note_number),
+ (SELECT count(DISTINCT kanban_id) FROM kanban_lots WHERE tenant_id=$1)
+ FROM delivery_notes WHERE tenant_id=$1`, fixture.tenantA).Scan(&distinctDNs, &distinctKanbans); err != nil {
+		t.Fatalf("count concurrent identifiers: %v", err)
+	}
+	if distinctDNs != 2 || distinctKanbans != 5 {
+		t.Fatalf("concurrent identifiers = %d DNs/%d Kanbans, want 2/5", distinctDNs, distinctKanbans)
+	}
+	if _, err := store.Approve(ctx, approver, approvals[0].ID, DecisionInput{}); err == nil {
+		t.Fatal("duplicate approval decision unexpectedly succeeded")
+	} else {
+		var conflict ConflictError
+		if !errors.As(err, &conflict) {
+			t.Fatalf("duplicate approval error = %T %v, want conflict", err, err)
+		}
+	}
+	assertApprovedDocumentCounts(t, ctx, admin, fixture.tenantA, orders[0].ID, 1, 1, 2)
+	assertApprovedDocumentCounts(t, ctx, admin, fixture.tenantA, orders[1].ID, 1, 1, 3)
 }
 
 func assertHydratedDocumentSummary(t *testing.T, ctx context.Context, store *SQLStore, actor Actor, orderID uuid.UUID, wantDocuments bool) {

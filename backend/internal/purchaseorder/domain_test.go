@@ -61,6 +61,22 @@ func TestOrderInputRejectsKanbanCountBeyondNumericCapacity(t *testing.T) {
 	}
 }
 
+func TestOrderInputRejectsAggregateKanbanCapacityWhenSubmitting(t *testing.T) {
+	input := validOrderInput()
+	input.Lines = []LineInput{
+		{RawMaterialID: uuid.New(), TotalKanban: decimal.NewFromInt(600_000)},
+		{RawMaterialID: uuid.New(), TotalKanban: decimal.NewFromInt(400_000)},
+	}
+
+	errs := input.NormalizeAndValidate(true)
+	if got := errs["lines"]; got != "A purchase order cannot exceed 999999 Kanban labels" {
+		t.Fatalf("aggregate capacity error = %q, want six-digit Kanban limit", got)
+	}
+	if draftErrors := input.NormalizeAndValidate(false); draftErrors["lines"] != "" {
+		t.Fatalf("draft aggregate capacity was rejected before submission: %#v", draftErrors)
+	}
+}
+
 func TestOrderLineCalculatesExactDecimalAmounts(t *testing.T) {
 	line := OrderLine{
 		QtyPerKanbanSnapshot: decimal.RequireFromString("0.333333"),

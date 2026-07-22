@@ -71,6 +71,18 @@ func TestInboundMigrationLiveConstraintsAndChangedSourceRerun(t *testing.T) {
 		assertPostgresCode(t, err, "23514")
 	})
 
+	t.Run("rejects a correct-quantity Kanban beyond the source quota", func(t *testing.T) {
+		var deliveryNoteLineID uuid.UUID
+		if err := db.QueryRow(ctx, `SELECT id FROM delivery_note_lines WHERE tenant_id=$1 AND delivery_note_id=$2 AND purchase_order_line_id=$3`, fixture.tenantA, firstDNID, fixture.line1).Scan(&deliveryNoteLineID); err != nil {
+			t.Fatalf("read delivery note line: %v", err)
+		}
+		tx := beginInboundApplicationTx(t, ctx, db, fixture.tenantA)
+		defer tx.Rollback(ctx)
+		_, err := tx.Exec(ctx, `INSERT INTO kanban_lots(tenant_id,delivery_note_line_id,purchase_order_line_id,kanban_id,lot_number,quantity,created_by_user_id,updated_by_user_id)
+ VALUES($1,$2,$3,'KB-202607-999998',3,2.5,$4,$4)`, fixture.tenantA, deliveryNoteLineID, fixture.line1, fixture.userA)
+		assertPostgresCode(t, err, "23514")
+	})
+
 	t.Run("rejects moving a DN header away from its lines", func(t *testing.T) {
 		tx := beginInboundApplicationTx(t, ctx, db, fixture.tenantA)
 		defer tx.Rollback(ctx)
@@ -89,6 +101,13 @@ func TestInboundMigrationLiveConstraintsAndChangedSourceRerun(t *testing.T) {
 		tx := beginInboundApplicationTx(t, ctx, db, fixture.tenantA)
 		defer tx.Rollback(ctx)
 		_, err := tx.Exec(ctx, `UPDATE purchase_order_lines SET qty_per_kanban_snapshot=999 WHERE tenant_id=$1 AND id=$2`, fixture.tenantA, fixture.line1)
+		assertPostgresCode(t, err, "23514")
+	})
+
+	t.Run("rejects reducing the source quota below existing lot ordinals", func(t *testing.T) {
+		tx := beginInboundApplicationTx(t, ctx, db, fixture.tenantA)
+		defer tx.Rollback(ctx)
+		_, err := tx.Exec(ctx, `UPDATE purchase_order_lines SET total_kanban=1 WHERE tenant_id=$1 AND id=$2`, fixture.tenantA, fixture.line1)
 		assertPostgresCode(t, err, "23514")
 	})
 
@@ -124,6 +143,23 @@ func TestInboundMigrationLiveConstraintsAndChangedSourceRerun(t *testing.T) {
 
 		applyInboundMigration(t, ctx, db, migration)
 		assertInboundCounts(t, ctx, db, fixture.tenantA, 3, 3, 4)
+	})
+
+	t.Run("fails capacity preflight before expanding missing lots", func(t *testing.T) {
+		purchaseOrderID, lineID := uuid.New(), uuid.New()
+		if _, err := db.Exec(ctx, `INSERT INTO purchase_orders(id,tenant_id,po_number,supplier_id,order_date,expected_delivery_date,currency,status,created_by_user_id,updated_by_user_id)
+ VALUES($1,$2,'PO-IN-CAPACITY',$3,'2026-07-27','2026-07-28','IDR','APPROVED',$4,$4)`, purchaseOrderID, fixture.tenantA, fixture.supplierA, fixture.userA); err != nil {
+			t.Fatalf("insert capacity PO: %v", err)
+		}
+		if _, err := db.Exec(ctx, `INSERT INTO purchase_order_lines(id,tenant_id,purchase_order_id,raw_material_id,raw_material_code_snapshot,raw_material_name_snapshot,base_unit_id,base_unit_code_snapshot,qty_per_kanban_snapshot,total_kanban,ordered_base_qty,unit_price_snapshot,line_total,sort_position,created_by_user_id,updated_by_user_id)
+ VALUES($1,$2,$3,$4,'IN-RM','Inbound Material',$5,'IN-KG',2.5,2,5,4.25,21.25,1,$6,$6)`, lineID, fixture.tenantA, purchaseOrderID, fixture.material, fixture.measurement, fixture.userA); err != nil {
+			t.Fatalf("insert capacity PO line: %v", err)
+		}
+		if _, err := db.Exec(ctx, `UPDATE kanban_number_sequences SET next_value=999999 WHERE tenant_id=$1 AND year_month='202607'`, fixture.tenantA); err != nil {
+			t.Fatalf("exhaust Kanban sequence: %v", err)
+		}
+		_, err := db.Exec(ctx, migration, pgx.QueryExecModeSimpleProtocol)
+		assertPostgresCode(t, err, "23514")
 	})
 }
 

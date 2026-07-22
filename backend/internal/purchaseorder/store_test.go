@@ -43,6 +43,15 @@ func TestApprovalSelectIncludesPurchaseOrderAndSupplierDetails(t *testing.T) {
 	}
 }
 
+func TestKanbanLotInsertIsSetWiseAndBounded(t *testing.T) {
+	query := strings.ToLower(insertMissingKanbanLotsSQL)
+	for _, fragment := range []string{"insert into kanban_lots", "generate_series", "row_number()", "lot_number <= pol.total_kanban"} {
+		if !strings.Contains(query, fragment) {
+			t.Errorf("set-wise Kanban insertion missing %q", fragment)
+		}
+	}
+}
+
 func TestDocumentSummaryQueryIsTenantScopedAndBatched(t *testing.T) {
 	query := strings.ToLower(documentSummarySelect)
 	for _, fragment := range []string{

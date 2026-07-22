@@ -15,3 +15,10 @@ func (e NotFoundError) Error() string { return fmt.Sprintf("%s not found", e.Res
 type ConflictError struct{ Fields FieldErrors }
 
 func (e ConflictError) Error() string { return "record conflicts with existing data" }
+
+type CapacityError struct {
+	Field   string
+	Message string
+}
+
+func (e CapacityError) Error() string { return "document numbering capacity exceeded" }

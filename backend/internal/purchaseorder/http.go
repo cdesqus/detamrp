@@ -3,6 +3,7 @@ package purchaseorder
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
@@ -347,16 +348,39 @@ func writeHTTPError(c *gin.Context, err error) bool {
 	}
 	var validation ValidationError
 	var conflict ConflictError
+	var capacity CapacityError
 	var missing NotFoundError
 	switch {
 	case errors.As(err, &validation):
 		c.JSON(http.StatusBadRequest, gin.H{"error": "validation_failed", "message": "Please correct the highlighted fields", "fields": validation.Fields})
 	case errors.As(err, &conflict):
 		c.JSON(http.StatusConflict, gin.H{"error": "conflict", "message": "Purchase order conflicts with its current state", "fields": conflict.Fields})
+	case errors.As(err, &capacity):
+		c.JSON(http.StatusConflict, gin.H{"error": "capacity_exceeded", "message": "Document numbering capacity is unavailable", "fields": FieldErrors{capacity.Field: capacity.Message}})
 	case errors.As(err, &missing):
 		c.JSON(http.StatusNotFound, gin.H{"error": "not_found", "message": missing.Error()})
 	default:
+		logUnexpectedHTTPError(c, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal_error", "message": "Request could not be completed"})
 	}
 	return true
+}
+
+func logUnexpectedHTTPError(c *gin.Context, err error) {
+	actor := actorFrom(c)
+	attributes := []any{
+		"tenant_id", actor.TenantID,
+		"user_id", actor.UserID,
+		"method", c.Request.Method,
+		"route", c.FullPath(),
+		"error", err,
+	}
+	if id := c.Param("id"); id != "" {
+		if strings.Contains(c.FullPath(), "purchase-order-approvals") {
+			attributes = append(attributes, "approval_id", id)
+		} else {
+			attributes = append(attributes, "purchase_order_id", id)
+		}
+	}
+	slog.ErrorContext(c.Request.Context(), "purchase order request failed", attributes...)
 }

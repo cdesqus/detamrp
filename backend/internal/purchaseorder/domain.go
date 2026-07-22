@@ -147,6 +147,7 @@ func (i *OrderInput) NormalizeAndValidate(requireLines bool) FieldErrors {
 	}
 
 	seenMaterials := make(map[uuid.UUID]struct{}, len(i.Lines))
+	totalKanbans := decimal.Zero
 	for index := range i.Lines {
 		line := &i.Lines[index]
 		prefix := "lines[" + strconv.Itoa(index) + "]."
@@ -161,7 +162,12 @@ func (i *OrderInput) NormalizeAndValidate(requireLines bool) FieldErrors {
 			errs[prefix+"totalKanban"] = "Total Kanban must be a positive integer"
 		} else if line.TotalKanban.GreaterThan(maxTotalKanban) {
 			errs[prefix+"totalKanban"] = "Total Kanban cannot exceed 99999999999999"
+		} else {
+			totalKanbans = totalKanbans.Add(line.TotalKanban)
 		}
+	}
+	if requireLines && totalKanbans.GreaterThan(decimal.NewFromInt(maxKanbanSequence)) {
+		errs["lines"] = "A purchase order cannot exceed 999999 Kanban labels"
 	}
 	return errs
 }

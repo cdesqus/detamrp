@@ -1,9 +1,11 @@
 package purchaseorder
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -413,6 +415,7 @@ func TestPurchaseOrderRoutesWriteStructuredServiceErrors(t *testing.T) {
 	}{
 		{"validation", ValidationError{Fields: FieldErrors{"supplierId": "Supplier is required"}}, http.StatusBadRequest, "validation_failed"},
 		{"conflict", ConflictError{Fields: FieldErrors{"status": "Only draft purchase orders can be submitted"}}, http.StatusConflict, "conflict"},
+		{"capacity", CapacityError{Field: "documents", Message: "Monthly Kanban label capacity is exhausted"}, http.StatusConflict, "capacity_exceeded"},
 		{"not found", NotFoundError{Resource: "purchase order"}, http.StatusNotFound, "not_found"},
 		{"internal", errors.New("database unavailable"), http.StatusInternalServerError, "internal_error"},
 	} {
@@ -434,6 +437,36 @@ func TestPurchaseOrderRoutesWriteStructuredServiceErrors(t *testing.T) {
 				t.Fatal("validation response did not include fields")
 			}
 		})
+	}
+}
+
+func TestPurchaseOrderRoutesLogUnexpectedErrorsWithRequestContext(t *testing.T) {
+	var logs bytes.Buffer
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewJSONHandler(&logs, nil)))
+	defer slog.SetDefault(previous)
+
+	actor := auth.User{ID: uuid.New(), TenantID: uuid.New(), DisplayName: "Buyer", Permissions: []string{"po.view", "po.approve"}}
+	repository := &httpRepository{err: errors.New("database unavailable")}
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	RegisterRoutes(router, NewService(repository), httpAuthenticator{user: actor})
+	purchaseOrderID, approvalID := uuid.New(), uuid.New()
+
+	for _, request := range []struct {
+		method, path, contextKey string
+	}{
+		{http.MethodGet, "/purchase-orders/" + purchaseOrderID.String(), "purchase_order_id"},
+		{http.MethodPost, "/purchase-order-approvals/" + approvalID.String() + "/approve", "approval_id"},
+	} {
+		response := serve(router, request.method, request.path, `{}`, "session")
+		if response.Code != http.StatusInternalServerError || strings.Contains(response.Body.String(), "database unavailable") {
+			t.Fatalf("unexpected sanitized response: %d %s", response.Code, response.Body.String())
+		}
+		if !strings.Contains(logs.String(), request.contextKey) || !strings.Contains(logs.String(), actor.TenantID.String()) || !strings.Contains(logs.String(), "database unavailable") {
+			t.Fatalf("structured log missing request context: %s", logs.String())
+		}
+		logs.Reset()
 	}
 }
 

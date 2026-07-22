@@ -20,17 +20,29 @@ type approvedDocumentLine struct {
 	QtyPerKanbanSnapshot decimal.Decimal
 }
 
-type missingKanbanLot struct {
-	deliveryNoteLineID  uuid.UUID
-	purchaseOrderLineID uuid.UUID
-	lotNumber           int64
-	quantity            decimal.Decimal
-}
-
 const (
 	maxDeliveryNoteSequence int64 = 99_999
 	maxKanbanSequence       int64 = 999_999
 )
+
+const insertMissingKanbanLotsSQL = `WITH missing AS (
+ SELECT dnl.id AS delivery_note_line_id,pol.id AS purchase_order_line_id,
+  generated.lot_number::integer AS lot_number,pol.qty_per_kanban_snapshot AS quantity,
+  row_number() OVER (ORDER BY pol.sort_position,pol.id,generated.lot_number)-1 AS sequence_offset
+ FROM purchase_order_lines pol
+ JOIN delivery_note_lines dnl ON dnl.tenant_id=pol.tenant_id
+  AND dnl.purchase_order_id=pol.purchase_order_id AND dnl.purchase_order_line_id=pol.id
+ CROSS JOIN LATERAL generate_series(1,pol.total_kanban::bigint) AS generated(lot_number)
+ LEFT JOIN kanban_lots existing ON existing.tenant_id=pol.tenant_id
+  AND existing.delivery_note_line_id=dnl.id AND existing.purchase_order_line_id=pol.id
+  AND existing.lot_number=generated.lot_number
+ WHERE pol.tenant_id=$1 AND pol.purchase_order_id=$2
+  AND generated.lot_number <= pol.total_kanban AND existing.id IS NULL
+)
+INSERT INTO kanban_lots(tenant_id,delivery_note_line_id,purchase_order_line_id,kanban_id,lot_number,quantity,created_by_user_id,updated_by_user_id)
+SELECT $1,delivery_note_line_id,purchase_order_line_id,
+ 'KB-'||$3||'-'||lpad(($4+sequence_offset)::text,6,'0'),lot_number,quantity,$5,$5
+FROM missing ORDER BY sequence_offset`
 
 func ensureApprovedDocuments(ctx context.Context, tx database.TenantTx, actor Actor, purchaseOrderID uuid.UUID) error {
 	var orderStatus Status
@@ -60,35 +72,52 @@ func ensureApprovedDocuments(ctx context.Context, tx database.TenantTx, actor Ac
 		}
 	}
 
-	missingLots, err := findMissingKanbanLots(ctx, tx, actor.TenantID, issuedAt, lines)
+	if err := validateExistingKanbanLots(ctx, tx, actor.TenantID, purchaseOrderID, issuedAt); err != nil {
+		return err
+	}
+	missingLots, err := countMissingKanbanLots(ctx, tx, actor.TenantID, purchaseOrderID)
 	if err != nil {
 		return err
 	}
-	if len(missingLots) == 0 {
+	if missingLots == 0 {
 		return nil
 	}
-	firstNumber, err := reserveNumberBlock(ctx, tx, "kanban_number_sequences", actor.TenantID, issuedAt.UTC().Format("200601"), int64(len(missingLots)))
+	yearMonth := issuedAt.UTC().Format("200601")
+	firstNumber, err := reserveNumberBlock(ctx, tx, "kanban_number_sequences", actor.TenantID, yearMonth, missingLots)
 	if err != nil {
 		return err
 	}
-	for index, lot := range missingLots {
-		kanbanID := fmt.Sprintf("KB-%s-%06d", issuedAt.UTC().Format("200601"), firstNumber+int64(index))
-		var insertedID uuid.UUID
-		err := tx.QueryRow(ctx, `INSERT INTO kanban_lots(tenant_id,delivery_note_line_id,purchase_order_line_id,kanban_id,lot_number,quantity,created_by_user_id,updated_by_user_id)
- VALUES($1,$2,$3,$4,$5,$6,$7,$7)
- ON CONFLICT(tenant_id,delivery_note_line_id,purchase_order_line_id,lot_number) DO NOTHING
- RETURNING id`, actor.TenantID, lot.deliveryNoteLineID, lot.purchaseOrderLineID, kanbanID, lot.lotNumber, lot.quantity, actor.UserID).Scan(&insertedID)
-		if errors.Is(err, pgx.ErrNoRows) {
-			if err := validateExistingKanbanLot(ctx, tx, actor.TenantID, issuedAt, lot); err != nil {
-				return err
-			}
-			continue
-		}
-		if err != nil {
-			return err
-		}
+	inserted, err := tx.Exec(ctx, insertMissingKanbanLotsSQL, actor.TenantID, purchaseOrderID, yearMonth, firstNumber, actor.UserID)
+	if err != nil {
+		return err
+	}
+	if inserted.RowsAffected() != missingLots {
+		return fmt.Errorf("purchase order %s generated %d of %d missing Kanban lots", purchaseOrderID, inserted.RowsAffected(), missingLots)
 	}
 	return nil
+}
+
+func validateApprovalDocumentCapacity(ctx context.Context, tx database.TenantTx, actor Actor, purchaseOrderID uuid.UUID) error {
+	lines, err := loadApprovedDocumentLines(ctx, tx, actor.TenantID, purchaseOrderID)
+	if err != nil {
+		return err
+	}
+	if err := validateApprovedDocumentLines(purchaseOrderID, lines); err != nil {
+		return ValidationError{Fields: FieldErrors{"lines": "A purchase order cannot exceed 999999 Kanban labels"}}
+	}
+	var issuedAt time.Time
+	if err := tx.QueryRow(ctx, `SELECT now()`).Scan(&issuedAt); err != nil {
+		return err
+	}
+	yearMonth := issuedAt.UTC().Format("200601")
+	if err := checkNumberBlockCapacity(ctx, tx, "delivery_note_number_sequences", actor.TenantID, yearMonth, 1); err != nil {
+		return err
+	}
+	var totalKanbans int64
+	for _, line := range lines {
+		totalKanbans += line.TotalKanban.IntPart()
+	}
+	return checkNumberBlockCapacity(ctx, tx, "kanban_number_sequences", actor.TenantID, yearMonth, totalKanbans)
 }
 
 func validateApprovedDocumentLines(purchaseOrderID uuid.UUID, lines []approvedDocumentLine) error {
@@ -204,71 +233,30 @@ func ensureDeliveryNoteLine(ctx context.Context, tx database.TenantTx, actor Act
 	return deliveryNoteLineID, nil
 }
 
-func findMissingKanbanLots(ctx context.Context, tx database.TenantTx, tenantID uuid.UUID, issuedAt time.Time, lines []approvedDocumentLine) ([]missingKanbanLot, error) {
-	var missing []missingKanbanLot
-	for _, line := range lines {
-		existing, err := loadExistingKanbanLots(ctx, tx, tenantID, issuedAt, line)
-		if err != nil {
-			return nil, err
-		}
-		for lotNumber := int64(1); lotNumber <= line.TotalKanban.IntPart(); lotNumber++ {
-			if _, found := existing[lotNumber]; found {
-				continue
-			}
-			missing = append(missing, missingKanbanLot{
-				deliveryNoteLineID:  line.DeliveryNoteLineID,
-				purchaseOrderLineID: line.ID,
-				lotNumber:           lotNumber,
-				quantity:            line.QtyPerKanbanSnapshot,
-			})
-		}
-	}
-	return missing, nil
+func countMissingKanbanLots(ctx context.Context, tx database.TenantTx, tenantID, purchaseOrderID uuid.UUID) (int64, error) {
+	var missing int64
+	err := tx.QueryRow(ctx, `SELECT COALESCE(SUM(pol.total_kanban::bigint),0)-COUNT(kl.id)
+ FROM purchase_order_lines pol
+ JOIN delivery_note_lines dnl ON dnl.tenant_id=pol.tenant_id AND dnl.purchase_order_id=pol.purchase_order_id AND dnl.purchase_order_line_id=pol.id
+ LEFT JOIN kanban_lots kl ON kl.tenant_id=dnl.tenant_id AND kl.delivery_note_line_id=dnl.id AND kl.purchase_order_line_id=pol.id
+ WHERE pol.tenant_id=$1 AND pol.purchase_order_id=$2`, tenantID, purchaseOrderID).Scan(&missing)
+	return missing, err
 }
 
-func loadExistingKanbanLots(ctx context.Context, tx database.TenantTx, tenantID uuid.UUID, issuedAt time.Time, line approvedDocumentLine) (map[int64]struct{}, error) {
-	rows, err := tx.Query(ctx, `SELECT delivery_note_line_id,purchase_order_line_id,kanban_id,lot_number,quantity
- FROM kanban_lots WHERE tenant_id=$1 AND delivery_note_line_id=$2 ORDER BY lot_number`, tenantID, line.DeliveryNoteLineID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	existing := make(map[int64]struct{})
-	for rows.Next() {
-		var deliveryNoteLineID, purchaseOrderLineID uuid.UUID
-		var kanbanID string
-		var lotNumber int64
-		var quantity decimal.Decimal
-		if err := rows.Scan(&deliveryNoteLineID, &purchaseOrderLineID, &kanbanID, &lotNumber, &quantity); err != nil {
-			return nil, err
-		}
-		if deliveryNoteLineID != line.DeliveryNoteLineID || purchaseOrderLineID != line.ID ||
-			lotNumber < 1 || lotNumber > line.TotalKanban.IntPart() || !quantity.Equal(line.QtyPerKanbanSnapshot) ||
-			!strings.HasPrefix(kanbanID, "KB-"+issuedAt.UTC().Format("200601")+"-") {
-			return nil, fmt.Errorf("existing Kanban lot %q for PO line %s is inconsistent", kanbanID, line.ID)
-		}
-		existing[lotNumber] = struct{}{}
-	}
-	return existing, rows.Err()
-}
-
-func validateExistingKanbanLot(ctx context.Context, tx database.TenantTx, tenantID uuid.UUID, issuedAt time.Time, expected missingKanbanLot) error {
-	var deliveryNoteLineID, purchaseOrderLineID uuid.UUID
-	var kanbanID string
-	var lotNumber int64
-	var quantity decimal.Decimal
-	err := tx.QueryRow(ctx, `SELECT delivery_note_line_id,purchase_order_line_id,kanban_id,lot_number,quantity
- FROM kanban_lots
- WHERE tenant_id=$1 AND delivery_note_line_id=$2 AND purchase_order_line_id=$3 AND lot_number=$4`,
-		tenantID, expected.deliveryNoteLineID, expected.purchaseOrderLineID, expected.lotNumber).
-		Scan(&deliveryNoteLineID, &purchaseOrderLineID, &kanbanID, &lotNumber, &quantity)
+func validateExistingKanbanLots(ctx context.Context, tx database.TenantTx, tenantID, purchaseOrderID uuid.UUID, issuedAt time.Time) error {
+	var inconsistent int64
+	err := tx.QueryRow(ctx, `SELECT COUNT(*)
+ FROM delivery_note_lines dnl
+ JOIN purchase_order_lines pol ON pol.tenant_id=dnl.tenant_id AND pol.purchase_order_id=dnl.purchase_order_id AND pol.id=dnl.purchase_order_line_id
+ JOIN kanban_lots kl ON kl.tenant_id=dnl.tenant_id AND kl.delivery_note_line_id=dnl.id
+ WHERE dnl.tenant_id=$1 AND dnl.purchase_order_id=$2
+  AND (kl.purchase_order_line_id<>pol.id OR kl.lot_number<1 OR kl.lot_number>pol.total_kanban
+   OR kl.quantity<>pol.qty_per_kanban_snapshot OR kl.kanban_id NOT LIKE $3||'%')`, tenantID, purchaseOrderID, "KB-"+issuedAt.UTC().Format("200601")+"-").Scan(&inconsistent)
 	if err != nil {
 		return err
 	}
-	if deliveryNoteLineID != expected.deliveryNoteLineID || purchaseOrderLineID != expected.purchaseOrderLineID ||
-		lotNumber != expected.lotNumber || !quantity.Equal(expected.quantity) ||
-		!strings.HasPrefix(kanbanID, "KB-"+issuedAt.UTC().Format("200601")+"-") {
-		return fmt.Errorf("existing Kanban lot %q for PO line %s is inconsistent", kanbanID, expected.purchaseOrderLineID)
+	if inconsistent > 0 {
+		return fmt.Errorf("purchase order %s has %d inconsistent Kanban lots", purchaseOrderID, inconsistent)
 	}
 	return nil
 }
@@ -277,34 +265,52 @@ func reserveNumberBlock(ctx context.Context, tx database.TenantTx, table string,
 	if count <= 0 {
 		return 0, fmt.Errorf("number block size must be positive")
 	}
-	var insertSQL, selectSQL, updateSQL string
-	var maxSequence int64
-	switch table {
-	case "delivery_note_number_sequences":
-		maxSequence = maxDeliveryNoteSequence
-		insertSQL = `INSERT INTO delivery_note_number_sequences(tenant_id,year_month,next_value) VALUES($1,$2,1) ON CONFLICT(tenant_id,year_month) DO NOTHING`
-		selectSQL = `SELECT next_value FROM delivery_note_number_sequences WHERE tenant_id=$1 AND year_month=$2 FOR UPDATE`
-		updateSQL = `UPDATE delivery_note_number_sequences SET next_value=$3 WHERE tenant_id=$1 AND year_month=$2`
-	case "kanban_number_sequences":
-		maxSequence = maxKanbanSequence
-		insertSQL = `INSERT INTO kanban_number_sequences(tenant_id,year_month,next_value) VALUES($1,$2,1) ON CONFLICT(tenant_id,year_month) DO NOTHING`
-		selectSQL = `SELECT next_value FROM kanban_number_sequences WHERE tenant_id=$1 AND year_month=$2 FOR UPDATE`
-		updateSQL = `UPDATE kanban_number_sequences SET next_value=$3 WHERE tenant_id=$1 AND year_month=$2`
-	default:
-		return 0, fmt.Errorf("unsupported number sequence %q", table)
-	}
-	if _, err := tx.Exec(ctx, insertSQL, tenantID, yearMonth); err != nil {
+	first, updateSQL, err := lockNumberSequence(ctx, tx, table, tenantID, yearMonth, count)
+	if err != nil {
 		return 0, err
-	}
-	var first int64
-	if err := tx.QueryRow(ctx, selectSQL, tenantID, yearMonth).Scan(&first); err != nil {
-		return 0, err
-	}
-	if first < 1 || count > maxSequence-first+1 {
-		return 0, fmt.Errorf("%s sequence %s has insufficient capacity for block of %d", table, yearMonth, count)
 	}
 	if _, err := tx.Exec(ctx, updateSQL, tenantID, yearMonth, first+count); err != nil {
 		return 0, err
 	}
 	return first, nil
+}
+
+func checkNumberBlockCapacity(ctx context.Context, tx database.TenantTx, table string, tenantID uuid.UUID, yearMonth string, count int64) error {
+	if count <= 0 {
+		return fmt.Errorf("number block size must be positive")
+	}
+	_, _, err := lockNumberSequence(ctx, tx, table, tenantID, yearMonth, count)
+	return err
+}
+
+func lockNumberSequence(ctx context.Context, tx database.TenantTx, table string, tenantID uuid.UUID, yearMonth string, count int64) (int64, string, error) {
+	var insertSQL, selectSQL, updateSQL, capacityMessage string
+	var maxSequence int64
+	switch table {
+	case "delivery_note_number_sequences":
+		maxSequence = maxDeliveryNoteSequence
+		capacityMessage = "Monthly delivery note capacity is exhausted"
+		insertSQL = `INSERT INTO delivery_note_number_sequences(tenant_id,year_month,next_value) VALUES($1,$2,1) ON CONFLICT(tenant_id,year_month) DO NOTHING`
+		selectSQL = `SELECT next_value FROM delivery_note_number_sequences WHERE tenant_id=$1 AND year_month=$2 FOR UPDATE`
+		updateSQL = `UPDATE delivery_note_number_sequences SET next_value=$3 WHERE tenant_id=$1 AND year_month=$2`
+	case "kanban_number_sequences":
+		maxSequence = maxKanbanSequence
+		capacityMessage = "Monthly Kanban label capacity is exhausted"
+		insertSQL = `INSERT INTO kanban_number_sequences(tenant_id,year_month,next_value) VALUES($1,$2,1) ON CONFLICT(tenant_id,year_month) DO NOTHING`
+		selectSQL = `SELECT next_value FROM kanban_number_sequences WHERE tenant_id=$1 AND year_month=$2 FOR UPDATE`
+		updateSQL = `UPDATE kanban_number_sequences SET next_value=$3 WHERE tenant_id=$1 AND year_month=$2`
+	default:
+		return 0, "", fmt.Errorf("unsupported number sequence %q", table)
+	}
+	if _, err := tx.Exec(ctx, insertSQL, tenantID, yearMonth); err != nil {
+		return 0, "", err
+	}
+	var first int64
+	if err := tx.QueryRow(ctx, selectSQL, tenantID, yearMonth).Scan(&first); err != nil {
+		return 0, "", err
+	}
+	if first < 1 || count > maxSequence-first+1 {
+		return 0, "", CapacityError{Field: "documents", Message: capacityMessage}
+	}
+	return first, updateSQL, nil
 }
