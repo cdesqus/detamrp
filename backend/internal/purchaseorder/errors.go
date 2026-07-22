@@ -27,6 +27,15 @@ type CapacityError struct {
 
 func (e CapacityError) Error() string { return "document numbering capacity exceeded" }
 
+type DocumentExportLimitError struct {
+	DocumentType string
+	Limit        int
+}
+
+func (e DocumentExportLimitError) Error() string {
+	return fmt.Sprintf("%s PDF export is limited to %d labels", e.DocumentType, e.Limit)
+}
+
 type ApprovalDocumentError struct {
 	ApprovalID      uuid.UUID
 	PurchaseOrderID uuid.UUID

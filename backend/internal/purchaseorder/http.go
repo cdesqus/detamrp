@@ -213,6 +213,7 @@ func hasPermission(c *gin.Context, permission string) bool {
 }
 
 func writePDF(c *gin.Context, document PDFDocument) {
+	c.Header("Cache-Control", "private, no-store")
 	c.Header("Content-Disposition", `inline; filename="`+document.Filename+`"`)
 	c.Data(http.StatusOK, "application/pdf", document.Content)
 }
@@ -387,6 +388,7 @@ func writeHTTPError(c *gin.Context, err error) bool {
 	var validation ValidationError
 	var conflict ConflictError
 	var capacity CapacityError
+	var exportLimit DocumentExportLimitError
 	var missing NotFoundError
 	var documentFailure ApprovalDocumentError
 	var renderFailure DocumentRenderError
@@ -404,6 +406,12 @@ func writeHTTPError(c *gin.Context, err error) bool {
 		c.JSON(http.StatusConflict, gin.H{"error": "conflict", "message": "Purchase order conflicts with its current state", "fields": conflict.Fields})
 	case errors.As(err, &capacity):
 		c.JSON(http.StatusConflict, gin.H{"error": "capacity_exceeded", "message": "Document numbering capacity is unavailable", "fields": FieldErrors{capacity.Field: capacity.Message}})
+	case errors.As(err, &exportLimit):
+		c.JSON(http.StatusUnprocessableEntity, gin.H{
+			"error":   "export_limit_exceeded",
+			"message": "Requested document is too large to export safely",
+			"fields":  FieldErrors{"kanbanLabels": exportLimit.Error()},
+		})
 	case errors.As(err, &missing):
 		c.JSON(http.StatusNotFound, gin.H{"error": "not_found", "message": missing.Error()})
 	default:

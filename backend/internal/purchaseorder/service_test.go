@@ -3,6 +3,7 @@ package purchaseorder
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -118,7 +119,7 @@ func TestServiceLoadsOperationalDocumentsBeforeRenderingPDF(t *testing.T) {
 		}
 		return []byte("delivery-note"), nil
 	}
-	service.renderKanbanLabelsPDF = func(document KanbanLabelDocument) ([]byte, error) {
+	service.renderKanbanLabelsPDF = func(_ context.Context, document KanbanLabelDocument) ([]byte, error) {
 		if document.PurchaseOrderID != id {
 			t.Fatalf("labels PO = %s", document.PurchaseOrderID)
 		}
@@ -132,6 +133,53 @@ func TestServiceLoadsOperationalDocumentsBeforeRenderingPDF(t *testing.T) {
 	labels, err := service.KanbanLabelsPDF(context.Background(), serviceActor(), id)
 	if err != nil || repo.called != "kanban-labels" || labels.Filename != "KANBAN-DN-1.pdf" {
 		t.Fatalf("KanbanLabelsPDF() = %#v, %v after %q", labels, err, repo.called)
+	}
+}
+
+func TestServiceRejectsOversizedKanbanLabelPDFBeforeRendering(t *testing.T) {
+	id := uuid.New()
+	repo := &fakeRepository{kanbanLabels: KanbanLabelDocument{
+		PurchaseOrderID: id,
+		Labels:          make([]KanbanLabel, 1001),
+	}}
+	service := NewService(repo)
+	renderCalls := 0
+	service.renderKanbanLabelsPDF = func(context.Context, KanbanLabelDocument) ([]byte, error) {
+		renderCalls++
+		return []byte("unexpected"), nil
+	}
+
+	_, err := service.KanbanLabelsPDF(context.Background(), serviceActor(), id)
+	var limit DocumentExportLimitError
+	if !errors.As(err, &limit) || limit.Limit != 1000 || !strings.Contains(err.Error(), "1000") {
+		t.Fatalf("KanbanLabelsPDF() error = %v, want safe 1000-label limit", err)
+	}
+	if renderCalls != 0 {
+		t.Fatalf("oversized export rendered %d times, want none", renderCalls)
+	}
+}
+
+func TestServiceDoesNotStartKanbanRenderingAfterCancellation(t *testing.T) {
+	id := uuid.New()
+	repo := &fakeRepository{kanbanLabels: KanbanLabelDocument{
+		PurchaseOrderID: id,
+		Labels:          []KanbanLabel{{KanbanID: "KB-1"}},
+	}}
+	service := NewService(repo)
+	renderCalls := 0
+	service.renderKanbanLabelsPDF = func(context.Context, KanbanLabelDocument) ([]byte, error) {
+		renderCalls++
+		return []byte("unexpected"), nil
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	_, err := service.KanbanLabelsPDF(ctx, serviceActor(), id)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("KanbanLabelsPDF() error = %v, want context cancellation", err)
+	}
+	if renderCalls != 0 {
+		t.Fatalf("cancelled export rendered %d times, want none", renderCalls)
 	}
 }
 

@@ -182,6 +182,9 @@ func TestPurchaseOrderPDFRoutesStreamInlinePDFsWithSafeFilenames(t *testing.T) {
 		if got := response.Header().Get("Content-Disposition"); got != test.disposition {
 			t.Errorf("GET %s Content-Disposition = %q, want %q", test.path, got, test.disposition)
 		}
+		if got := response.Header().Get("Cache-Control"); got != "private, no-store" {
+			t.Errorf("GET %s Cache-Control = %q, want private, no-store", test.path, got)
+		}
 		if !bytes.HasPrefix(response.Body.Bytes(), []byte("%PDF-")) {
 			t.Errorf("GET %s body does not begin with PDF signature", test.path)
 		}
@@ -206,10 +209,10 @@ func TestPurchaseOrderPDFRouteIncludesPricesOnlyWithPermission(t *testing.T) {
 	withoutPrice := serve(purchaseOrderRouter(t, []string{"po.view"}, &httpRepository{order: order}), http.MethodGet, path, "", "session")
 	withPrice := serve(purchaseOrderRouter(t, []string{"po.view", "po.price.view"}, &httpRepository{order: order}), http.MethodGet, path, "", "session")
 
-	if strings.Contains(withoutPrice.Body.String(), "Unit Price") || strings.Contains(withoutPrice.Body.String(), "918273") {
+	if pdfContainsText(withoutPrice.Body.Bytes(), "Unit Price") || pdfContainsText(withoutPrice.Body.Bytes(), "918273") {
 		t.Fatalf("PO PDF exposed price without po.price.view")
 	}
-	if !strings.Contains(withPrice.Body.String(), "Unit Price") || !strings.Contains(withPrice.Body.String(), "918273") {
+	if !pdfContainsText(withPrice.Body.Bytes(), "Unit Price") || !pdfContainsText(withPrice.Body.Bytes(), "918273") {
 		t.Fatalf("PO PDF omitted price with po.price.view")
 	}
 }
@@ -233,6 +236,31 @@ func TestOperationalDocumentEndpointsReturnTypedFailures(t *testing.T) {
 	}
 }
 
+func TestKanbanLabelEndpointReturnsTypedSafeExportLimitResponse(t *testing.T) {
+	actor := auth.User{ID: uuid.New(), TenantID: uuid.New(), DisplayName: "Buyer", Permissions: []string{"po.view"}}
+	purchaseOrderID := uuid.New()
+	service := NewService(&httpRepository{kanbanLabels: KanbanLabelDocument{
+		PurchaseOrderID: purchaseOrderID,
+		Labels:          make([]KanbanLabel, 1001),
+	}})
+	renderCalls := 0
+	service.renderKanbanLabelsPDF = func(context.Context, KanbanLabelDocument) ([]byte, error) {
+		renderCalls++
+		return []byte("unexpected"), nil
+	}
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	RegisterRoutes(router, service, httpAuthenticator{user: actor})
+
+	response := serve(router, http.MethodGet, "/purchase-orders/"+purchaseOrderID.String()+"/documents/kanban-labels.pdf", "", "session")
+	if response.Code != http.StatusUnprocessableEntity || !strings.Contains(response.Body.String(), `"error":"export_limit_exceeded"`) || strings.Contains(response.Body.String(), "1001") {
+		t.Fatalf("limit response = %d %s", response.Code, response.Body.String())
+	}
+	if renderCalls != 0 {
+		t.Fatalf("oversized HTTP export rendered %d times, want none", renderCalls)
+	}
+}
+
 func TestPDFDocumentEndpointSanitizesRendererFailuresAndLogsContext(t *testing.T) {
 	actor := auth.User{ID: uuid.New(), TenantID: uuid.New(), DisplayName: "Buyer", Permissions: []string{"po.view"}}
 	purchaseOrderID := uuid.New()
@@ -249,7 +277,7 @@ func TestPDFDocumentEndpointSanitizesRendererFailuresAndLogsContext(t *testing.T
 			service.renderDeliveryNotePDF = func(DeliveryNoteDocument) ([]byte, error) { return nil, cause }
 		}},
 		{"/purchase-orders/" + purchaseOrderID.String() + "/documents/kanban-labels.pdf", "kanban_labels", func(service *Service) {
-			service.renderKanbanLabelsPDF = func(KanbanLabelDocument) ([]byte, error) { return nil, cause }
+			service.renderKanbanLabelsPDF = func(context.Context, KanbanLabelDocument) ([]byte, error) { return nil, cause }
 		}},
 	} {
 		t.Run(test.documentType, func(t *testing.T) {

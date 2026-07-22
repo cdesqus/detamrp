@@ -31,7 +31,7 @@ func TestRenderPOPDFIncludesOrRedactsPrices(t *testing.T) {
 	if !bytes.HasPrefix(priced, []byte("%PDF-")) {
 		t.Fatal("not a PDF")
 	}
-	if !bytes.Contains(priced, []byte("200000")) || !bytes.Contains(priced, []byte("400000")) {
+	if !pdfContainsText(priced, "200000") || !pdfContainsText(priced, "400000") {
 		t.Fatal("authorized prices absent")
 	}
 
@@ -39,7 +39,7 @@ func TestRenderPOPDFIncludesOrRedactsPrices(t *testing.T) {
 	if err != nil {
 		t.Fatalf("render redacted PO: %v", err)
 	}
-	if bytes.Contains(redacted, []byte("200000")) || bytes.Contains(redacted, []byte("400000")) {
+	if pdfContainsText(redacted, "200000") || pdfContainsText(redacted, "400000") {
 		t.Fatal("price leaked")
 	}
 }
@@ -62,8 +62,110 @@ func TestRenderDeliveryNotePDFIncludesEveryLine(t *testing.T) {
 		t.Fatal("not a PDF")
 	}
 	for _, materialCode := range []string{"RM-ALPHA", "RM-BRAVO"} {
-		if !bytes.Contains(result, []byte(materialCode)) {
+		if !pdfContainsText(result, materialCode) {
 			t.Fatalf("delivery note omitted %s", materialCode)
+		}
+	}
+}
+
+func TestRenderPDFsEmbedUnicodeText(t *testing.T) {
+	order := Order{
+		PONumber:     "PO-UTF8",
+		SupplierName: "PT Maju Sejahterá",
+		Notes:        "Harap simpan pada suhu ±5 °C – jangan terkena air",
+		CreatedBy:    Actor{DisplayName: "José Pembeli"},
+		Lines: []OrderLine{{
+			RawMaterialCode: "RM-Ø", RawMaterialName: "Baja élit", BaseUnitCode: "KG",
+		}},
+	}
+	deliveryNote := DeliveryNoteDocument{
+		DeliveryNoteNumber: "DN-UTF8", PONumber: "PO-UTF8", SupplierName: "PT Maju Sejahterá",
+		Lines: []DeliveryNoteLine{{RawMaterialCode: "RM-Ø", RawMaterialName: "Baja élit", BaseUnitCode: "KG"}},
+	}
+	labels := KanbanLabelDocument{
+		DeliveryNoteNumber: "DN-UTF8", PONumber: "PO-UTF8",
+		Labels: []KanbanLabel{{KanbanID: "KB-UTF8-1", RawMaterialCode: "RM-Ø", RawMaterialName: "Baja élit", BaseUnitCode: "KG", LotNumber: 1}},
+	}
+
+	po, err := RenderPOPDF(order, false)
+	if err != nil {
+		t.Fatalf("render Unicode PO: %v", err)
+	}
+	dn, err := RenderDeliveryNotePDF(deliveryNote)
+	if err != nil {
+		t.Fatalf("render Unicode delivery note: %v", err)
+	}
+	labelPDF, err := RenderKanbanLabelsPDF(labels)
+	if err != nil {
+		t.Fatalf("render Unicode labels: %v", err)
+	}
+
+	assertEmbeddedUnicodeText(t, "PO", po, "PT Maju Sejahterá", "Harap simpan pada suhu ±5 °C – jangan terkena air", "José Pembeli", "RM-Ø", "Baja élit")
+	assertEmbeddedUnicodeText(t, "delivery note", dn, "PT Maju Sejahterá", "RM-Ø", "Baja élit")
+	assertEmbeddedUnicodeText(t, "labels", labelPDF, "RM-Ø - Baja élit")
+}
+
+func TestRenderPDFsKeepLongTextWithinReadableLayout(t *testing.T) {
+	longName := "Komponen " + strings.Repeat("W", 360)
+	order := Order{
+		PONumber: "PO-LONG", SupplierName: longName, Notes: strings.Repeat("Catatan penanganan harus dibaca dengan teliti. ", 30),
+		CreatedBy: Actor{DisplayName: longName},
+	}
+	deliveryNote := DeliveryNoteDocument{DeliveryNoteNumber: "DN-LONG", PONumber: "PO-LONG", SupplierName: longName}
+	for index := range 22 {
+		order.Lines = append(order.Lines, OrderLine{
+			RawMaterialCode: fmt.Sprintf("RM-%02d", index+1), RawMaterialName: longName, BaseUnitCode: "KG",
+		})
+		deliveryNote.Lines = append(deliveryNote.Lines, DeliveryNoteLine{
+			RawMaterialCode: fmt.Sprintf("RM-%02d", index+1), RawMaterialName: longName, BaseUnitCode: "KG",
+		})
+	}
+	labels := KanbanLabelDocument{
+		DeliveryNoteNumber: "DN-LONG", PONumber: "PO-LONG",
+		Labels: []KanbanLabel{{KanbanID: "KB-LONG-1", RawMaterialCode: "RM-LONG", RawMaterialName: longName, BaseUnitCode: "KG", LotNumber: 1}},
+	}
+
+	po, err := RenderPOPDF(order, false)
+	if err != nil {
+		t.Fatalf("render long PO: %v", err)
+	}
+	dn, err := RenderDeliveryNotePDF(deliveryNote)
+	if err != nil {
+		t.Fatalf("render long delivery note: %v", err)
+	}
+	labelPDF, err := RenderKanbanLabelsPDF(labels)
+	if err != nil {
+		t.Fatalf("render long labels: %v", err)
+	}
+
+	for documentType, document := range map[string][]byte{"PO": po, "delivery note": dn, "labels": labelPDF} {
+		if !bytes.Contains(document, utf16BE("WW…")) {
+			t.Errorf("%s PDF did not mark measured truncation with an ellipsis", documentType)
+		}
+	}
+	for documentType, document := range map[string][]byte{"PO": po, "delivery note": dn} {
+		if pages := bytes.Count(document, []byte("/Type /Page\n")); pages < 2 {
+			t.Errorf("%s PDF used %d page for 22 long rows, want wrapped rows to flow across pages", documentType, pages)
+		}
+	}
+}
+
+func TestFitPDFTextLinesUsesMeasuredWidthAndMarksTruncation(t *testing.T) {
+	pdf := newA4PDF("layout")
+	pdf.AddPage()
+	pdf.SetFont(pdfFontFamily, "", 8)
+	const width = 32.0
+
+	lines := fitPDFTextLines(pdf, strings.Repeat("material sangat panjang ", 12), width, 2)
+	if len(lines) != 2 {
+		t.Fatalf("fitted lines = %#v, want exactly two", lines)
+	}
+	if !strings.HasSuffix(lines[len(lines)-1], "…") {
+		t.Fatalf("last fitted line = %q, want truncation marker", lines[len(lines)-1])
+	}
+	for _, line := range lines {
+		if got := pdf.GetStringWidth(line); got > width-2 {
+			t.Errorf("line %q width = %.2f, exceeds %.2f", line, got, width-2)
 		}
 	}
 }
@@ -93,13 +195,61 @@ func TestRenderKanbanLabelsPDFProducesOneOrderedCode128LabelPerLot(t *testing.T)
 	if !bytes.HasPrefix(result, []byte("%PDF-")) {
 		t.Fatal("not a PDF")
 	}
-	if got := bytes.Count(result, []byte("KANBAN LABEL")); got != len(document.Labels) {
+	if got := pdfTextCount(result, "KANBAN LABEL"); got != len(document.Labels) {
 		t.Fatalf("labels=%d, want %d", got, len(document.Labels))
 	}
 	for index, label := range document.Labels {
 		if encoded[index] != label.KanbanID {
 			t.Fatalf("encoded[%d]=%q, want %q", index, encoded[index], label.KanbanID)
 		}
+	}
+}
+
+func TestRenderKanbanLabelsPDFRejectsOversizedExportBeforeEncoding(t *testing.T) {
+	document := KanbanLabelDocument{Labels: make([]KanbanLabel, 1001)}
+	for index := range document.Labels {
+		document.Labels[index].KanbanID = fmt.Sprintf("KB-%04d", index+1)
+	}
+
+	original := encodeKanbanBarcode
+	encodeCalls := 0
+	encodeKanbanBarcode = func(string) (image.Image, error) {
+		encodeCalls++
+		return nil, errors.New("barcode encoding must not start")
+	}
+	t.Cleanup(func() { encodeKanbanBarcode = original })
+
+	_, err := RenderKanbanLabelsPDF(document)
+	var limit DocumentExportLimitError
+	if !errors.As(err, &limit) || limit.Limit != 1000 || !strings.Contains(err.Error(), "1000") {
+		t.Fatalf("oversized export error = %v, want safe 1000-label limit", err)
+	}
+	if encodeCalls != 0 {
+		t.Fatalf("oversized export encoded %d barcodes, want none", encodeCalls)
+	}
+}
+
+func TestRenderKanbanLabelsPDFStopsAfterRequestCancellation(t *testing.T) {
+	document := KanbanLabelDocument{Labels: []KanbanLabel{
+		{KanbanID: "KB-0001"},
+		{KanbanID: "KB-0002"},
+	}}
+	ctx, cancel := context.WithCancel(context.Background())
+	original := encodeKanbanBarcode
+	encodeCalls := 0
+	encodeKanbanBarcode = func(string) (image.Image, error) {
+		encodeCalls++
+		cancel()
+		return image.NewRGBA(image.Rect(0, 0, 420, 72)), nil
+	}
+	t.Cleanup(func() { encodeKanbanBarcode = original })
+
+	_, err := renderKanbanLabelsPDF(ctx, document)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("cancelled render error = %v, want context cancellation", err)
+	}
+	if encodeCalls != 1 {
+		t.Fatalf("cancelled render encoded %d barcodes, want one", encodeCalls)
 	}
 }
 
@@ -162,6 +312,10 @@ func TestLoadKanbanLabelDocumentUsesStableTenantFilteredOrdering(t *testing.T) {
 	}
 	if !strings.Contains(strings.ToLower(query.calls[len(query.calls)-1].sql), "order by pol.sort_position,kl.lot_number") {
 		t.Fatalf("labels query lacks stable ordering: %s", query.calls[len(query.calls)-1].sql)
+	}
+	labelsCall := query.calls[len(query.calls)-1]
+	if !strings.Contains(strings.ToLower(labelsCall.sql), "limit $3") || len(labelsCall.args) != 3 || labelsCall.args[2] != 1001 {
+		t.Fatalf("labels query is not bounded to max+1: %s args=%#v", labelsCall.sql, labelsCall.args)
 	}
 	assertTenantQueries(t, query.calls, tenantID, orderID)
 }
@@ -263,8 +417,36 @@ func assertTenantQueries(t *testing.T, calls []documentQueryCall, tenantID, orde
 		if !strings.Contains(strings.ToLower(call.sql), "tenant_id=$1") {
 			t.Errorf("query lacks tenant predicate: %s", call.sql)
 		}
-		if len(call.args) != 2 || call.args[0] != tenantID || call.args[1] != orderID {
+		if len(call.args) < 2 || call.args[0] != tenantID || call.args[1] != orderID {
 			t.Errorf("query args = %#v, want tenant and order", call.args)
 		}
 	}
+}
+
+func assertEmbeddedUnicodeText(t *testing.T, documentType string, document []byte, values ...string) {
+	t.Helper()
+	if !bytes.Contains(document, []byte("/ToUnicode")) {
+		t.Fatalf("%s PDF has no embedded Unicode character map", documentType)
+	}
+	for _, value := range values {
+		if !bytes.Contains(document, utf16BE(value)) {
+			t.Errorf("%s PDF does not contain UTF-16BE text %q", documentType, value)
+		}
+	}
+}
+
+func utf16BE(value string) []byte {
+	result := make([]byte, 0, len(value)*2)
+	for _, character := range value {
+		result = append(result, byte(character>>8), byte(character))
+	}
+	return result
+}
+
+func pdfContainsText(document []byte, value string) bool {
+	return bytes.Contains(document, []byte(value)) || bytes.Contains(document, utf16BE(value))
+}
+
+func pdfTextCount(document []byte, value string) int {
+	return bytes.Count(document, []byte(value)) + bytes.Count(document, utf16BE(value))
 }

@@ -192,6 +192,7 @@ func TestSQLStoreApprovalGeneratesDocuments(t *testing.T) {
 		t.Fatalf("approve order: %v", err)
 	}
 	assertApprovedDocumentCounts(t, ctx, admin, fixture.tenantA, order.ID, 1, 2, 5)
+	assertLivePDFProjectionsTenantScoped(t, ctx, store, buyer, Actor{TenantID: fixture.tenantB, UserID: fixture.otherUser}, order.ID, 2, 5)
 	assertHydratedDocumentSummary(t, ctx, store, buyer, order.ID, true)
 
 	if _, err := admin.Exec(ctx, `UPDATE purchase_orders SET status='DRAFT' WHERE tenant_id=$1 AND id=$2`, fixture.tenantA, order.ID); err != nil {
@@ -400,6 +401,39 @@ func assertApprovedDocumentCounts(t *testing.T, ctx context.Context, db *pgxpool
 	}
 	if dnCount != wantDNs || dnLineCount != wantLines || lotCount != wantLots {
 		t.Fatalf("documents = dn %d, lines %d, lots %d", dnCount, dnLineCount, lotCount)
+	}
+}
+
+func assertLivePDFProjectionsTenantScoped(t *testing.T, ctx context.Context, store *SQLStore, actor, otherTenant Actor, purchaseOrderID uuid.UUID, wantLines, wantLabels int) {
+	t.Helper()
+	deliveryNote, err := store.LoadDeliveryNoteDocument(ctx, actor, purchaseOrderID)
+	if err != nil {
+		t.Fatalf("load live delivery note PDF projection: %v", err)
+	}
+	if deliveryNote.PurchaseOrderID != purchaseOrderID || deliveryNote.DeliveryNoteID == uuid.Nil || deliveryNote.DeliveryNoteNumber == "" || len(deliveryNote.Lines) != wantLines {
+		t.Fatalf("live delivery note PDF projection = %#v", deliveryNote)
+	}
+	labels, err := store.LoadKanbanLabelDocument(ctx, actor, purchaseOrderID)
+	if err != nil {
+		t.Fatalf("load live label PDF projection: %v", err)
+	}
+	if labels.PurchaseOrderID != purchaseOrderID || labels.DeliveryNoteID != deliveryNote.DeliveryNoteID || labels.DeliveryNoteNumber != deliveryNote.DeliveryNoteNumber || len(labels.Labels) != wantLabels {
+		t.Fatalf("live label PDF projection = %#v", labels)
+	}
+	for name, load := range map[string]func() error{
+		"delivery note": func() error {
+			_, loadErr := store.LoadDeliveryNoteDocument(ctx, otherTenant, purchaseOrderID)
+			return loadErr
+		},
+		"labels": func() error {
+			_, loadErr := store.LoadKanbanLabelDocument(ctx, otherTenant, purchaseOrderID)
+			return loadErr
+		},
+	} {
+		var missing NotFoundError
+		if err := load(); !errors.As(err, &missing) {
+			t.Errorf("other tenant loaded %s PDF projection: %T %v", name, err, err)
+		}
 	}
 }
 

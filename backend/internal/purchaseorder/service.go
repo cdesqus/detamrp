@@ -45,7 +45,7 @@ type Service struct {
 	repo                  Repository
 	renderPOPDF           func(Order, bool) ([]byte, error)
 	renderDeliveryNotePDF func(DeliveryNoteDocument) ([]byte, error)
-	renderKanbanLabelsPDF func(KanbanLabelDocument) ([]byte, error)
+	renderKanbanLabelsPDF func(context.Context, KanbanLabelDocument) ([]byte, error)
 }
 
 func NewService(repo Repository) *Service {
@@ -53,7 +53,7 @@ func NewService(repo Repository) *Service {
 		repo:                  repo,
 		renderPOPDF:           RenderPOPDF,
 		renderDeliveryNotePDF: RenderDeliveryNotePDF,
-		renderKanbanLabelsPDF: RenderKanbanLabelsPDF,
+		renderKanbanLabelsPDF: renderKanbanLabelsPDF,
 	}
 }
 
@@ -95,7 +95,13 @@ func (s *Service) KanbanLabelsPDF(ctx context.Context, actor Actor, id uuid.UUID
 	if err != nil {
 		return PDFDocument{}, err
 	}
-	content, err := s.renderKanbanLabelsPDF(document)
+	if err := ctx.Err(); err != nil {
+		return PDFDocument{}, err
+	}
+	if err := validateKanbanLabelExportSize(document.Labels); err != nil {
+		return PDFDocument{}, err
+	}
+	content, err := s.renderKanbanLabelsPDF(ctx, document)
 	if err != nil {
 		return PDFDocument{}, documentRenderError(id, "kanban_labels", err)
 	}
