@@ -140,7 +140,7 @@ func (s *Store) Scan(ctx context.Context, a Actor, sessionID uuid.UUID, value st
 			return ErrConflict
 		}
 		var lot uuid.UUID
-		e := tx.QueryRow(ctx, `SELECT kl.id FROM kanban_lots kl JOIN delivery_note_lines dnl ON dnl.tenant_id=kl.tenant_id AND dnl.id=kl.delivery_note_line_id WHERE kl.tenant_id=$1 AND kl.kanban_id=$2 AND dnl.delivery_note_id=$3 AND kl.status='ISSUED' FOR UPDATE`, a.TenantID, kanban, dn).Scan(&lot)
+		e := tx.QueryRow(ctx, `SELECT kl.id FROM kanban_lots kl JOIN delivery_note_lines dnl ON dnl.tenant_id=kl.tenant_id AND dnl.id=kl.delivery_note_line_id WHERE kl.tenant_id=$1 AND kl.kanban_id=$2 AND dnl.delivery_note_id=$3 AND kl.status='ISSUED' FOR UPDATE OF kl`, a.TenantID, kanban, dn).Scan(&lot)
 		if errors.Is(e, pgx.ErrNoRows) {
 			return ErrValidation
 		}
@@ -253,7 +253,7 @@ func (s *Store) Complete(ctx context.Context, a Actor, id uuid.UUID) (Receiving,
 		if _, e = tx.Exec(ctx, `UPDATE delivery_notes SET status=$3,updated_by_user_id=$4,updated_at=now() WHERE tenant_id=$1 AND id=$2`, a.TenantID, dn, dnStatus, a.UserID); e != nil {
 			return e
 		}
-		if _, e = tx.Exec(ctx, `INSERT INTO integration_outbox(tenant_id,event_type,aggregate_id,idempotency_key,payload) VALUES($1,'SAGE_GOODS_RECEIPT_CREATE',$2,$3,jsonb_build_object('receivingId',$2))`, a.TenantID, rid, "receiving:"+rid.String()+":sage-goods-receipt"); e != nil {
+		if _, e = tx.Exec(ctx, `INSERT INTO integration_outbox(tenant_id,event_type,aggregate_id,idempotency_key,payload) VALUES($1,'SAGE_GOODS_RECEIPT_CREATE',$2,$3,jsonb_build_object('receivingId',to_jsonb($2::uuid)))`, a.TenantID, rid, "receiving:"+rid.String()+":sage-goods-receipt"); e != nil {
 			return e
 		}
 		_, e = tx.Exec(ctx, `UPDATE receiving_sessions SET status='COMPLETED',updated_by_user_id=$3,updated_at=now() WHERE tenant_id=$1 AND id=$2`, a.TenantID, id, a.UserID)
