@@ -17,22 +17,36 @@ type Actor struct {
 	DisplayName      string
 }
 type Scan struct {
-	KanbanLotID                                                     uuid.UUID `json:"kanbanLotId"`
-	KanbanID, MaterialCode, MaterialName, Unit, Warehouse, Location string
-	Quantity                                                        decimal.Decimal `json:"quantity"`
+	KanbanLotID  uuid.UUID       `json:"kanbanLotId"`
+	KanbanID     string          `json:"kanbanId"`
+	MaterialCode string          `json:"materialCode"`
+	MaterialName string          `json:"materialName"`
+	Unit         string          `json:"unit"`
+	Warehouse    string          `json:"warehouse"`
+	Location     string          `json:"location"`
+	Quantity     decimal.Decimal `json:"quantity"`
 }
 type Session struct {
-	ID                                                    uuid.UUID `json:"id"`
-	DocumentNumber, Destination, Notes, Status, CreatedBy string
-	TransactionDate                                       time.Time `json:"transactionDate"`
-	Scans                                                 []Scan    `json:"scans"`
+	ID              uuid.UUID `json:"id"`
+	DocumentNumber  string    `json:"documentNumber"`
+	Destination     string    `json:"destination"`
+	Notes           string    `json:"notes"`
+	Status          string    `json:"status"`
+	CreatedBy       string    `json:"createdBy"`
+	TransactionDate time.Time `json:"transactionDate"`
+	Scans           []Scan    `json:"scans"`
 }
 type Document struct {
-	ID                                                    uuid.UUID `json:"id"`
-	DocumentNumber, Destination, Notes, Status, CreatedBy string
-	TransactionDate                                       time.Time `json:"transactionDate"`
-	KanbanCount, MaterialCount                            int
-	Scans                                                 []Scan `json:"scans"`
+	ID              uuid.UUID `json:"id"`
+	DocumentNumber  string    `json:"documentNumber"`
+	Destination     string    `json:"destination"`
+	Notes           string    `json:"notes"`
+	Status          string    `json:"status"`
+	CreatedBy       string    `json:"createdBy"`
+	TransactionDate time.Time `json:"transactionDate"`
+	KanbanCount     int       `json:"kanbanCount"`
+	MaterialCount   int       `json:"materialCount"`
+	Scans           []Scan    `json:"scans"`
 }
 
 func normalizeDestination(v string) (string, error) {

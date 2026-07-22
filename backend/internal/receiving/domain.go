@@ -21,30 +21,52 @@ type Actor struct {
 	DisplayName      string
 }
 type Option struct {
-	DeliveryNoteID                             uuid.UUID `json:"deliveryNoteId"`
-	DeliveryNoteNumber, PONumber, SupplierName string
-	Planned, Received, Outstanding             int
+	DeliveryNoteID     uuid.UUID `json:"deliveryNoteId"`
+	DeliveryNoteNumber string    `json:"deliveryNoteNumber"`
+	PONumber           string    `json:"poNumber"`
+	SupplierName       string    `json:"supplierName"`
+	Planned            int       `json:"planned"`
+	Received           int       `json:"received"`
+	Outstanding        int       `json:"outstanding"`
 }
 type Scan struct {
-	KanbanLotID                                uuid.UUID `json:"kanbanLotId"`
-	KanbanID, MaterialCode, MaterialName, Unit string
-	Quantity                                   decimal.Decimal `json:"quantity"`
+	KanbanLotID  uuid.UUID       `json:"kanbanLotId"`
+	KanbanID     string          `json:"kanbanId"`
+	MaterialCode string          `json:"materialCode"`
+	MaterialName string          `json:"materialName"`
+	Unit         string          `json:"unit"`
+	Quantity     decimal.Decimal `json:"quantity"`
 }
 type Session struct {
-	ID                                                                  uuid.UUID `json:"id"`
-	DeliveryNoteID                                                      uuid.UUID `json:"deliveryNoteId"`
-	ReceivingNumber, DeliveryNoteNumber, PONumber, SupplierName, Status string
-	ReceivingDate                                                       time.Time `json:"receivingDate"`
-	Scans                                                               []Scan    `json:"scans"`
-	Planned, PreviouslyReceived, Outstanding                            int
-	CreatedBy                                                           string `json:"createdBy"`
+	ID                 uuid.UUID `json:"id"`
+	DeliveryNoteID     uuid.UUID `json:"deliveryNoteId"`
+	ReceivingNumber    string    `json:"receivingNumber"`
+	DeliveryNoteNumber string    `json:"deliveryNoteNumber"`
+	PONumber           string    `json:"poNumber"`
+	SupplierName       string    `json:"supplierName"`
+	Status             string    `json:"status"`
+	ReceivingDate      time.Time `json:"receivingDate"`
+	Scans              []Scan    `json:"scans"`
+	Planned            int       `json:"planned"`
+	PreviouslyReceived int       `json:"previouslyReceived"`
+	Outstanding        int       `json:"outstanding"`
+	CreatedBy          string    `json:"createdBy"`
 }
 type Receiving struct {
-	ID                                                                                                uuid.UUID `json:"id"`
-	ReceivingNumber, DeliveryNoteNumber, PONumber, SupplierName, Status, SageReceiptNumber, CreatedBy string
-	ReceivingDate                                                                                     time.Time `json:"receivingDate"`
-	Planned, PreviouslyReceived, ReceivedNow, Outstanding                                             int
-	Scans                                                                                             []Scan `json:"scans"`
+	ID                 uuid.UUID `json:"id"`
+	ReceivingNumber    string    `json:"receivingNumber"`
+	DeliveryNoteNumber string    `json:"deliveryNoteNumber"`
+	PONumber           string    `json:"poNumber"`
+	SupplierName       string    `json:"supplierName"`
+	Status             string    `json:"status"`
+	SageReceiptNumber  string    `json:"sageReceiptNumber"`
+	CreatedBy          string    `json:"createdBy"`
+	ReceivingDate      time.Time `json:"receivingDate"`
+	Planned            int       `json:"planned"`
+	PreviouslyReceived int       `json:"previouslyReceived"`
+	ReceivedNow        int       `json:"receivedNow"`
+	Outstanding        int       `json:"outstanding"`
+	Scans              []Scan    `json:"scans"`
 }
 
 func normalizeKanban(value string) (string, error) {
