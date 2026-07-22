@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -135,15 +136,152 @@ func TestSQLStoreLivePurchaseOrderWorkflow(t *testing.T) {
 	}
 }
 
+func TestSQLStoreApprovalGeneratesDocuments(t *testing.T) {
+	adminURL := os.Getenv("TEST_DATABASE_URL")
+	if adminURL == "" {
+		t.Skip("TEST_DATABASE_URL is not configured")
+	}
+	ctx := context.Background()
+	admin, err := pgxpool.New(ctx, adminURL)
+	if err != nil {
+		t.Fatalf("open admin pool: %v", err)
+	}
+	fixture := newLiveFixture()
+	if err := fixture.insert(ctx, admin); err != nil {
+		admin.Close()
+		t.Fatalf("insert fixture: %v", err)
+	}
+	defer func() {
+		if err := fixture.cleanup(ctx, admin); err != nil {
+			t.Errorf("cleanup fixture: %v", err)
+		}
+		admin.Close()
+	}()
+
+	appDB, err := database.Open(ctx, applicationDatabaseURL(t, adminURL))
+	if err != nil {
+		t.Fatalf("open application pool: %v", err)
+	}
+	defer appDB.Close()
+	store := NewSQLStore(appDB)
+	buyer := Actor{TenantID: fixture.tenantA, UserID: fixture.buyer, DisplayName: "Live Buyer"}
+	approver := Actor{TenantID: fixture.tenantA, UserID: fixture.approver, DisplayName: "Live Director"}
+	input := OrderInput{
+		SupplierID:           fixture.supplier,
+		OrderDate:            time.Date(2026, time.July, 21, 0, 0, 0, 0, time.UTC),
+		ExpectedDeliveryDate: time.Date(2026, time.July, 22, 0, 0, 0, 0, time.UTC),
+		Currency:             "IDR",
+		Lines: []LineInput{
+			{RawMaterialID: fixture.material, TotalKanban: decimal.NewFromInt(2)},
+			{RawMaterialID: fixture.material2, TotalKanban: decimal.NewFromInt(3)},
+		},
+	}
+
+	order, err := store.CreateOrder(ctx, buyer, input)
+	if err != nil {
+		t.Fatalf("create order: %v", err)
+	}
+	if _, err := store.SubmitOrder(ctx, buyer, order.ID); err != nil {
+		t.Fatalf("submit order: %v", err)
+	}
+	approvals, total, err := store.ListApprovals(ctx, approver, ListQuery{Limit: 50})
+	if err != nil || total != 1 || len(approvals) != 1 {
+		t.Fatalf("list approvals = %d/%d, err %v", len(approvals), total, err)
+	}
+	if _, err := store.Approve(ctx, approver, approvals[0].ID, DecisionInput{}); err != nil {
+		t.Fatalf("approve order: %v", err)
+	}
+	assertApprovedDocumentCounts(t, ctx, admin, fixture.tenantA, order.ID, 1, 2, 5)
+
+	if err := database.WithTenant(ctx, appDB, tenantContext(approver), func(tx database.TenantTx) error {
+		if err := tx.QueryRow(ctx, `SELECT id FROM purchase_orders WHERE tenant_id=$1 AND id=$2 FOR UPDATE`, fixture.tenantA, order.ID).Scan(&order.ID); err != nil {
+			return err
+		}
+		return ensureApprovedDocuments(ctx, tx, approver, order.ID)
+	}); err != nil {
+		t.Fatalf("retry approved document generation: %v", err)
+	}
+	assertApprovedDocumentCounts(t, ctx, admin, fixture.tenantA, order.ID, 1, 2, 5)
+
+	failedOrder, err := store.CreateOrder(ctx, buyer, OrderInput{
+		SupplierID:           fixture.supplier,
+		OrderDate:            time.Date(2026, time.July, 21, 0, 0, 0, 0, time.UTC),
+		ExpectedDeliveryDate: time.Date(2026, time.July, 22, 0, 0, 0, 0, time.UTC),
+		Currency:             "IDR",
+		Lines:                []LineInput{{RawMaterialID: fixture.material, TotalKanban: decimal.NewFromInt(2)}},
+	})
+	if err != nil {
+		t.Fatalf("create forced-error order: %v", err)
+	}
+	if _, err := store.SubmitOrder(ctx, buyer, failedOrder.ID); err != nil {
+		t.Fatalf("submit forced-error order: %v", err)
+	}
+	failedApprovals, total, err := store.ListApprovals(ctx, approver, ListQuery{Limit: 50})
+	if err != nil || total != 1 || len(failedApprovals) != 1 {
+		t.Fatalf("list forced-error approvals = %d/%d, err %v", len(failedApprovals), total, err)
+	}
+	forcedSequence, err := admin.Exec(ctx, `UPDATE kanban_number_sequences SET next_value=999999 WHERE tenant_id=$1`, fixture.tenantA)
+	if err != nil {
+		t.Fatalf("force generator error: %v", err)
+	}
+	if forcedSequence.RowsAffected() != 1 {
+		t.Fatalf("forced generator sequences = %d, want 1", forcedSequence.RowsAffected())
+	}
+	if _, err := store.Approve(ctx, approver, failedApprovals[0].ID, DecisionInput{}); err == nil {
+		t.Fatal("approval with forced generator error unexpectedly succeeded")
+	}
+
+	var approvalStatus ApprovalStatus
+	var orderStatus Status
+	var failedDocumentCount int
+	if err := admin.QueryRow(ctx, `SELECT a.status,p.status,
+	 (SELECT count(*) FROM delivery_notes dn WHERE dn.tenant_id=p.tenant_id AND dn.purchase_order_id=p.id)
+	 FROM purchase_order_approvals a
+	 JOIN purchase_orders p ON p.tenant_id=a.tenant_id AND p.id=a.purchase_order_id
+	 WHERE a.tenant_id=$1 AND a.id=$2`, fixture.tenantA, failedApprovals[0].ID).Scan(&approvalStatus, &orderStatus, &failedDocumentCount); err != nil {
+		t.Fatalf("read forced-error statuses: %v", err)
+	}
+	if approvalStatus != ApprovalPending || orderStatus != StatusPendingApproval || failedDocumentCount != 0 {
+		t.Fatalf("forced-error state = approval %s, order %s, documents %d", approvalStatus, orderStatus, failedDocumentCount)
+	}
+}
+
+func TestValidateApprovedDocumentLinesRejectsUnrepresentableKanbanTotal(t *testing.T) {
+	lineID := uuid.New()
+	err := validateApprovedDocumentLines(uuid.New(), []approvedDocumentLine{{
+		ID:          lineID,
+		TotalKanban: decimal.NewFromInt(1_000_000),
+	}})
+	if err == nil || !strings.Contains(err.Error(), "exceeds monthly identifier capacity") {
+		t.Fatalf("validate million-Kanban line = %v, want identifier-capacity error", err)
+	}
+}
+
+func assertApprovedDocumentCounts(t *testing.T, ctx context.Context, db *pgxpool.Pool, tenantID, purchaseOrderID uuid.UUID, wantDNs, wantLines, wantLots int) {
+	t.Helper()
+	var dnCount, dnLineCount, lotCount int
+	if err := db.QueryRow(ctx, `SELECT
+	 (SELECT count(*) FROM delivery_notes WHERE tenant_id=$1 AND purchase_order_id=$2),
+	 (SELECT count(*) FROM delivery_note_lines WHERE tenant_id=$1 AND purchase_order_id=$2),
+	 (SELECT count(*) FROM kanban_lots k
+	  JOIN purchase_order_lines pol ON pol.tenant_id=k.tenant_id AND pol.id=k.purchase_order_line_id
+	  WHERE k.tenant_id=$1 AND pol.purchase_order_id=$2)`, tenantID, purchaseOrderID).Scan(&dnCount, &dnLineCount, &lotCount); err != nil {
+		t.Fatalf("count approved documents: %v", err)
+	}
+	if dnCount != wantDNs || dnLineCount != wantLines || lotCount != wantLots {
+		t.Fatalf("documents = dn %d, lines %d, lots %d", dnCount, dnLineCount, lotCount)
+	}
+}
+
 type liveFixture struct {
-	tenantA, tenantB, buyer, approver, otherUser uuid.UUID
-	role, measurement, supplier, material        uuid.UUID
+	tenantA, tenantB, buyer, approver, otherUser     uuid.UUID
+	role, measurement, supplier, material, material2 uuid.UUID
 }
 
 func newLiveFixture() liveFixture {
 	return liveFixture{
 		tenantA: uuid.New(), tenantB: uuid.New(), buyer: uuid.New(), approver: uuid.New(), otherUser: uuid.New(),
-		role: uuid.New(), measurement: uuid.New(), supplier: uuid.New(), material: uuid.New(),
+		role: uuid.New(), measurement: uuid.New(), supplier: uuid.New(), material: uuid.New(), material2: uuid.New(),
 	}
 }
 
@@ -162,7 +300,9 @@ func (f liveFixture) insert(ctx context.Context, db *pgxpool.Pool) error {
 		{`INSERT INTO user_roles(tenant_id,user_id,role_id) VALUES($1,$2,$3)`, []any{f.tenantA, f.approver, f.role}},
 		{`INSERT INTO measurements(id,tenant_id,code,name,created_by_user_id,updated_by_user_id) VALUES($1,$2,'KG','Kilogram',$3,$3)`, []any{f.measurement, f.tenantA, f.buyer}},
 		{`INSERT INTO suppliers(id,tenant_id,code,sage_supplier_code,name,email,currency,created_by_user_id,updated_by_user_id) VALUES($1,$2,'LIVE-SUP','LIVE-SAGE','Live Supplier','supplier@live.test','IDR',$3,$3)`, []any{f.supplier, f.tenantA, f.buyer}},
-		{`INSERT INTO raw_materials(id,tenant_id,code,sage_item_code,name,supplier_id,base_unit_id,qty_per_kanban,standard_unit_price,currency,created_by_user_id,updated_by_user_id) VALUES($1,$2,'LIVE-RM','LIVE-ITEM','Live Material',$3,$4,2.5,4.25,'IDR',$5,$5)`, []any{f.material, f.tenantA, f.supplier, f.measurement, f.buyer}},
+		{`INSERT INTO raw_materials(id,tenant_id,code,sage_item_code,name,supplier_id,base_unit_id,qty_per_kanban,standard_unit_price,currency,created_by_user_id,updated_by_user_id) VALUES
+ ($1,$2,'LIVE-RM','LIVE-ITEM','Live Material',$3,$4,2.5,4.25,'IDR',$5,$5),
+ ($6,$2,'LIVE-RM-2','LIVE-ITEM-2','Live Material 2',$3,$4,4,6.5,'IDR',$5,$5)`, []any{f.material, f.tenantA, f.supplier, f.measurement, f.buyer, f.material2}},
 	}
 	for _, statement := range statements {
 		if _, err := db.Exec(ctx, statement.sql, statement.args...); err != nil {
@@ -173,7 +313,7 @@ func (f liveFixture) insert(ctx context.Context, db *pgxpool.Pool) error {
 }
 
 func (f liveFixture) cleanup(ctx context.Context, db *pgxpool.Pool) error {
-	tables := []string{"purchase_order_approvals", "purchase_order_lines", "purchase_orders", "purchase_order_number_sequences", "role_permissions", "user_roles", "raw_materials", "suppliers", "measurements", "roles", "tenant_settings", "sessions", "users"}
+	tables := []string{"kanban_lots", "delivery_note_lines", "delivery_notes", "delivery_note_number_sequences", "kanban_number_sequences", "purchase_order_approvals", "purchase_order_lines", "purchase_orders", "purchase_order_number_sequences", "role_permissions", "user_roles", "raw_materials", "suppliers", "measurements", "roles", "tenant_settings", "sessions", "users"}
 	for _, tenantID := range []uuid.UUID{f.tenantA, f.tenantB} {
 		for _, table := range tables {
 			if _, err := db.Exec(ctx, fmt.Sprintf("DELETE FROM %s WHERE tenant_id=$1", table), tenantID); err != nil {

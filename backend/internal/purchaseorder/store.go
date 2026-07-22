@@ -315,6 +315,11 @@ func (s *SQLStore) decide(ctx context.Context, actor Actor, id uuid.UUID, input 
 		if _, err = tx.Exec(ctx, `UPDATE purchase_orders SET status=$3,updated_by_user_id=$4,updated_at=now() WHERE tenant_id=$1 AND id=$2`, actor.TenantID, purchaseOrderID, orderStatus, actor.UserID); err != nil {
 			return err
 		}
+		if orderStatus == StatusApproved {
+			if err = ensureApprovedDocuments(ctx, tx, actor, purchaseOrderID); err != nil {
+				return err
+			}
+		}
 		approval, err = getApproval(ctx, tx, actor.TenantID, id)
 		return err
 	})
