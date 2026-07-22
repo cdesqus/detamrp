@@ -235,11 +235,15 @@ func ensureDeliveryNoteLine(ctx context.Context, tx database.TenantTx, actor Act
 
 func countMissingKanbanLots(ctx context.Context, tx database.TenantTx, tenantID, purchaseOrderID uuid.UUID) (int64, error) {
 	var missing int64
-	err := tx.QueryRow(ctx, `SELECT COALESCE(SUM(pol.total_kanban::bigint),0)-COUNT(kl.id)
- FROM purchase_order_lines pol
- JOIN delivery_note_lines dnl ON dnl.tenant_id=pol.tenant_id AND dnl.purchase_order_id=pol.purchase_order_id AND dnl.purchase_order_line_id=pol.id
- LEFT JOIN kanban_lots kl ON kl.tenant_id=dnl.tenant_id AND kl.delivery_note_line_id=dnl.id AND kl.purchase_order_line_id=pol.id
- WHERE pol.tenant_id=$1 AND pol.purchase_order_id=$2`, tenantID, purchaseOrderID).Scan(&missing)
+	err := tx.QueryRow(ctx, `SELECT COALESCE(SUM(line.total_kanban-line.existing_lots),0)
+ FROM (
+  SELECT pol.id,pol.total_kanban::bigint AS total_kanban,COUNT(kl.id)::bigint AS existing_lots
+  FROM purchase_order_lines pol
+  JOIN delivery_note_lines dnl ON dnl.tenant_id=pol.tenant_id AND dnl.purchase_order_id=pol.purchase_order_id AND dnl.purchase_order_line_id=pol.id
+  LEFT JOIN kanban_lots kl ON kl.tenant_id=dnl.tenant_id AND kl.delivery_note_line_id=dnl.id AND kl.purchase_order_line_id=pol.id
+  WHERE pol.tenant_id=$1 AND pol.purchase_order_id=$2
+  GROUP BY pol.id,pol.total_kanban
+ ) line`, tenantID, purchaseOrderID).Scan(&missing)
 	return missing, err
 }
 
