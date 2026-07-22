@@ -40,6 +40,23 @@ describe('supplier order UI', () => {
     expect(screen.queryByText(/IDR/)).not.toBeInTheDocument();
   });
 
+  it('shows compact document availability columns for approved and non-approved orders', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response({ items: [
+      { id: 'po-approved', poNumber: 'PO-APPROVED', supplierId: 'supplier-1', supplierName: 'PT Prima', orderDate: '2026-07-21', expectedDeliveryDate: '2026-07-25', status: 'APPROVED', currency: 'IDR', documents: { deliveryNoteId: 'dn-1', deliveryNoteNumber: 'DN-202607-00001', kanbanCount: 10, issuedAt: '2026-07-22T00:00:00Z' } },
+      { id: 'po-pending', poNumber: 'PO-PENDING', supplierId: 'supplier-1', supplierName: 'PT Prima', orderDate: '2026-07-21', expectedDeliveryDate: '2026-07-25', status: 'PENDING_APPROVAL', currency: 'IDR', documents: null }
+    ], total: 2 })));
+
+    render(<SupplierOrderIndex permissions={['po.view']} />);
+
+    const approvedRow = (await screen.findByText('PO-APPROVED')).closest('tr')!;
+    const pendingRow = screen.getByText('PO-PENDING').closest('tr')!;
+    expect(screen.getByRole('columnheader', { name: 'DN Documents' })).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: 'Kanban Labels' })).toBeInTheDocument();
+    expect(within(approvedRow).getByText('DN-202607-00001')).toBeInTheDocument();
+    expect(within(approvedRow).getByText('10 labels')).toBeInTheDocument();
+    expect(within(pendingRow).getAllByText('—')).toHaveLength(3);
+  });
+
   it('cancels drafts from a compact row menu once and reloads the list', async () => {
     const orders = [
       { id: 'po-draft', poNumber: 'PO-DRAFT', supplierId: 'supplier-1', supplierName: 'PT Prima', orderDate: '2026-07-21', expectedDeliveryDate: '2026-07-25', status: 'DRAFT', currency: 'IDR', createdBy: { displayName: 'Admin' } },
@@ -62,8 +79,9 @@ describe('supplier order UI', () => {
     expect(screen.queryByRole('button', { name: 'Actions for PO-APPROVED' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Open PO-DRAFT' })).toBeInTheDocument();
     await user.click(actions);
-    expect(screen.getByRole('menu')).toHaveClass('supplier-order-row-menu-popover--upward');
-    await user.click(screen.getByRole('menuitem', { name: 'Cancel Draft' }));
+    expect(actions).not.toHaveAttribute('aria-haspopup');
+    expect(screen.getByTestId('draft-actions-po-draft')).toHaveClass('supplier-order-row-menu-popover--upward');
+    await user.click(screen.getByRole('button', { name: 'Cancel Draft' }));
     const dialog = screen.getByRole('dialog', { name: 'Cancel draft PO-DRAFT' });
     const confirm = screen.getByRole('button', { name: 'Confirm cancellation' });
     expect(confirm).toHaveFocus();
@@ -109,7 +127,7 @@ describe('supplier order UI', () => {
 
     const actions = await screen.findByRole('button', { name: 'Actions for PO-DRAFT' });
     await user.click(actions);
-    await user.click(screen.getByRole('menuitem', { name: 'Cancel Draft' }));
+    await user.click(screen.getByRole('button', { name: 'Cancel Draft' }));
     await user.click(screen.getByRole('button', { name: 'Confirm cancellation' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Draft can no longer be cancelled');
     expect(screen.getByRole('button', { name: 'Confirm cancellation' })).toBeEnabled();
@@ -407,9 +425,13 @@ describe('supplier order UI', () => {
     const user = userEvent.setup();
     render(<SupplierOrderForm orderId="po-detail" />);
     expect(screen.getByText('Loading supplier order...')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Back to Supplier Orders' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Save as Draft' })).not.toBeInTheDocument();
-    await user.click(await screen.findByRole('button', { name: 'Retry' }));
+    const retry = await screen.findByRole('button', { name: 'Retry' });
+    expect(screen.getByRole('button', { name: 'Back to Supplier Orders' })).toBeInTheDocument();
+    await user.click(retry);
     expect(await screen.findByText('PO-1')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Back to Supplier Orders' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Save as Draft' })).not.toBeInTheDocument();
     expect(screen.getByRole('status', { name: 'Supplier' })).toHaveTextContent('supplier-1');
   });

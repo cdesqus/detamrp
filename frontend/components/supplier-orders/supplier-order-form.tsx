@@ -242,12 +242,13 @@ export function SupplierOrderForm({ orderId, initialOrder, permissions }: Props)
     finally { setDeciding(false); }
   }
 
-  if (detailLoading) return <section className="supplier-order-form"><div className="table-empty">Loading supplier order...</div></section>;
-  if (detailError) return <section className="supplier-order-form"><div className="table-empty"><strong>Could not load supplier order</strong><span>{detailError}</span><button className="table-action" onClick={() => setDetailAttempt(value => value + 1)}>Retry</button></div></section>;
+  const detailBack = (orderId || savedId) && <button type="button" className="table-action supplier-order-back" onClick={() => router.push('/supplier-orders')}>Back to Supplier Orders</button>;
+  if (detailLoading) return <section className="supplier-order-form">{detailBack}<div className="table-empty">Loading supplier order...</div></section>;
+  if (detailError) return <section className="supplier-order-form">{detailBack}<div className="table-empty"><strong>Could not load supplier order</strong><span>{detailError}</span><button className="table-action" onClick={() => setDetailAttempt(value => value + 1)}>Retry</button></div></section>;
   const availableMaterials = materials.filter(item => !lines.some(line => line.rawMaterialId === item.id));
   const unplacedErrors = Object.entries(errors).filter(([key]) => key !== '_form' && key !== 'supplierId' && key !== 'orderDate' && key !== 'expectedDeliveryDate' && key !== 'lines' && !/^lines\[\d+\]\.(totalKanban|rawMaterialId)$/.test(key) && !/^lines\[\d+\]$/.test(key));
   return <section className="supplier-order-form">
-    {savedId && <button type="button" className="table-action supplier-order-back" onClick={() => router.push('/supplier-orders')}>Back to Supplier Orders</button>}
+    {detailBack}
     <div className="page-title-row"><div><h1>{poNumber || 'New Supplier Order'}</h1><p className="muted">{editable ? 'Complete the order and save it as a draft or send it for approval.' : `This supplier order is ${status.replaceAll('_', ' ').toLowerCase()} and read-only.`}</p></div>{poNumber && <span className="status-pill">{status.replaceAll('_', ' ')}</span>}</div>
     {errors._form && <p className="form-error" role="alert">{errors._form}</p>}
     {unplacedErrors.length > 0 && <div className="form-error" role="alert"><ul>{unplacedErrors.map(([key, message]) => <li key={key}>{message}</li>)}</ul></div>}
