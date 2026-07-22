@@ -450,13 +450,14 @@ func TestPurchaseOrderRoutesLogUnexpectedErrorsWithRequestContext(t *testing.T) 
 	purchaseOrderID, approvalID := uuid.New(), uuid.New()
 
 	for _, request := range []struct {
-		method, path string
-		err          error
-		contextKeys  []string
+		method, path  string
+		err           error
+		contextKeys   []string
+		expectedCause string
 	}{
-		{http.MethodGet, "/purchase-orders/" + purchaseOrderID.String(), errors.New("database unavailable"), []string{"purchase_order_id"}},
-		{http.MethodPost, "/purchase-order-approvals/" + approvalID.String() + "/approve", ApprovalDocumentError{ApprovalID: approvalID, PurchaseOrderID: purchaseOrderID, Err: errors.New("generator unavailable")}, []string{"approval_id", "purchase_order_id"}},
-		{http.MethodPost, "/purchase-order-approvals/" + approvalID.String() + "/approve", ApprovalDocumentError{ApprovalID: approvalID, PurchaseOrderID: purchaseOrderID, Err: CapacityError{Field: "documents", Message: "Monthly Kanban label capacity is exhausted"}}, []string{"approval_id", "purchase_order_id"}},
+		{http.MethodGet, "/purchase-orders/" + purchaseOrderID.String(), errors.New("database unavailable"), []string{"purchase_order_id"}, "database unavailable"},
+		{http.MethodPost, "/purchase-order-approvals/" + approvalID.String() + "/approve", ApprovalDocumentError{ApprovalID: approvalID, PurchaseOrderID: purchaseOrderID, Err: errors.New("generator unavailable")}, []string{"approval_id", "purchase_order_id"}, "generator unavailable"},
+		{http.MethodPost, "/purchase-order-approvals/" + approvalID.String() + "/approve", ApprovalDocumentError{ApprovalID: approvalID, PurchaseOrderID: purchaseOrderID, Err: CapacityError{Field: "documents", Message: "Monthly Kanban label capacity is exhausted"}}, []string{"approval_id", "purchase_order_id"}, "Monthly Kanban label capacity is exhausted"},
 	} {
 		gin.SetMode(gin.TestMode)
 		router := gin.New()
@@ -472,6 +473,9 @@ func TestPurchaseOrderRoutesLogUnexpectedErrorsWithRequestContext(t *testing.T) 
 		}
 		if !strings.Contains(logs.String(), actor.TenantID.String()) {
 			t.Fatalf("structured log missing request context: %s", logs.String())
+		}
+		if !strings.Contains(logs.String(), request.expectedCause) {
+			t.Fatalf("structured log missing underlying cause %q: %s", request.expectedCause, logs.String())
 		}
 		logs.Reset()
 	}

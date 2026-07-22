@@ -375,19 +375,27 @@ func writeHTTPError(c *gin.Context, err error) bool {
 
 func logUnexpectedHTTPError(c *gin.Context, err error) {
 	actor := actorFrom(c)
+	loggedError := err
+	var documentFailure ApprovalDocumentError
+	if errors.As(err, &documentFailure) {
+		loggedError = documentFailure.Err
+	}
 	attributes := []any{
 		"tenant_id", actor.TenantID,
 		"user_id", actor.UserID,
 		"method", c.Request.Method,
 		"route", c.FullPath(),
-		"error", err,
+		"error", loggedError,
 	}
-	var documentFailure ApprovalDocumentError
 	if errors.As(err, &documentFailure) {
 		attributes = append(attributes,
 			"approval_id", documentFailure.ApprovalID,
 			"purchase_order_id", documentFailure.PurchaseOrderID,
 		)
+		var capacity CapacityError
+		if errors.As(documentFailure.Err, &capacity) {
+			attributes = append(attributes, "capacity_message", capacity.Message)
+		}
 	} else if id := c.Param("id"); id != "" {
 		if strings.Contains(c.FullPath(), "purchase-order-approvals") {
 			attributes = append(attributes, "approval_id", id)
