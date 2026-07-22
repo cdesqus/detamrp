@@ -94,6 +94,7 @@ button:disabled { cursor: not-allowed; opacity: .48; }
 .table-action { padding: 3px 7px; color: #3f3f46; background: white; border: 1px solid #d4d4d8; border-radius: 4px; cursor: pointer; font-size: 10px; }
 .status-pill { display: inline-flex; align-items: center; height: 21px; padding: 0 7px; color: #52525b; background: #f4f4f5; border: 1px solid #e4e4e7; border-radius: 999px; font-size: 10px; font-weight: 600; }
 .supplier-order-form { max-width: 1160px; }
+.supplier-order-back { margin-bottom: 10px; }
 .supplier-order-card { margin-top: 16px; padding: 14px; background: white; border: 1px solid #e4e4e7; border-radius: 7px; }
 .supplier-order-fields { display: grid; grid-template-columns: repeat(4, minmax(140px, 1fr)); gap: 11px; }
 .supplier-order-fields label { display: grid; gap: 5px; color: #52525b; font-size: 11px; font-weight: 600; }
@@ -115,6 +116,12 @@ button:disabled { cursor: not-allowed; opacity: .48; }
 .supplier-order-actions > div:last-child { display: flex; gap: 7px; }
 .supplier-order-actions button { height: 32px; padding: 0 11px; color: #3f3f46; background: white; border: 1px solid #d4d4d8; border-radius: 5px; cursor: pointer; }
 .supplier-order-actions .primary-button { color: white; border-color: #27272a; background: #27272a; }
+.supplier-order-documents { display: flex; align-items: center; gap: 14px; }
+.supplier-order-documents > div:first-child, .supplier-order-document-summary { display: grid; gap: 2px; }
+.supplier-order-documents strong { color: #27272a; font-size: 12px; }
+.supplier-order-documents span { color: #71717a; font-size: 10px; }
+.supplier-order-document-actions { display: flex; gap: 6px; margin-left: auto; }
+@media (max-width: 560px) { .supplier-order-documents { align-items: stretch; flex-direction: column; } .supplier-order-document-actions { margin-left: 0; } }
 .crud-scrim { position: fixed; z-index: 39; inset: 0; width: 100%; background: rgb(0 0 0 / 20%); border: 0; }
 .crud-modal { position: fixed; z-index: 40; top: 50%; left: 50%; display: flex; flex-direction: column; max-width: calc(100vw - 32px); max-height: min(84vh, 760px); overflow: hidden; background: white; border: 1px solid #e4e4e7; border-radius: 9px; box-shadow: 0 20px 60px rgb(0 0 0 / 18%); transform: translate(-50%, -50%); }
 .crud-modal--compact { width: 520px; }

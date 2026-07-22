@@ -286,6 +286,25 @@ describe('supplier order UI', () => {
     expect(screen.queryByText('Order Total')).not.toBeInTheDocument();
   });
 
+  it('provides detail navigation and shows generated documents only for approved orders', async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response({ items: [] })));
+    const approvedOrder = { id: 'po-approved', poNumber: 'PO-APPROVED', status: 'APPROVED', supplierId: 'supplier-1', supplierName: 'PT Prima', currency: 'IDR', orderDate: '2026-07-21', expectedDeliveryDate: '2026-07-22', lines: [], documents: { deliveryNoteId: 'dn-1', deliveryNoteNumber: 'DN-202607-00001', kanbanCount: 10, issuedAt: '2026-07-22T00:00:00Z' } };
+    const { rerender } = render(<SupplierOrderForm initialOrder={approvedOrder} />);
+
+    expect(screen.getByRole('button', { name: 'Back to Supplier Orders' })).toBeInTheDocument();
+    expect(screen.getByText('DN-202607-00001')).toBeInTheDocument();
+    expect(screen.getByText('10 Kanban labels')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Print DN' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Print Kanban Labels' })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Back to Supplier Orders' }));
+    expect(push).toHaveBeenCalledWith('/supplier-orders');
+
+    rerender(<SupplierOrderForm key="pending-order" initialOrder={{ ...approvedOrder, id: 'po-pending', status: 'PENDING_APPROVAL' }} />);
+    expect(screen.queryByText('Documents')).not.toBeInTheDocument();
+  });
+
   it('shows loading then retryable detail failure without draft actions before the order loads', async () => {
     let detailAttempts = 0;
     vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
