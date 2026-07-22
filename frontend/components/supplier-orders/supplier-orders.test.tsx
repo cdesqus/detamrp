@@ -40,20 +40,40 @@ describe('supplier order UI', () => {
     expect(screen.queryByText(/IDR/)).not.toBeInTheDocument();
   });
 
-  it('shows compact document availability columns for approved and non-approved orders', async () => {
+  it('shows compact new-tab PDF actions only when each document is available', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response({ items: [
       { id: 'po-approved', poNumber: 'PO-APPROVED', supplierId: 'supplier-1', supplierName: 'PT Prima', orderDate: '2026-07-21', expectedDeliveryDate: '2026-07-25', status: 'APPROVED', currency: 'IDR', documents: { deliveryNoteId: 'dn-1', deliveryNoteNumber: 'DN-202607-00001', kanbanCount: 10, issuedAt: '2026-07-22T00:00:00Z' } },
-      { id: 'po-pending', poNumber: 'PO-PENDING', supplierId: 'supplier-1', supplierName: 'PT Prima', orderDate: '2026-07-21', expectedDeliveryDate: '2026-07-25', status: 'PENDING_APPROVAL', currency: 'IDR', documents: null }
-    ], total: 2 })));
+      { id: 'po-approved-empty', poNumber: 'PO-APPROVED-EMPTY', supplierId: 'supplier-1', supplierName: 'PT Prima', orderDate: '2026-07-21', expectedDeliveryDate: '2026-07-25', status: 'APPROVED', currency: 'IDR', documents: null },
+      { id: 'po-pending', poNumber: 'PO-PENDING', supplierId: 'supplier-1', supplierName: 'PT Prima', orderDate: '2026-07-21', expectedDeliveryDate: '2026-07-25', status: 'PENDING_APPROVAL', currency: 'IDR', documents: { deliveryNoteId: 'dn-pending', deliveryNoteNumber: 'DN-PENDING', kanbanCount: 2, issuedAt: '2026-07-22T00:00:00Z' } }
+    ], total: 3 })));
 
     render(<SupplierOrderIndex permissions={['po.view']} />);
 
     const approvedRow = (await screen.findByText('PO-APPROVED')).closest('tr')!;
+    const approvedEmptyRow = screen.getByText('PO-APPROVED-EMPTY').closest('tr')!;
     const pendingRow = screen.getByText('PO-PENDING').closest('tr')!;
-    expect(screen.getByRole('columnheader', { name: 'DN Documents' })).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: 'PO PDF' })).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: 'DN PDF' })).toBeInTheDocument();
     expect(screen.getByRole('columnheader', { name: 'Kanban Labels' })).toBeInTheDocument();
-    expect(within(approvedRow).getByText('DN-202607-00001')).toBeInTheDocument();
-    expect(within(approvedRow).getByText('10 labels')).toBeInTheDocument();
+
+    const poLink = within(approvedRow).getByRole('link', { name: 'Open PO PDF for PO-APPROVED' });
+    expect(poLink).toHaveAttribute('href', '/api/purchase-orders/po-approved/documents/po.pdf');
+    expect(poLink).toHaveAttribute('target', '_blank');
+    expect(poLink).toHaveAttribute('rel', 'noopener noreferrer');
+    const deliveryNoteLink = within(approvedRow).getByRole('link', { name: 'Open DN PDF for PO-APPROVED' });
+    expect(deliveryNoteLink).toHaveAttribute('href', '/api/purchase-orders/po-approved/documents/delivery-note.pdf');
+    expect(deliveryNoteLink).toHaveAttribute('target', '_blank');
+    expect(deliveryNoteLink).toHaveAttribute('rel', 'noopener noreferrer');
+    const labelsLink = within(approvedRow).getByRole('link', { name: 'Open Kanban labels PDF for PO-APPROVED' });
+    expect(labelsLink).toHaveAttribute('href', '/api/purchase-orders/po-approved/documents/kanban-labels.pdf');
+    expect(labelsLink).toHaveAttribute('target', '_blank');
+    expect(labelsLink).toHaveAttribute('rel', 'noopener noreferrer');
+
+    expect(within(approvedEmptyRow).getByRole('link', { name: 'Open PO PDF for PO-APPROVED-EMPTY' })).toHaveAttribute('target', '_blank');
+    expect(within(approvedEmptyRow).queryByRole('link', { name: /DN PDF|Kanban labels PDF/ })).not.toBeInTheDocument();
+    expect(within(approvedEmptyRow).getAllByText('—')).toHaveLength(3);
+    expect(within(pendingRow).getByRole('link', { name: 'Open PO PDF for PO-PENDING' })).toHaveAttribute('target', '_blank');
+    expect(within(pendingRow).queryByRole('link', { name: /DN PDF|Kanban labels PDF/ })).not.toBeInTheDocument();
     expect(within(pendingRow).getAllByText('—')).toHaveLength(3);
   });
 
@@ -200,9 +220,11 @@ describe('supplier order UI', () => {
     expect(JSON.parse((fetchMock.mock.calls[2][1] as RequestInit).body as string)).toEqual(expect.objectContaining({ supplierId: 'supplier-1', lines: [{ rawMaterialId: 'material-1', totalKanban: '2' }] }));
     await waitFor(() => expect(push).toHaveBeenCalledWith('/supplier-orders'));
     expect(screen.queryByRole('button', { name: 'Cancel draft' })).not.toBeInTheDocument();
+    push.mockReset();
     await user.click(screen.getByRole('button', { name: 'Save & Send for Approval' }));
     await waitFor(() => expect(fetchMock).toHaveBeenLastCalledWith('/api/purchase-orders/po-1/submit', expect.objectContaining({ method: 'POST' })));
     expect(JSON.parse((fetchMock.mock.calls[3][1] as RequestInit).body as string)).toEqual(expect.objectContaining({ supplierId: 'supplier-1', lines: [{ rawMaterialId: 'material-1', totalKanban: '2' }] }));
+    await waitFor(() => expect(push).toHaveBeenCalledWith('/supplier-orders'));
   });
 
   it('requires confirmation before replacing a supplier with selected materials and prevents duplicate materials', async () => {
@@ -307,6 +329,7 @@ describe('supplier order UI', () => {
     await user.click(screen.getByRole('button', { name: 'Save as Draft' }));
     expect(await screen.findByText('Server says positive integer')).toBeInTheDocument();
     expect(screen.getByRole('spinbutton', { name: 'Total Kanban for Steel Coil' })).toHaveAttribute('aria-describedby', 'kanban-error-0');
+    expect(push).not.toHaveBeenCalled();
   });
 
   it('promotes approver errors and associates raw material errors with their row', async () => {
@@ -325,6 +348,7 @@ describe('supplier order UI', () => {
     expect(await screen.findByText('Configure an active PO Approver before submission')).toBeInTheDocument();
     expect(screen.getByText('Raw Material is no longer active for this supplier')).toBeInTheDocument();
     expect(screen.getByText('Raw Material is no longer active for this supplier').closest('td')).toHaveAttribute('aria-describedby', 'material-error-0');
+    expect(push).not.toHaveBeenCalled();
   });
 
   it('loads a submitted Director detail from snapshots without editable master lists', async () => {
@@ -390,20 +414,17 @@ describe('supplier order UI', () => {
     expect(screen.queryByText('Order Total')).not.toBeInTheDocument();
   });
 
-  it('provides detail navigation and shows generated documents only for approved orders', async () => {
+  it('provides detail navigation without a redundant document card', async () => {
     const user = userEvent.setup();
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response({ items: [] })));
     const approvedOrder = { id: 'po-approved', poNumber: 'PO-APPROVED', status: 'APPROVED', supplierId: 'supplier-1', supplierName: 'PT Prima', currency: 'IDR', orderDate: '2026-07-21', expectedDeliveryDate: '2026-07-22', lines: [], documents: { deliveryNoteId: 'dn-1', deliveryNoteNumber: 'DN-202607-00001', kanbanCount: 10, issuedAt: '2026-07-22T00:00:00Z' } };
     const { rerender } = render(<SupplierOrderForm initialOrder={approvedOrder} />);
 
     expect(screen.getByRole('button', { name: 'Back to Supplier Orders' })).toBeInTheDocument();
-    expect(screen.getByText('DN-202607-00001')).toBeInTheDocument();
-    expect(screen.getByText('10 Kanban labels')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Print DN' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'Print DN' })).toHaveAccessibleDescription('Document printing is not available yet.');
-    expect(screen.getByRole('button', { name: 'Print Kanban Labels' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'Print Kanban Labels' })).toHaveAccessibleDescription('Document printing is not available yet.');
-    expect(screen.getByText('Document printing is not available yet.')).toBeInTheDocument();
+    expect(screen.queryByText('Documents')).not.toBeInTheDocument();
+    expect(screen.queryByText('DN-202607-00001')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Print DN' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Print Kanban Labels' })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Back to Supplier Orders' }));
     expect(push).toHaveBeenCalledWith('/supplier-orders');
