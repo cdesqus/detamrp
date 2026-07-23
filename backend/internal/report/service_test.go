@@ -16,6 +16,13 @@ func TestParseFilterRejectsReversedDates(t *testing.T) {
 	}
 }
 
+func TestParseFilterRequiresBothDates(t *testing.T) {
+	_, fields := ParseFilter(url.Values{})
+	if fields["fromDate"] == "" || fields["toDate"] == "" {
+		t.Fatalf("missing date fields = %#v", fields)
+	}
+}
+
 func TestRenderReceivingPDF(t *testing.T) {
 	result := Result{Items: []Row{{
 		ReceivingNumber: "RCV-1", ReceivingDate: time.Date(2026, 7, 23, 0, 0, 0, 0, time.UTC),

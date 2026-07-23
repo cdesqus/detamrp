@@ -26,6 +26,12 @@ func ParseFilter(values url.Values) (Filter, FieldErrors) {
 		return &date
 	}
 	filter.FromDate, filter.ToDate = parseDate("fromDate"), parseDate("toDate")
+	if strings.TrimSpace(values.Get("fromDate")) == "" {
+		fields["fromDate"] = "From Date is required"
+	}
+	if strings.TrimSpace(values.Get("toDate")) == "" {
+		fields["toDate"] = "To Date is required"
+	}
 	if filter.FromDate != nil && filter.ToDate != nil && filter.FromDate.After(*filter.ToDate) {
 		fields["toDate"] = "To Date must be on or after From Date"
 	}
