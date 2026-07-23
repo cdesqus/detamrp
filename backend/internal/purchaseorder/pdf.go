@@ -117,9 +117,9 @@ func RenderPOPDF(order Order, includePrices bool) ([]byte, error) {
 	totalBaseQty := decimal.Zero
 	rows := make([][]string, 0, len(order.Lines))
 	for _, line := range order.Lines {
-		values := []string{line.RawMaterialCode, line.RawMaterialName, line.BaseUnitCode, line.QtyPerKanbanSnapshot.String(), line.TotalKanban.String(), line.OrderedBaseQty.String()}
+		values := []string{line.RawMaterialCode, line.RawMaterialName, line.BaseUnitCode, formatPDFDecimal(line.QtyPerKanbanSnapshot, 6), formatPDFDecimal(line.TotalKanban, 0), formatPDFDecimal(line.OrderedBaseQty, 6)}
 		if includePrices {
-			values = append(values, line.UnitPriceSnapshot.String(), line.LineTotal.String())
+			values = append(values, formatPDFMoney(line.UnitPriceSnapshot, order.Currency), formatPDFMoney(line.LineTotal, order.Currency))
 		}
 		rows = append(rows, values)
 		totalBaseQty = totalBaseQty.Add(line.OrderedBaseQty)
@@ -127,9 +127,9 @@ func RenderPOPDF(order Order, includePrices bool) ([]byte, error) {
 	writePDFTable(pdf, widths, headings, rows)
 	pdf.Ln(3)
 	writePDFSectionTitle(pdf, "ORDER SUMMARY")
-	writeKeyValue(pdf, "Total Base Quantity", totalBaseQty.String(), 3)
+	writeKeyValue(pdf, "Total Base Quantity", formatPDFDecimal(totalBaseQty, 6), 3)
 	if includePrices {
-		writeKeyValue(pdf, "Total Amount", order.TotalAmount.String(), 3)
+		writeKeyValue(pdf, "Total Amount", formatPDFMoney(order.TotalAmount, order.Currency), 3)
 	}
 	if strings.TrimSpace(order.Notes) != "" {
 		writeKeyValue(pdf, "Notes", order.Notes, 8)
@@ -142,6 +142,40 @@ func RenderPOPDF(order Order, includePrices bool) ([]byte, error) {
 	}
 	writeKeyValue(pdf, "Approver", approver, 3)
 	return outputPDF(pdf)
+}
+
+func formatPDFDecimal(value decimal.Decimal, maximumFractionDigits int) string {
+	raw := value.StringFixed(int32(maximumFractionDigits))
+	parts := strings.SplitN(raw, ".", 2)
+	negative := strings.HasPrefix(parts[0], "-")
+	whole := strings.TrimPrefix(parts[0], "-")
+	for index := len(whole) - 3; index > 0; index -= 3 {
+		whole = whole[:index] + "." + whole[index:]
+	}
+	fraction := ""
+	if len(parts) == 2 {
+		fraction = strings.TrimRight(parts[1], "0")
+	}
+	result := whole
+	if fraction != "" {
+		result += "," + fraction
+	}
+	if negative && !value.IsZero() {
+		result = "-" + result
+	}
+	return result
+}
+
+func formatPDFMoney(value decimal.Decimal, currency string) string {
+	maximumFractionDigits := 2
+	if strings.EqualFold(strings.TrimSpace(currency), "IDR") {
+		maximumFractionDigits = 0
+	}
+	formatted := formatPDFDecimal(value, maximumFractionDigits)
+	if strings.TrimSpace(currency) == "" {
+		return formatted
+	}
+	return strings.TrimSpace(currency) + " " + formatted
 }
 
 func writePDFSectionTitle(pdf *fpdf.Fpdf, title string) {

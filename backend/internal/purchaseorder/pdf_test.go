@@ -22,6 +22,15 @@ type cancelOnPixelImage struct {
 	cancel context.CancelFunc
 }
 
+func TestFormatPDFValuesTrimDatabaseScale(t *testing.T) {
+	if got := formatPDFMoney(decimal.RequireFromString("10000000.000000"), "IDR"); got != "IDR 10.000.000" {
+		t.Fatalf("IDR = %q", got)
+	}
+	if got := formatPDFDecimal(decimal.RequireFromString("12345.250000"), 6); got != "12.345,25" {
+		t.Fatalf("quantity = %q", got)
+	}
+}
+
 func (image cancelOnPixelImage) At(x, y int) color.Color {
 	image.cancel()
 	return image.Image.At(x, y)
@@ -42,7 +51,7 @@ func TestRenderPOPDFIncludesOrRedactsPrices(t *testing.T) {
 	if !bytes.HasPrefix(priced, []byte("%PDF-")) {
 		t.Fatal("not a PDF")
 	}
-	if !pdfContainsText(priced, "200000") || !pdfContainsText(priced, "400000") {
+	if !pdfContainsText(priced, "IDR 200.000") || !pdfContainsText(priced, "IDR 400.000") {
 		t.Fatal("authorized prices absent")
 	}
 
@@ -50,7 +59,7 @@ func TestRenderPOPDFIncludesOrRedactsPrices(t *testing.T) {
 	if err != nil {
 		t.Fatalf("render redacted PO: %v", err)
 	}
-	if pdfContainsText(redacted, "200000") || pdfContainsText(redacted, "400000") {
+	if pdfContainsText(redacted, "IDR 200.000") || pdfContainsText(redacted, "IDR 400.000") {
 		t.Fatal("price leaked")
 	}
 }
@@ -58,9 +67,13 @@ func TestRenderPOPDFIncludesOrRedactsPrices(t *testing.T) {
 func TestRenderPOPDFUsesModernBusinessSections(t *testing.T) {
 	order := Order{PONumber: "PO-MODERN", SupplierName: "PT Modern", Status: StatusApproved, CreatedBy: Actor{DisplayName: "Buyer"}, SubmittedApproverDisplayName: "Director", Notes: "Deliver carefully"}
 	result, err := RenderPOPDF(order, false)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, heading := range []string{"SUPPLIER DETAILS", "ORDER DETAILS", "APPROVAL", "ORDER SUMMARY"} {
-		if !pdfContainsText(result, heading) { t.Errorf("missing modern section %q", heading) }
+		if !pdfContainsText(result, heading) {
+			t.Errorf("missing modern section %q", heading)
+		}
 	}
 }
 

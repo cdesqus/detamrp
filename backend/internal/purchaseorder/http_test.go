@@ -209,10 +209,10 @@ func TestPurchaseOrderPDFRouteIncludesPricesOnlyWithPermission(t *testing.T) {
 	withoutPrice := serve(purchaseOrderRouter(t, []string{"po.view"}, &httpRepository{order: order}), http.MethodGet, path, "", "session")
 	withPrice := serve(purchaseOrderRouter(t, []string{"po.view", "po.price.view"}, &httpRepository{order: order}), http.MethodGet, path, "", "session")
 
-	if pdfContainsText(withoutPrice.Body.Bytes(), "Unit Price") || pdfContainsText(withoutPrice.Body.Bytes(), "918273") {
+	if pdfContainsText(withoutPrice.Body.Bytes(), "Unit Price") || pdfContainsText(withoutPrice.Body.Bytes(), "918.273") {
 		t.Fatalf("PO PDF exposed price without po.price.view")
 	}
-	if !pdfContainsText(withPrice.Body.Bytes(), "Unit Price") || !pdfContainsText(withPrice.Body.Bytes(), "918273") {
+	if !pdfContainsText(withPrice.Body.Bytes(), "Unit Price") || !pdfContainsText(withPrice.Body.Bytes(), "918.273") {
 		t.Fatalf("PO PDF omitted price with po.price.view")
 	}
 }

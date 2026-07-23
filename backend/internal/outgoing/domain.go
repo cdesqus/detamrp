@@ -51,7 +51,7 @@ type Document struct {
 
 func normalizeDestination(v string) (string, error) {
 	v = strings.TrimSpace(v)
-	if v == "" || len(v) > 120 {
+	if len(v) > 120 {
 		return "", ErrValidation
 	}
 	return v, nil

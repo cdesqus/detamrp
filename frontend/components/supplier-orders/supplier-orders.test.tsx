@@ -23,7 +23,7 @@ describe('supplier order UI', () => {
     render(<SupplierOrderIndex permissions={['po.view', 'po.price.view']} />);
     expect(await screen.findByText('PO-202607-00001')).toBeInTheDocument();
     expect(screen.getByText('SUP-01 â€” PT Prima')).toBeInTheDocument();
-    expect(screen.getByText('IDR 12.500000')).toBeInTheDocument();
+    expect(screen.getByText('IDR 12')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Open PO-202607-00001' })).toBeInTheDocument();
     expect(fetch).not.toHaveBeenCalledWith('/api/master-data/suppliers?limit=200', { credentials: 'include' });
     await user.click(screen.getByRole('button', { name: 'Create order' }));
@@ -215,11 +215,11 @@ describe('supplier order UI', () => {
     await user.clear(screen.getByRole('combobox', { name: 'Raw Material' }));
     await user.type(screen.getByRole('combobox', { name: 'Raw Material' }), 'RM-01 — Steel Coil');
     await user.click(add);
-    expect(screen.getAllByText('0.020000').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('IDR 0').length).toBeGreaterThan(0);
     expect(screen.getByRole('combobox', { name: 'Raw Material' })).toHaveAttribute('list');
     await user.clear(screen.getByRole('spinbutton', { name: 'Total Kanban for Steel Coil' }));
     await user.type(screen.getByRole('spinbutton', { name: 'Total Kanban for Steel Coil' }), '2');
-    expect(screen.getAllByText('0.040000').length).toBeGreaterThan(0);
+    expect(screen.getByText('0,2')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Save as Draft' }));
     await waitFor(() => expect(fetchMock).toHaveBeenLastCalledWith('/api/purchase-orders', expect.objectContaining({ method: 'POST' })));
     expect(JSON.parse((fetchMock.mock.calls[2][1] as RequestInit).body as string)).toEqual(expect.objectContaining({ supplierId: 'supplier-1', lines: [{ rawMaterialId: 'material-1', totalKanban: '2' }] }));
@@ -366,7 +366,7 @@ describe('supplier order UI', () => {
     expect(screen.getByText('PT Prima snapshot')).toBeInTheDocument();
     expect(screen.getByText(/RM-SNAPSHOT/)).toBeInTheDocument();
     expect(screen.getByRole('columnheader', { name: 'Unit Price' })).toBeInTheDocument();
-    expect(screen.getByText('7.000000')).toBeInTheDocument();
+    expect(screen.getByText('IDR 7')).toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(fetchMock).toHaveBeenCalledWith('/api/purchase-orders/po-director', { credentials: 'include' });
     expect(fetchMock).toHaveBeenCalledWith('/api/purchase-order-approvals?limit=200&offset=0', { credentials: 'include' });

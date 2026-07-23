@@ -23,7 +23,7 @@ func RenderPDF(d Document) ([]byte, error) {
 	p.CellFormat(60, 8, d.DocumentNumber, "", 1, "R", false, 0, "")
 	p.SetTextColor(24, 24, 27)
 	p.SetY(39)
-	for _, x := range [][2]string{{"Date", d.TransactionDate.Format("02 Jan 2006")}, {"Destination", d.Destination}, {"Completed By", d.CreatedBy}, {"Kanban", fmt.Sprint(d.KanbanCount)}, {"Materials", fmt.Sprint(d.MaterialCount)}, {"Notes", d.Notes}} {
+	for _, x := range [][2]string{{"Date", d.TransactionDate.Format("02 Jan 2006")}, {"Destination", outgoingDisplayValue(d.Destination)}, {"Completed By", d.CreatedBy}, {"Kanban", fmt.Sprint(d.KanbanCount)}, {"Materials", fmt.Sprint(d.MaterialCount)}, {"Notes", outgoingDisplayValue(d.Notes)}} {
 		p.SetFont("OS", "B", 9)
 		p.CellFormat(38, 7, x[0], "", 0, "L", false, 0, "")
 		p.SetFont("OS", "", 9)
@@ -48,4 +48,11 @@ func RenderPDF(d Document) ([]byte, error) {
 		return nil, e
 	}
 	return b.Bytes(), nil
+}
+
+func outgoingDisplayValue(value string) string {
+	if value == "" {
+		return "—"
+	}
+	return value
 }
