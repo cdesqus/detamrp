@@ -405,12 +405,44 @@ func deliveryNoteQRPNG(value string) ([]byte, error) {
 	return output.Bytes(), nil
 }
 
+func encodeKanbanQR(value string) (barcode.Barcode, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil, errors.New("Kanban ID is required")
+	}
+	encoded, err := qr.Encode(value, qr.M, qr.Auto)
+	if err != nil {
+		return nil, fmt.Errorf("encode Kanban QR %q: %w", value, err)
+	}
+	scaled, err := barcode.Scale(encoded, 260, 260)
+	if err != nil {
+		return nil, fmt.Errorf("scale Kanban QR %q: %w", value, err)
+	}
+	return scaled, nil
+}
+
+func kanbanQRPNG(value string) ([]byte, error) {
+	encoded, err := encodeKanbanQR(value)
+	if err != nil {
+		return nil, err
+	}
+	var output bytes.Buffer
+	if err := png.Encode(&output, encoded); err != nil {
+		return nil, fmt.Errorf("render Kanban QR %q: %w", value, err)
+	}
+	return output.Bytes(), nil
+}
+
 var encodeKanbanBarcode = func(value string) (image.Image, error) {
 	encoded, err := code128.Encode(value)
 	if err != nil {
 		return nil, err
 	}
 	return barcode.Scale(encoded, 420, 72)
+}
+
+var encodeKanbanQRImage = func(value string) (image.Image, error) {
+	return encodeKanbanQR(value)
 }
 
 func RenderKanbanLabelsPDF(document KanbanLabelDocument) ([]byte, error) {
@@ -423,51 +455,122 @@ func renderKanbanLabelsPDF(ctx context.Context, document KanbanLabelDocument) ([
 	}
 	pdf := newA4PDF("KANBAN-" + document.DeliveryNoteNumber)
 	pdf.SetAutoPageBreak(false, 0)
-	const labelWidth, labelHeight = 90.0, 64.0
-	const leftX, rightX, topY = 12.0, 108.0, 12.0
+	const cardsPerPage = 3
+	const cardX, cardWidth, cardHeight = 12.0, 186.0, 84.0
+	const cardGap, firstCardY = 5.0, 12.0
 
 	for index, label := range document.Labels {
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		rowOnPage := (index / 2) % 4
-		if index%8 == 0 {
+		slot := index % cardsPerPage
+		if slot == 0 {
 			pdf.AddPage()
 		}
-		x := leftX
-		if index%2 == 1 {
-			x = rightX
-		}
-		y := topY + float64(rowOnPage)*68
-		pdf.Rect(x, y, labelWidth, labelHeight, "D")
-		pdf.SetFont(pdfFontFamily, "B", 10)
-		writePDFTextLines(pdf, x+3, y+2, labelWidth-6, 5, fitPDFTextLines(pdf, "KANBAN LABEL", labelWidth-6, 1), "C")
-		pdf.SetFont(pdfFontFamily, "B", 9)
-		writePDFTextLines(pdf, x+3, y+7, labelWidth-6, 5, fitPDFTextLines(pdf, label.KanbanID, labelWidth-6, 1), "C")
-		pdf.SetFont(pdfFontFamily, "", 7)
-		writePDFTextLines(pdf, x+3, y+12, labelWidth-6, 4, fitPDFTextLines(pdf, "DN: "+document.DeliveryNoteNumber+"  PO: "+document.PONumber, labelWidth-6, 1), "L")
-		writePDFTextLines(pdf, x+3, y+16, labelWidth-6, 4, fitPDFTextLines(pdf, label.RawMaterialCode+" - "+label.RawMaterialName, labelWidth-6, 2), "L")
-		writePDFTextLines(pdf, x+3, y+24, labelWidth-6, 4, fitPDFTextLines(pdf, "Lot: "+strconv.Itoa(label.LotNumber)+"  Qty: "+label.Quantity.String()+" "+label.BaseUnitCode, labelWidth-6, 1), "L")
-
-		barcodeImage, err := encodeKanbanBarcode(label.KanbanID)
+		qrImage, err := encodeKanbanQRImage(label.KanbanID)
 		if err != nil {
-			return nil, fmt.Errorf("encode Kanban %q: %w", label.KanbanID, err)
+			return nil, fmt.Errorf("encode Kanban QR %q: %w", label.KanbanID, err)
 		}
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		var barcodePNG bytes.Buffer
-		if err := png.Encode(&barcodePNG, barcodeImage); err != nil {
-			return nil, fmt.Errorf("render Kanban %q barcode: %w", label.KanbanID, err)
+		var qrPNG bytes.Buffer
+		if err := png.Encode(&qrPNG, qrImage); err != nil {
+			return nil, fmt.Errorf("render Kanban QR %q: %w", label.KanbanID, err)
 		}
-		imageName := "kanban-" + strconv.Itoa(index)
-		pdf.RegisterImageOptionsReader(imageName, fpdf.ImageOptions{ImageType: "PNG", ReadDpi: false}, bytes.NewReader(barcodePNG.Bytes()))
-		pdf.ImageOptions(imageName, x+5, y+29, labelWidth-10, 0, false, fpdf.ImageOptions{ImageType: "PNG", ReadDpi: false}, 0, "")
+		y := firstCardY + float64(slot)*(cardHeight+cardGap)
+		if err := writeKanbanCard(pdf, document, label, index, cardX, y, cardWidth, cardHeight, qrPNG.Bytes()); err != nil {
+			return nil, err
+		}
+		if slot < cardsPerPage-1 && index+1 < len(document.Labels) {
+			writeKanbanCutLine(pdf, y+cardHeight+cardGap/2)
+		}
 	}
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 	return outputPDF(pdf)
+}
+
+func writeKanbanCard(pdf *fpdf.Fpdf, document KanbanLabelDocument, label KanbanLabel, index int, x, y, width, height float64, qrPNG []byte) error {
+	pdf.SetDrawColor(39, 39, 42)
+	pdf.SetLineWidth(0.35)
+	pdf.Rect(x, y, width, height, "D")
+
+	const headerHeight = 15.0
+	pdf.SetFillColor(24, 24, 27)
+	pdf.Rect(x, y, width, headerHeight, "F")
+	pdf.SetTextColor(255, 255, 255)
+	pdf.SetXY(x+4, y+3)
+	pdf.SetFont(pdfFontFamily, "B", 15)
+	pdf.CellFormat(82, 8, "KANBAN CARD", "", 0, "L", false, 0, "")
+	pdf.SetFont(pdfFontFamily, "", 7)
+	pdf.CellFormat(32, 8, "KANBAN ID", "", 0, "R", false, 0, "")
+	pdf.SetFont(pdfFontFamily, "B", 12)
+	pdf.CellFormat(64, 8, label.KanbanID, "", 0, "R", false, 0, "")
+	pdf.SetTextColor(24, 24, 27)
+
+	qrX, qrY, qrSize := x+5, y+20, 43.0
+	pdf.Rect(qrX-1, qrY-1, qrSize+2, qrSize+2, "D")
+	imageName := "kanban-qr-" + strconv.Itoa(index)
+	pdf.RegisterImageOptionsReader(imageName, fpdf.ImageOptions{ImageType: "PNG", ReadDpi: false}, bytes.NewReader(qrPNG))
+	pdf.ImageOptions(imageName, qrX, qrY, qrSize, qrSize, false, fpdf.ImageOptions{ImageType: "PNG", ReadDpi: false}, 0, "")
+	pdf.SetXY(qrX-1, qrY+qrSize+2)
+	pdf.SetFont(pdfFontFamily, "B", 7)
+	pdf.CellFormat(qrSize+2, 5, label.KanbanID, "", 0, "C", false, 0, "")
+
+	detailX := x + 53
+	detailWidth := width - 58
+	pdf.SetXY(detailX, y+20)
+	pdf.SetFont(pdfFontFamily, "B", 7)
+	pdf.CellFormat(detailWidth, 5, "RAW MATERIAL", "", 1, "L", false, 0, "")
+	pdf.SetXY(detailX, y+25)
+	pdf.SetFont(pdfFontFamily, "B", 13)
+	pdf.CellFormat(detailWidth, 7, label.RawMaterialCode, "", 1, "L", false, 0, "")
+	pdf.SetFont(pdfFontFamily, "", 8)
+	description := fitPDFTextLines(pdf, label.RawMaterialName, detailWidth, 2)
+	writePDFTextLines(pdf, detailX, y+33, detailWidth, 5, description, "L")
+
+	infoY := y + 47
+	columnWidth := detailWidth / 2
+	pdf.Rect(detailX, infoY, columnWidth, 17, "D")
+	pdf.Rect(detailX+columnWidth, infoY, columnWidth, 17, "D")
+	pdf.SetXY(detailX+2, infoY+2)
+	pdf.SetFont(pdfFontFamily, "B", 7)
+	pdf.CellFormat(columnWidth-4, 4, "QUANTITY", "", 1, "L", false, 0, "")
+	pdf.SetXY(detailX+2, infoY+7)
+	pdf.SetFont(pdfFontFamily, "B", 13)
+	pdf.CellFormat(columnWidth-4, 7, formatPDFDecimal(label.Quantity, 6)+" "+label.BaseUnitCode, "", 0, "L", false, 0, "")
+	pdf.SetXY(detailX+columnWidth+2, infoY+2)
+	pdf.SetFont(pdfFontFamily, "B", 7)
+	pdf.CellFormat(columnWidth-4, 4, "LOT", "", 1, "L", false, 0, "")
+	pdf.SetXY(detailX+columnWidth+2, infoY+7)
+	pdf.SetFont(pdfFontFamily, "B", 13)
+	pdf.CellFormat(columnWidth-4, 7, strconv.Itoa(label.LotNumber), "", 0, "L", false, 0, "")
+
+	referenceY := y + 67
+	pdf.SetXY(detailX, referenceY)
+	pdf.SetFont(pdfFontFamily, "B", 7)
+	pdf.CellFormat(25, 5, "DELIVERY NOTE", "", 0, "L", false, 0, "")
+	pdf.SetFont(pdfFontFamily, "", 8)
+	pdf.CellFormat(39, 5, document.DeliveryNoteNumber, "", 0, "L", false, 0, "")
+	pdf.SetFont(pdfFontFamily, "B", 7)
+	pdf.CellFormat(27, 5, "PURCHASE ORDER", "", 0, "L", false, 0, "")
+	pdf.SetFont(pdfFontFamily, "", 8)
+	pdf.CellFormat(detailWidth-91, 5, document.PONumber, "", 1, "L", false, 0, "")
+	return pdf.Error()
+}
+
+func writeKanbanCutLine(pdf *fpdf.Fpdf, y float64) {
+	pdf.SetDrawColor(113, 113, 122)
+	pdf.SetDashPattern([]float64{2, 2}, 0)
+	pdf.Line(12, y, 198, y)
+	pdf.SetDashPattern([]float64{}, 0)
+	pdf.SetTextColor(113, 113, 122)
+	pdf.SetXY(84, y-2.5)
+	pdf.SetFont(pdfFontFamily, "", 6)
+	pdf.CellFormat(42, 5, "CUT HERE", "", 0, "C", false, 0, "")
+	pdf.SetTextColor(24, 24, 27)
 }
 
 func validateKanbanLabelExportSize(labels []KanbanLabel) error {

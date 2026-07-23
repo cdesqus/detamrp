@@ -128,6 +128,32 @@ func TestDeliveryNoteQRPNG(t *testing.T) {
 	}
 }
 
+func TestKanbanQRUsesExactKanbanID(t *testing.T) {
+	encoded, err := encodeKanbanQR("KB-202607-00028")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if encoded.Content() != "KB-202607-00028" {
+		t.Fatalf("QR content = %q", encoded.Content())
+	}
+}
+
+func TestKanbanQRRejectsEmptyID(t *testing.T) {
+	if _, err := encodeKanbanQR("  "); err == nil {
+		t.Fatal("empty Kanban ID was accepted")
+	}
+}
+
+func TestKanbanQRPNG(t *testing.T) {
+	result, err := kanbanQRPNG("KB-202607-00028")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result) < 8 || !bytes.Equal(result[:8], []byte{137, 80, 78, 71, 13, 10, 26, 10}) {
+		t.Fatal("Kanban QR is not PNG data")
+	}
+}
+
 func TestDeliveryNoteUnitTotals(t *testing.T) {
 	lines := []DeliveryNoteLine{
 		{BaseUnitCode: "PCS", TotalQuantity: decimal.NewFromInt(20)},
@@ -238,7 +264,7 @@ func TestRenderPDFsEmbedUnicodeText(t *testing.T) {
 
 	assertEmbeddedUnicodeText(t, "PO", po, "PT Maju Sejahterá", "Harap simpan pada suhu ±5 °C – jangan terkena air", "José Pembeli", "RM-Ø", "Baja élit")
 	assertEmbeddedUnicodeText(t, "delivery note", dn, "PT Maju Sejahterá", "RM-Ø", "Baja élit")
-	assertEmbeddedUnicodeText(t, "labels", labelPDF, "RM-Ø - Baja élit")
+	assertEmbeddedUnicodeText(t, "labels", labelPDF, "RM-Ø", "Baja élit")
 }
 
 func TestRenderPDFsKeepLongTextWithinReadableLayout(t *testing.T) {
@@ -306,7 +332,7 @@ func TestFitPDFTextLinesUsesMeasuredWidthAndMarksTruncation(t *testing.T) {
 	}
 }
 
-func TestRenderKanbanLabelsPDFProducesOneOrderedCode128LabelPerLot(t *testing.T) {
+func TestRenderKanbanLabelsPDFProducesOneOrderedQRCardPerLot(t *testing.T) {
 	document := KanbanLabelDocument{
 		DeliveryNoteNumber: "DN-202607-00001", PONumber: "PO-202607-00001",
 		Labels: []KanbanLabel{
@@ -316,13 +342,13 @@ func TestRenderKanbanLabelsPDFProducesOneOrderedCode128LabelPerLot(t *testing.T)
 		},
 	}
 
-	original := encodeKanbanBarcode
+	original := encodeKanbanQRImage
 	var encoded []string
-	encodeKanbanBarcode = func(value string) (image.Image, error) {
+	encodeKanbanQRImage = func(value string) (image.Image, error) {
 		encoded = append(encoded, value)
-		return image.NewRGBA(image.Rect(0, 0, 420, 72)), nil
+		return image.NewRGBA(image.Rect(0, 0, 260, 260)), nil
 	}
-	t.Cleanup(func() { encodeKanbanBarcode = original })
+	t.Cleanup(func() { encodeKanbanQRImage = original })
 
 	result, err := RenderKanbanLabelsPDF(document)
 	if err != nil {
@@ -331,13 +357,85 @@ func TestRenderKanbanLabelsPDFProducesOneOrderedCode128LabelPerLot(t *testing.T)
 	if !bytes.HasPrefix(result, []byte("%PDF-")) {
 		t.Fatal("not a PDF")
 	}
-	if got := pdfTextCount(result, "KANBAN LABEL"); got != len(document.Labels) {
-		t.Fatalf("labels=%d, want %d", got, len(document.Labels))
+	if got := pdfTextCount(result, "KANBAN CARD"); got != len(document.Labels) {
+		t.Fatalf("cards=%d, want %d", got, len(document.Labels))
 	}
 	for index, label := range document.Labels {
 		if encoded[index] != label.KanbanID {
 			t.Fatalf("encoded[%d]=%q, want %q", index, encoded[index], label.KanbanID)
 		}
+	}
+}
+
+func TestRenderWideKanbanCard(t *testing.T) {
+	document := KanbanLabelDocument{
+		DeliveryNoteNumber: "DN-202607-00004",
+		PONumber:           "PO-202607-00009",
+		Labels: []KanbanLabel{{
+			KanbanID: "KB-202607-00028", RawMaterialCode: "BRG-123-00",
+			RawMaterialName: "COIL MATERIAL", Quantity: decimal.RequireFromString("5.000000"),
+			BaseUnitCode: "PC", LotNumber: 1,
+		}},
+	}
+	result, err := RenderKanbanLabelsPDF(document)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, text := range []string{
+		"KANBAN CARD", "KANBAN ID", "RAW MATERIAL", "QUANTITY", "LOT",
+		"DELIVERY NOTE", "PURCHASE ORDER", "KB-202607-00028", "5 PC",
+	} {
+		if !pdfContainsText(result, text) {
+			t.Errorf("missing Kanban Card text %q", text)
+		}
+	}
+	if pdfContainsText(result, "KANBAN LABEL") {
+		t.Fatal("legacy Kanban Label title is still present")
+	}
+}
+
+func TestKanbanCardPagination(t *testing.T) {
+	document := KanbanLabelDocument{DeliveryNoteNumber: "DN-PAGED", PONumber: "PO-PAGED"}
+	for index := 1; index <= 4; index++ {
+		document.Labels = append(document.Labels, KanbanLabel{
+			KanbanID: fmt.Sprintf("KB-PAGED-%02d", index), RawMaterialCode: "RM-PAGED",
+			RawMaterialName: "Wide Kanban Card", Quantity: decimal.NewFromInt(5),
+			BaseUnitCode: "PC", LotNumber: index,
+		})
+	}
+	result, err := RenderKanbanLabelsPDF(document)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pages := bytes.Count(result, []byte("/Type /Page\n")); pages != 2 {
+		t.Fatalf("page count = %d, want 2", pages)
+	}
+	if got := pdfTextCount(result, "KANBAN CARD"); got != 4 {
+		t.Fatalf("card count = %d, want 4", got)
+	}
+	if !pdfContainsText(result, "KB-PAGED-04") || !pdfContainsText(result, "CUT HERE") {
+		t.Fatal("fourth card or cut line is missing")
+	}
+}
+
+func TestKanbanCardsDoNotUseCode128(t *testing.T) {
+	original := encodeKanbanBarcode
+	calls := 0
+	encodeKanbanBarcode = func(string) (image.Image, error) {
+		calls++
+		return nil, errors.New("Code128 must not be used")
+	}
+	t.Cleanup(func() { encodeKanbanBarcode = original })
+
+	_, err := RenderKanbanLabelsPDF(KanbanLabelDocument{Labels: []KanbanLabel{{
+		KanbanID: "KB-QR-ONLY", RawMaterialCode: "RM", RawMaterialName: "QR only",
+		Quantity: decimal.NewFromInt(1), BaseUnitCode: "PC", LotNumber: 1,
+	}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if calls != 0 {
+		t.Fatalf("Code128 encoder called %d times", calls)
 	}
 }
 
@@ -347,13 +445,13 @@ func TestRenderKanbanLabelsPDFRejectsOversizedExportBeforeEncoding(t *testing.T)
 		document.Labels[index].KanbanID = fmt.Sprintf("KB-%04d", index+1)
 	}
 
-	original := encodeKanbanBarcode
+	original := encodeKanbanQRImage
 	encodeCalls := 0
-	encodeKanbanBarcode = func(string) (image.Image, error) {
+	encodeKanbanQRImage = func(string) (image.Image, error) {
 		encodeCalls++
-		return nil, errors.New("barcode encoding must not start")
+		return nil, errors.New("QR encoding must not start")
 	}
-	t.Cleanup(func() { encodeKanbanBarcode = original })
+	t.Cleanup(func() { encodeKanbanQRImage = original })
 
 	_, err := RenderKanbanLabelsPDF(document)
 	var limit DocumentExportLimitError
@@ -361,7 +459,7 @@ func TestRenderKanbanLabelsPDFRejectsOversizedExportBeforeEncoding(t *testing.T)
 		t.Fatalf("oversized export error = %v, want safe 1000-label limit", err)
 	}
 	if encodeCalls != 0 {
-		t.Fatalf("oversized export encoded %d barcodes, want none", encodeCalls)
+		t.Fatalf("oversized export encoded %d QR codes, want none", encodeCalls)
 	}
 }
 
@@ -371,32 +469,32 @@ func TestRenderKanbanLabelsPDFStopsAfterRequestCancellation(t *testing.T) {
 		{KanbanID: "KB-0002"},
 	}}
 	ctx, cancel := context.WithCancel(context.Background())
-	original := encodeKanbanBarcode
+	original := encodeKanbanQRImage
 	encodeCalls := 0
-	encodeKanbanBarcode = func(string) (image.Image, error) {
+	encodeKanbanQRImage = func(string) (image.Image, error) {
 		encodeCalls++
 		cancel()
-		return image.NewRGBA(image.Rect(0, 0, 420, 72)), nil
+		return image.NewRGBA(image.Rect(0, 0, 260, 260)), nil
 	}
-	t.Cleanup(func() { encodeKanbanBarcode = original })
+	t.Cleanup(func() { encodeKanbanQRImage = original })
 
 	_, err := renderKanbanLabelsPDF(ctx, document)
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("cancelled render error = %v, want context cancellation", err)
 	}
 	if encodeCalls != 1 {
-		t.Fatalf("cancelled render encoded %d barcodes, want one", encodeCalls)
+		t.Fatalf("cancelled render encoded %d QR codes, want one", encodeCalls)
 	}
 }
 
 func TestRenderKanbanLabelsPDFStopsBeforeSerializationAfterLateCancellation(t *testing.T) {
 	document := KanbanLabelDocument{Labels: []KanbanLabel{{KanbanID: "KB-0001"}}}
 	ctx, cancel := context.WithCancel(context.Background())
-	original := encodeKanbanBarcode
-	encodeKanbanBarcode = func(string) (image.Image, error) {
-		return cancelOnPixelImage{Image: image.NewRGBA(image.Rect(0, 0, 420, 72)), cancel: cancel}, nil
+	original := encodeKanbanQRImage
+	encodeKanbanQRImage = func(string) (image.Image, error) {
+		return cancelOnPixelImage{Image: image.NewRGBA(image.Rect(0, 0, 260, 260)), cancel: cancel}, nil
 	}
-	t.Cleanup(func() { encodeKanbanBarcode = original })
+	t.Cleanup(func() { encodeKanbanQRImage = original })
 
 	result, err := renderKanbanLabelsPDF(ctx, document)
 	if !errors.Is(err, context.Canceled) {
