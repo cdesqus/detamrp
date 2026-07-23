@@ -29,7 +29,7 @@ func RegisterRoutes(router *gin.Engine, store *Store, authn Authenticator) {
 		c.Set(rbac.ContextPermissionsKey, user.Permissions)
 		c.Next()
 	}
-	group := router.Group("/reports/receiving", middleware, rbac.RequirePermissions("receiving.view"))
+	group := router.Group("/reports", middleware, rbac.RequirePermissions("receiving.view"))
 	handler := func(c *gin.Context, pdf bool) {
 		filter, fields := ParseFilter(c.Request.URL.Query())
 		if len(fields) > 0 {
@@ -54,6 +54,6 @@ func RegisterRoutes(router *gin.Engine, store *Store, authn Authenticator) {
 		c.Header("Content-Disposition", `inline; filename="receiving-report.pdf"`)
 		c.Data(http.StatusOK, "application/pdf", data)
 	}
-	group.GET("", func(c *gin.Context) { handler(c, false) })
-	group.GET(".pdf", func(c *gin.Context) { handler(c, true) })
+	group.GET("/receiving", func(c *gin.Context) { handler(c, false) })
+	group.GET("/receiving.pdf", func(c *gin.Context) { handler(c, true) })
 }
