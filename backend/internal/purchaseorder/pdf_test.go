@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"image"
 	"image/color"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -98,6 +99,108 @@ func TestRenderDeliveryNotePDFIncludesEveryLine(t *testing.T) {
 		if !pdfContainsText(result, materialCode) {
 			t.Fatalf("delivery note omitted %s", materialCode)
 		}
+	}
+}
+
+func TestDeliveryNoteQRUsesExactDNNumber(t *testing.T) {
+	encoded, err := encodeDeliveryNoteQR("DN-202607-00002")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if encoded.Content() != "DN-202607-00002" {
+		t.Fatalf("QR content = %q", encoded.Content())
+	}
+}
+
+func TestDeliveryNoteQRRejectsEmptyDNNumber(t *testing.T) {
+	if _, err := encodeDeliveryNoteQR("   "); err == nil {
+		t.Fatal("empty DN number was accepted")
+	}
+}
+
+func TestDeliveryNoteQRPNG(t *testing.T) {
+	result, err := deliveryNoteQRPNG("DN-202607-00002")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result) < 8 || !bytes.Equal(result[:8], []byte{137, 80, 78, 71, 13, 10, 26, 10}) {
+		t.Fatal("QR is not PNG data")
+	}
+}
+
+func TestDeliveryNoteUnitTotals(t *testing.T) {
+	lines := []DeliveryNoteLine{
+		{BaseUnitCode: "PCS", TotalQuantity: decimal.NewFromInt(20)},
+		{BaseUnitCode: "KG", TotalQuantity: decimal.NewFromInt(10)},
+		{BaseUnitCode: "KG", TotalQuantity: decimal.NewFromInt(5)},
+	}
+	got := deliveryNoteUnitTotals(lines)
+	want := []string{"KG 15", "PCS 20"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("totals = %#v, want %#v", got, want)
+	}
+}
+
+func TestRenderDeliveryNotePDFUsesModernLayout(t *testing.T) {
+	document := DeliveryNoteDocument{
+		DeliveryNoteNumber: "DN-MODERN", PONumber: "PO-MODERN", SupplierName: "PT Modern",
+		ExpectedDeliveryDate: time.Date(2026, 7, 25, 0, 0, 0, 0, time.UTC),
+		IssuedAt:             time.Date(2026, 7, 23, 0, 0, 0, 0, time.UTC),
+		Lines: []DeliveryNoteLine{
+			{RawMaterialCode: "RM-PCS", RawMaterialName: "Modern Part", BaseUnitCode: "PCS", QtyPerKanban: decimal.NewFromInt(10), TotalKanban: decimal.NewFromInt(2), TotalQuantity: decimal.NewFromInt(20)},
+			{RawMaterialCode: "RM-KG", RawMaterialName: "Modern Coil", BaseUnitCode: "KG", QtyPerKanban: decimal.NewFromInt(5), TotalKanban: decimal.NewFromInt(3), TotalQuantity: decimal.NewFromInt(15)},
+		},
+	}
+
+	result, err := RenderDeliveryNotePDF(document)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, text := range []string{
+		"Order Stock", "DELIVERY NOTE", "SCAN FOR RECEIVING", "MATERIAL DETAILS",
+		"REMARKS", "SUPPLIER", "Prepared By", "RECEIVER", "Received By",
+		"Total Kanban", "Total Quantity", "PCS 20", "KG 15",
+	} {
+		if !pdfContainsText(result, text) {
+			t.Errorf("missing modern DN text %q", text)
+		}
+	}
+	for _, redundant := range []string{"10.000000", "2.000000", "20.000000"} {
+		if pdfContainsText(result, redundant) {
+			t.Errorf("found redundant quantity %q", redundant)
+		}
+	}
+}
+
+func TestDeliveryNotePagination(t *testing.T) {
+	lines := make([]DeliveryNoteLine, 45)
+	for index := range lines {
+		lines[index] = DeliveryNoteLine{
+			RawMaterialCode: fmt.Sprintf("RM-%03d", index+1),
+			RawMaterialName: "Long production material description requiring a wrapped table row",
+			BaseUnitCode:    "PCS",
+			QtyPerKanban:    decimal.NewFromInt(10),
+			TotalKanban:     decimal.NewFromInt(2),
+			TotalQuantity:   decimal.NewFromInt(20),
+		}
+	}
+	result, err := RenderDeliveryNotePDF(DeliveryNoteDocument{
+		DeliveryNoteNumber: "DN-PAGED",
+		PONumber:           "PO-PAGED",
+		SupplierName:       "PT Pagination",
+		Lines:              lines,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pages := bytes.Count(result, []byte("/Type /Page\n")); pages < 2 {
+		t.Fatalf("page count = %d, want multiple pages", pages)
+	}
+	if !pdfContainsText(result, "DELIVERY NOTE / CONTINUED") {
+		t.Fatal("missing continuation heading")
+	}
+	if !pdfContainsText(result, "RM-045") || !pdfContainsText(result, "REMARKS") || !pdfContainsText(result, "RECEIVER") {
+		t.Fatal("final row or footer is missing")
 	}
 }
 

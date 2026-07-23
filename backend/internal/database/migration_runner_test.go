@@ -46,8 +46,8 @@ func TestLiveSchemaMigrationsAreAppliedExactlyOnce(t *testing.T) {
 	if err := pool.QueryRow(context.Background(), `SELECT count(*),count(DISTINCT version),min(version),max(version) FROM schema_migrations`).Scan(&count, &distinct, &minimum, &maximum); err != nil {
 		t.Fatalf("read schema migrations: %v", err)
 	}
-	if count != 8 || distinct != 8 || minimum != 1 || maximum != 8 {
-		t.Fatalf("schema migration versions = count %d distinct %d range %d-%d, want eight unique versions 1-8", count, distinct, minimum, maximum)
+	if count != 9 || distinct != 9 || minimum != 1 || maximum != 9 {
+		t.Fatalf("schema migration versions = count %d distinct %d range %d-%d, want nine unique versions 1-9", count, distinct, minimum, maximum)
 	}
 }
 

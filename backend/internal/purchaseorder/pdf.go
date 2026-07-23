@@ -7,12 +7,14 @@ import (
 	"fmt"
 	"image"
 	"image/png"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/boombuler/barcode"
 	"github.com/boombuler/barcode/code128"
+	"github.com/boombuler/barcode/qr"
 	"github.com/go-pdf/fpdf"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -190,24 +192,217 @@ func writePDFSectionTitle(pdf *fpdf.Fpdf, title string) {
 func RenderDeliveryNotePDF(document DeliveryNoteDocument) ([]byte, error) {
 	pdf := newA4PDF(document.DeliveryNoteNumber)
 	pdf.AddPage()
-	pdf.SetFont(pdfFontFamily, "B", 16)
-	pdf.CellFormat(0, 9, "DELIVERY NOTE", "", 1, "C", false, 0, "")
-	pdf.SetFont(pdfFontFamily, "", 10)
-	writeKeyValue(pdf, "DN Number", document.DeliveryNoteNumber, 3)
-	writeKeyValue(pdf, "PO Number", document.PONumber, 3)
-	writeKeyValue(pdf, "Supplier", document.SupplierName, 3)
-	writeKeyValue(pdf, "Expected Delivery", formatPDFDate(document.ExpectedDeliveryDate), 3)
-	writeKeyValue(pdf, "Issued At", formatPDFDate(document.IssuedAt), 3)
-	pdf.Ln(3)
-
-	widths := []float64{24, 51, 16, 28, 25, 30}
-	headings := []string{"Material", "Description", "Unit", "Qty/Kanban", "Kanbans", "Total Qty"}
-	rows := make([][]string, 0, len(document.Lines))
-	for _, line := range document.Lines {
-		rows = append(rows, []string{line.RawMaterialCode, line.RawMaterialName, line.BaseUnitCode, line.QtyPerKanban.String(), line.TotalKanban.String(), line.TotalQuantity.String()})
+	qrPNG, err := deliveryNoteQRPNG(document.DeliveryNoteNumber)
+	if err != nil {
+		return nil, err
 	}
-	writePDFTable(pdf, widths, headings, rows)
+	writeDeliveryNoteHeader(pdf, document, qrPNG)
+	writePDFSectionTitle(pdf, "MATERIAL DETAILS")
+	widths := []float64{10, 29, 55, 16, 27, 22, 27}
+	headings := []string{"No.", "Material Code", "Description", "Unit", "Qty / Kanban", "Kanbans", "Total Qty"}
+	rows := make([][]string, 0, len(document.Lines))
+	for index, line := range document.Lines {
+		rows = append(rows, []string{
+			strconv.Itoa(index + 1),
+			line.RawMaterialCode,
+			line.RawMaterialName,
+			line.BaseUnitCode,
+			formatPDFDecimal(line.QtyPerKanban, 6),
+			formatPDFDecimal(line.TotalKanban, 0),
+			formatPDFDecimal(line.TotalQuantity, 6),
+		})
+	}
+	writeDeliveryNoteTable(pdf, widths, headings, rows)
+	writeDeliveryNoteFooter(pdf, document.Lines)
 	return outputPDF(pdf)
+}
+
+func writeDeliveryNoteHeader(pdf *fpdf.Fpdf, document DeliveryNoteDocument, qrPNG []byte) {
+	pdf.SetFillColor(24, 24, 27)
+	pdf.Rect(0, 0, 210, 32, "F")
+	pdf.SetTextColor(255, 255, 255)
+	pdf.SetXY(12, 7)
+	pdf.SetFont(pdfFontFamily, "B", 12)
+	pdf.CellFormat(55, 6, "Order Stock", "", 0, "L", false, 0, "")
+	pdf.SetFont(pdfFontFamily, "B", 17)
+	pdf.CellFormat(76, 7, "DELIVERY NOTE", "", 0, "C", false, 0, "")
+	pdf.SetFont(pdfFontFamily, "B", 9)
+	pdf.CellFormat(55, 6, document.DeliveryNoteNumber, "", 1, "R", false, 0, "")
+	pdf.SetX(67)
+	pdf.SetFont(pdfFontFamily, "", 7)
+	pdf.CellFormat(76, 5, "SUPPLIER SHIPPING DOCUMENT", "", 0, "C", false, 0, "")
+	pdf.SetTextColor(24, 24, 27)
+
+	pdf.SetY(38)
+	pdf.SetFont(pdfFontFamily, "B", 8)
+	pdf.CellFormat(92, 6, "DELIVERY INFORMATION", "", 0, "L", false, 0, "")
+	pdf.SetX(151)
+	pdf.CellFormat(47, 6, "SCAN FOR RECEIVING", "", 1, "C", false, 0, "")
+	pdf.SetY(45)
+	writeDeliveryNoteMeta(pdf, "Supplier", document.SupplierName)
+	writeDeliveryNoteMeta(pdf, "PO Number", document.PONumber)
+	writeDeliveryNoteMeta(pdf, "Expected Delivery", formatPDFDate(document.ExpectedDeliveryDate))
+	writeDeliveryNoteMeta(pdf, "Issued Date", formatPDFDate(document.IssuedAt))
+
+	imageName := "delivery-note-qr"
+	pdf.RegisterImageOptionsReader(imageName, fpdf.ImageOptions{ImageType: "PNG", ReadDpi: false}, bytes.NewReader(qrPNG))
+	pdf.ImageOptions(imageName, 158, 47, 32, 32, false, fpdf.ImageOptions{ImageType: "PNG", ReadDpi: false}, 0, "")
+	pdf.SetXY(151, 80)
+	pdf.SetFont(pdfFontFamily, "B", 7)
+	pdf.CellFormat(47, 4, document.DeliveryNoteNumber, "", 0, "C", false, 0, "")
+	pdf.SetY(88)
+}
+
+func writeDeliveryNoteMeta(pdf *fpdf.Fpdf, label, value string) {
+	y := pdf.GetY()
+	pdf.SetX(12)
+	pdf.SetFont(pdfFontFamily, "B", 8)
+	pdf.CellFormat(34, 6, label, "", 0, "L", false, 0, "")
+	pdf.SetFont(pdfFontFamily, "", 8)
+	pdf.CellFormat(94, 6, value, "", 1, "L", false, 0, "")
+	pdf.SetY(y + 7)
+}
+
+func deliveryNoteUnitTotals(lines []DeliveryNoteLine) []string {
+	totals := make(map[string]decimal.Decimal)
+	for _, line := range lines {
+		unit := strings.ToUpper(strings.TrimSpace(line.BaseUnitCode))
+		totals[unit] = totals[unit].Add(line.TotalQuantity)
+	}
+	units := make([]string, 0, len(totals))
+	for unit := range totals {
+		units = append(units, unit)
+	}
+	sort.Strings(units)
+	result := make([]string, 0, len(units))
+	for _, unit := range units {
+		result = append(result, strings.TrimSpace(unit+" "+formatPDFDecimal(totals[unit], 6)))
+	}
+	return result
+}
+
+func writeDeliveryNoteFooter(pdf *fpdf.Fpdf, lines []DeliveryNoteLine) {
+	const footerHeight = 75.0
+	ensurePDFPageRoom(pdf, footerHeight)
+	pdf.Ln(2)
+
+	totalKanban := decimal.Zero
+	for _, line := range lines {
+		totalKanban = totalKanban.Add(line.TotalKanban)
+	}
+	left, _, _, _ := pdf.GetMargins()
+	pdf.SetX(left)
+	pdf.SetFillColor(244, 244, 245)
+	pdf.SetFont(pdfFontFamily, "B", 8)
+	pdf.CellFormat(93, 7, "Total Kanban", "1", 0, "L", true, 0, "")
+	pdf.SetFont(pdfFontFamily, "", 8)
+	pdf.CellFormat(93, 7, formatPDFDecimal(totalKanban, 0), "1", 1, "R", false, 0, "")
+	pdf.SetX(left)
+	pdf.SetFont(pdfFontFamily, "B", 8)
+	pdf.CellFormat(93, 7, "Total Quantity", "1", 0, "L", true, 0, "")
+	pdf.SetFont(pdfFontFamily, "", 8)
+	pdf.CellFormat(93, 7, strings.Join(deliveryNoteUnitTotals(lines), "  |  "), "1", 1, "R", false, 0, "")
+
+	pdf.Ln(3)
+	pdf.SetFont(pdfFontFamily, "B", 8)
+	pdf.CellFormat(186, 6, "REMARKS", "1", 1, "L", true, 0, "")
+	pdf.CellFormat(186, 12, "", "1", 1, "L", false, 0, "")
+	pdf.Ln(4)
+	writeDeliveryNoteSignatureBoxes(pdf)
+}
+
+func writeDeliveryNoteTable(pdf *fpdf.Fpdf, widths []float64, headings []string, rows [][]string) {
+	writeHeader := func() {
+		pdf.SetFont(pdfFontFamily, "B", 7)
+		pdf.SetFillColor(244, 244, 245)
+		for index, heading := range headings {
+			pdf.CellFormat(widths[index], 7, heading, "1", 0, "C", true, 0, "")
+		}
+		pdf.Ln(-1)
+	}
+	writeHeader()
+	for _, values := range rows {
+		pdf.SetFont(pdfFontFamily, "", 7)
+		linesByCell := make([][]string, len(values))
+		rowHeight := 7.0
+		for index, value := range values {
+			linesByCell[index] = fitPDFTextLines(pdf, value, widths[index]-2, 3)
+			rowHeight = max(rowHeight, 2+float64(len(linesByCell[index]))*4)
+		}
+		if !pdfPageHasRoom(pdf, rowHeight) {
+			pdf.AddPage()
+			pdf.SetFont(pdfFontFamily, "B", 9)
+			pdf.CellFormat(0, 7, "DELIVERY NOTE / CONTINUED", "", 1, "L", false, 0, "")
+			pdf.SetFont(pdfFontFamily, "", 7)
+			pdf.CellFormat(0, 5, "Material details continued", "", 1, "L", false, 0, "")
+			pdf.Ln(2)
+			writeHeader()
+			pdf.SetFont(pdfFontFamily, "", 7)
+		}
+		x, y := pdf.GetX(), pdf.GetY()
+		for index, lines := range linesByCell {
+			pdf.Rect(x, y, widths[index], rowHeight, "D")
+			align := "L"
+			if index == 0 || index >= 3 {
+				align = "C"
+			}
+			writePDFTextLines(pdf, x+1, y+1, widths[index]-2, 4, lines, align)
+			x += widths[index]
+		}
+		left, _, _, _ := pdf.GetMargins()
+		pdf.SetXY(left, y+rowHeight)
+	}
+}
+
+func writeDeliveryNoteSignatureBoxes(pdf *fpdf.Fpdf) {
+	left, _, _, _ := pdf.GetMargins()
+	baseY := pdf.GetY()
+	xPositions := []float64{left, left + 96}
+	headings := []string{"SUPPLIER", "RECEIVER"}
+	subheadings := []string{"Prepared By", "Received By"}
+	for index, x := range xPositions {
+		y := baseY
+		pdf.SetXY(x, y)
+		pdf.SetFillColor(244, 244, 245)
+		pdf.SetFont(pdfFontFamily, "B", 8)
+		pdf.CellFormat(90, 6, headings[index], "1", 1, "C", true, 0, "")
+		pdf.SetXY(x, y+6)
+		pdf.SetFont(pdfFontFamily, "", 7)
+		pdf.CellFormat(90, 5, subheadings[index], "1", 1, "C", false, 0, "")
+		pdf.Rect(x, y+11, 90, 17, "D")
+		pdf.SetXY(x+2, y+28)
+		pdf.CellFormat(43, 5, "Name:", "1", 0, "L", false, 0, "")
+		pdf.CellFormat(45, 5, "Date:", "1", 0, "L", false, 0, "")
+	}
+	pdf.SetXY(left, baseY+34)
+}
+
+func encodeDeliveryNoteQR(value string) (barcode.Barcode, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil, errors.New("delivery note number is required")
+	}
+	encoded, err := qr.Encode(value, qr.M, qr.Auto)
+	if err != nil {
+		return nil, fmt.Errorf("encode delivery note QR %q: %w", value, err)
+	}
+	scaled, err := barcode.Scale(encoded, 220, 220)
+	if err != nil {
+		return nil, fmt.Errorf("scale delivery note QR %q: %w", value, err)
+	}
+	return scaled, nil
+}
+
+func deliveryNoteQRPNG(value string) ([]byte, error) {
+	encoded, err := encodeDeliveryNoteQR(value)
+	if err != nil {
+		return nil, err
+	}
+	var output bytes.Buffer
+	if err := png.Encode(&output, encoded); err != nil {
+		return nil, fmt.Errorf("render delivery note QR %q: %w", value, err)
+	}
+	return output.Bytes(), nil
 }
 
 var encodeKanbanBarcode = func(value string) (image.Image, error) {
