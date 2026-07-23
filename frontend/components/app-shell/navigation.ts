@@ -12,6 +12,7 @@ export const navigationGroups: NavigationGroup[] = [
   ] },
   { label: 'Procurement', icon: 'clipboard', collapsible: true, items: [{ label: 'Supplier Orders', href: '/supplier-orders', icon: 'clipboard' }] },
   { label: 'Logistics', icon: 'package', collapsible: true, items: [
+    { label: 'Stock Inventory', href: '/inventory', icon: 'package' },
     { label: 'Receiving', href: '/receiving', icon: 'receiving' },
     { label: 'Outgoing Material', href: '/outgoing-material', icon: 'outgoing' }
   ] },

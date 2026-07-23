@@ -36,6 +36,7 @@ describe('AppShell', () => {
   });
 
   it('orders master data first and keeps approval and delivery notes out of the sidebar', async () => {
+    currentPath = '/inventory';
     render(<AppShell title="Dashboard"><div>content</div></AppShell>);
     await screen.findByText('Administrator');
     const sidebar = screen.getByLabelText('Main navigation');
@@ -44,6 +45,7 @@ describe('AppShell', () => {
     expect(text.indexOf('Data Master')).toBeLessThan(text.indexOf('Procurement'));
     expect(text.indexOf('Procurement')).toBeLessThan(text.indexOf('Logistics'));
     expect(text.indexOf('Logistics')).toBeLessThan(text.indexOf('Reports'));
+    expect(text.indexOf('Stock Inventory')).toBeLessThan(text.indexOf('Receiving'));
     expect(screen.queryByRole('link', { name: 'Delivery Notes' })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Approval Inbox' })).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Dashboard' }).querySelector('svg')).toBeInTheDocument();

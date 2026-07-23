@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"order-stock/backend/internal/inventory"
 )
 
 func TestHealth(t *testing.T) {
@@ -22,5 +24,16 @@ func TestHealth(t *testing.T) {
 	}
 	if response["status"] != "ok" {
 		t.Fatalf("expected healthy response, got %q", response["status"])
+	}
+}
+
+func TestWithInventoryStoreRegistersConfiguration(t *testing.T) {
+	store := &inventory.Store{}
+	config := serverConfig{}
+
+	WithInventoryStore(store)(&config)
+
+	if config.inventoryStore != store {
+		t.Fatal("inventory store was not registered")
 	}
 }
