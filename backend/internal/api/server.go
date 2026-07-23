@@ -11,6 +11,7 @@ import (
 	"order-stock/backend/internal/outgoing"
 	"order-stock/backend/internal/purchaseorder"
 	"order-stock/backend/internal/receiving"
+	"order-stock/backend/internal/report"
 	"order-stock/backend/internal/settings"
 )
 
@@ -31,6 +32,7 @@ type serverConfig struct {
 	receivingStore       *receiving.Store
 	outgoingStore        *outgoing.Store
 	inventoryStore       *inventory.Store
+	reportStore          *report.Store
 }
 
 type ServerOption func(*serverConfig)
@@ -66,6 +68,9 @@ func WithOutgoingStore(store *outgoing.Store) ServerOption {
 }
 func WithInventoryStore(store *inventory.Store) ServerOption {
 	return func(c *serverConfig) { c.inventoryStore = store }
+}
+func WithReportStore(store *report.Store) ServerOption {
+	return func(c *serverConfig) { c.reportStore = store }
 }
 
 func NewServer(options ...ServerOption) http.Handler {
@@ -103,6 +108,9 @@ func NewServer(options ...ServerOption) http.Handler {
 		}
 		if config.inventoryStore != nil {
 			inventory.RegisterRoutes(router, config.inventoryStore, config.authenticator)
+		}
+		if config.reportStore != nil {
+			report.RegisterRoutes(router, config.reportStore, config.authenticator)
 		}
 	}
 	return router
