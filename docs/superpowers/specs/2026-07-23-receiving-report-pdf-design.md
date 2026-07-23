@@ -6,14 +6,16 @@ Implement one report for the MVP: Receiving Report. Do not add separate Supplier
 
 ## Screen
 
-The Reports page shows actual completed receiving transactions in a compact table. Filters are:
+The Reports page initially shows only the filter panel and must not fetch or display receiving transactions automatically. Filters are:
 
-- From Date
-- To Date
+- From Date (required)
+- To Date (required)
 - Supplier
 - Reference search covering Receiving Number, DN Number, and PO Number
 
-Actions are Apply Filters, Reset, and Export PDF. The supplier filter is populated from active master suppliers. The table displays:
+Apply Filters becomes visually active only after both required dates are filled. Supplier and Reference remain optional. After a successful Apply Filters action, the page displays the matching results table and enables Export PDF. Reset clears the filters, hides the results and export action, and restores the initial filter-only state.
+
+The supplier filter is populated from active master suppliers. The table displays:
 
 - Receiving Number
 - Receiving Date
@@ -38,7 +40,7 @@ Endpoints:
 - `GET /reports/receiving` returns filtered JSON rows and totals.
 - `GET /reports/receiving.pdf` returns the same filtered result as an A4 landscape PDF.
 
-Accepted query parameters are `fromDate`, `toDate`, `supplierId`, and `search`. Invalid dates or a date range where From Date exceeds To Date return a typed validation response.
+Accepted query parameters are `fromDate`, `toDate`, `supplierId`, and `search`. The report endpoints require both dates. Missing or invalid dates, or a date range where From Date exceeds To Date, return a typed validation response.
 
 ## PDF
 
@@ -66,4 +68,4 @@ Long reports continue across pages with the table header repeated. Empty filtere
 - Repository filtering, tenant isolation, flattened material rows, and totals.
 - HTTP query validation and PDF response headers.
 - PDF content, empty-state export, and pagination.
-- Frontend loading, filtering, reset, data table, error state, and PDF export URL.
+- Frontend initial filter-only state, required-date behavior, no automatic report fetch, filtering, reset, data table, error state, and PDF export URL.
