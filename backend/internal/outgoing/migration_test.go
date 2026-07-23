@@ -17,3 +17,19 @@ func TestMigrationDefinesOutgoingAndRLS(t *testing.T) {
 		}
 	}
 }
+
+func TestOptionalDestinationMigration(t *testing.T) {
+	b, err := os.ReadFile("../../../database/migrations/009_outgoing_optional_destination.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sql := strings.ToLower(string(b))
+	for _, required := range []string{
+		"drop constraint if exists outgoing_sessions_destination_check",
+		"check (length(trim(destination)) <= 120)",
+	} {
+		if !strings.Contains(sql, required) {
+			t.Errorf("missing %q", required)
+		}
+	}
+}
