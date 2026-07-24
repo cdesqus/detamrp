@@ -25,12 +25,12 @@ The remaining existing business columns follow: Supplier, Order Date, Expected D
 
 ### Actions
 
-Actions use compact icons with accessible labels and hover tooltips.
+The Actions cell contains one compact `Action ▾` button. It opens a single menu containing every action so the column stays narrow and users do not need to interpret an ambiguous plus, ellipsis, or gear icon.
 
-- Open detail is always available.
-- Edit is enabled only for Draft orders and users with `po.edit_draft`.
-- Cancel is enabled only for Draft orders and users with `po.edit_draft`; it retains the existing confirmation dialog.
-- The envelope opens a small action popover that always renders both choices:
+- Open Detail is always available.
+- Edit Order is enabled only for Draft orders and users with `po.edit_draft`.
+- Cancel Draft is enabled only for Draft orders and users with `po.edit_draft`; it retains the existing confirmation dialog and is visually separated from routine actions.
+- The menu always renders both messaging choices:
   - Send to Approval is enabled only for Draft orders and users with `po.submit`; it uses the existing submit endpoint.
   - Send to Supplier is applicable after approval, including Partially Received and Fully Received orders, but remains disabled until the supplier email endpoint exists.
   - After SMTP and Email Log are implemented, the same action becomes Send or Resend to Supplier without restructuring the table.
@@ -40,7 +40,7 @@ Actions use compact icons with accessible labels and hover tooltips.
 
 ### Documents
 
-One compact Docs icon opens a popover containing three clearly named entries:
+One compact `Docs ▾` button opens a popover containing three clearly named entries:
 
 - Purchase Order PDF is always available.
 - Delivery Note PDF is available after approval and document generation.
@@ -61,7 +61,7 @@ Unavailable documents remain visible but disabled. Available entries open the PD
 
 - Tables remain dense and modern; do not enlarge rows, headings, buttons, or typography.
 - Actions are positioned on the left after the row number.
-- Icon controls are reduced to a dense operational size and document controls retain short labels where they improve recognition.
+- `Action ▾` and `Docs ▾` are compact text controls; generic plus, ellipsis, and gear icons are not used.
 - Tooltips and accessible names describe every icon.
 - Horizontal scrolling remains available for wide tables.
 
