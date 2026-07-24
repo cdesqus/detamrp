@@ -75,13 +75,13 @@ describe('supplier order UI', () => {
 
     await user.click(within(approvedEmptyRow).getByRole('button', { name: 'Documents for PO-APPROVED-EMPTY' }));
     expect(within(approvedEmptyRow).getByRole('link', { name: 'Purchase Order PDF for PO-APPROVED-EMPTY' })).toHaveAttribute('target', '_blank');
-    expect(within(approvedEmptyRow).getByRole('button', { name: 'Delivery Note PDF' })).toBeDisabled();
+    expect(within(approvedEmptyRow).getByText('Delivery Note PDF')).toHaveAttribute('aria-disabled', 'true');
     await user.click(within(oversizedRow).getByRole('button', { name: 'Documents for PO-APPROVED-OVERSIZED' }));
     expect(within(oversizedRow).getByRole('link', { name: 'Delivery Note PDF for PO-APPROVED-OVERSIZED' })).toBeInTheDocument();
-    expect(within(oversizedRow).getByRole('button', { name: 'Kanban Labels PDF' })).toBeDisabled();
+    expect(within(oversizedRow).getByText('Kanban Labels PDF')).toHaveAttribute('aria-disabled', 'true');
     await user.click(within(pendingRow).getByRole('button', { name: 'Documents for PO-PENDING' }));
     expect(within(pendingRow).getByRole('link', { name: 'Purchase Order PDF for PO-PENDING' })).toHaveAttribute('target', '_blank');
-    expect(within(pendingRow).getByRole('button', { name: 'Delivery Note PDF' })).toBeDisabled();
+    expect(within(pendingRow).getByText('Delivery Note PDF')).toHaveAttribute('aria-disabled', 'true');
   });
 
   it('cancels drafts from a compact row menu once and reloads the list', async () => {
@@ -136,7 +136,21 @@ describe('supplier order UI', () => {
 
     const actions = await screen.findByRole('button', { name: 'Actions for PO-DRAFT' });
     await userEvent.click(actions);
-    expect(screen.getByRole('button', { name: 'Cancel Draft' })).toBeDisabled();
+    expect(screen.getByText('Cancel Draft')).toHaveAttribute('aria-disabled', 'true');
+  });
+
+  it('keeps unavailable approval and supplier actions visible in the row menu', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response({ items: [
+      { id: 'po-approved', poNumber: 'PO-APPROVED', supplierId: 'supplier-1', supplierName: 'PT Prima', orderDate: '2026-07-21', expectedDeliveryDate: '2026-07-25', status: 'APPROVED', currency: 'IDR' }
+    ], total: 1 })));
+    const user = userEvent.setup();
+
+    render(<SupplierOrderIndex permissions={['po.view', 'po.edit_draft', 'po.submit']} />);
+    await user.click(await screen.findByRole('button', { name: 'Actions for PO-APPROVED' }));
+
+    expect(screen.getByText('Send to Approval')).toHaveAttribute('aria-disabled', 'true');
+    expect(screen.getByText('Send to Supplier')).toHaveAttribute('aria-disabled', 'true');
+    expect(screen.getByText('Cancel Draft')).toHaveAttribute('aria-disabled', 'true');
   });
 
   it('shows cancellation errors and returns focus when Escape closes the confirmation', async () => {
