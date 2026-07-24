@@ -1,4 +1,4 @@
-export type IconName = 'dashboard' | 'units' | 'supplier' | 'package' | 'clipboard' | 'receiving' | 'outgoing' | 'report' | 'settings' | 'users' | 'shield' | 'mail' | 'history' | 'bell' | 'chevron-left' | 'chevron-right' | 'menu';
+export type IconName = 'dashboard' | 'units' | 'supplier' | 'package' | 'clipboard' | 'receiving' | 'outgoing' | 'report' | 'settings' | 'users' | 'shield' | 'mail' | 'history' | 'bell' | 'chevron-left' | 'chevron-right' | 'menu' | 'open' | 'edit' | 'pdf' | 'cancel';
 
 const paths: Record<IconName, React.ReactNode> = {
   dashboard: <><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></>,
@@ -18,6 +18,10 @@ const paths: Record<IconName, React.ReactNode> = {
   'chevron-left': <path d="m15 18-6-6 6-6"/>,
   'chevron-right': <path d="m9 18 6-6-6-6"/>,
   menu: <path d="M4 7h16M4 12h16M4 17h16"/>
+  ,open: <><path d="M3 12s3.5-6 9-6 9 6 9 6-3.5 6-9 6-9-6-9-6Z"/><circle cx="12" cy="12" r="2.5"/></>,
+  edit: <><path d="M4 20h4l11-11-4-4L4 16z"/><path d="m13.5 6.5 4 4"/></>,
+  pdf: <><path d="M6 2h8l4 4v16H6z"/><path d="M14 2v5h5M8 17h8M8 13h5"/></>,
+  cancel: <><circle cx="12" cy="12" r="9"/><path d="m9 9 6 6m0-6-6 6"/></>
 };
 
 export function Icon({ name, size = 16 }: { name: IconName; size?: number }) {

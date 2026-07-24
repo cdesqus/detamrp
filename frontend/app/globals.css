@@ -98,10 +98,21 @@ button:disabled { cursor: not-allowed; opacity: .48; }
 .supplier-order-row-menu { position: relative; }
 .supplier-order-row-menu-trigger { width: 25px; height: 23px; padding: 0; color: #52525b; background: white; border: 1px solid #d4d4d8; border-radius: 4px; cursor: pointer; font-size: 12px; line-height: 1; }
 .supplier-order-row-menu-trigger:hover, .supplier-order-row-menu-trigger:focus-visible { color: #18181b; border-color: #a1a1aa; outline: none; }
-.supplier-order-row-menu-popover { position: absolute; z-index: 20; right: 0; width: 116px; overflow: hidden; background: white; border: 1px solid #e4e4e7; border-radius: 5px; box-shadow: 0 8px 22px rgb(0 0 0 / 12%); }
-.supplier-order-row-menu-popover--upward { bottom: calc(100% + 4px); }
+.supplier-order-row-menu-popover { position: absolute; z-index: 20; top: calc(100% + 4px); left: 0; width: 142px; overflow: hidden; background: white; border: 1px solid #e4e4e7; border-radius: 5px; box-shadow: 0 8px 22px rgb(0 0 0 / 12%); }
+.supplier-order-row-menu-popover--upward { top: auto; bottom: calc(100% + 4px); }
 .supplier-order-row-menu-popover button { width: 100%; height: 29px; padding: 0 9px; color: #991b1b; background: white; border: 0; cursor: pointer; font-size: 10px; text-align: left; white-space: nowrap; }
 .supplier-order-row-menu-popover button:hover, .supplier-order-row-menu-popover button:focus-visible { background: #fef2f2; outline: none; }
+.supplier-order-row-menu-popover button:disabled { color:#a1a1aa; background:#f4f4f5; cursor:not-allowed; }
+.icon-action { display:inline-flex; align-items:center; justify-content:center; width:25px; height:24px; padding:0; color:#3f3f46; background:#fff; border:1px solid #d4d4d8; border-radius:4px; cursor:pointer; text-decoration:none; }
+.icon-action:hover,.icon-action:focus-visible { color:#18181b; border-color:#a1a1aa; background:#fafafa; outline:none; }
+.icon-action:disabled,.icon-action[aria-disabled="true"] { color:#a1a1aa; background:#f4f4f5; border-color:#e4e4e7; cursor:not-allowed; }
+.table-icon-group { display:flex; align-items:center; gap:4px; white-space:nowrap; }
+.table-pagination { display:flex; align-items:center; justify-content:flex-end; gap:8px; min-height:38px; padding:6px 10px; color:#52525b; border-top:1px solid #e4e4e7; font-size:11px; }
+.table-pagination button { width:25px; height:24px; padding:0; background:#fff; border:1px solid #d4d4d8; border-radius:4px; cursor:pointer; }
+.table-pagination button:disabled { color:#a1a1aa; background:#f4f4f5; cursor:not-allowed; }
+.table-pagination label { display:flex; align-items:center; gap:5px; }
+.table-pagination select { height:25px; padding:0 22px 0 6px; font-size:11px; }
+.transaction-number { width:42px; text-align:right; color:#71717a; }
 .status-pill { display: inline-flex; align-items: center; height: 21px; padding: 0 7px; color: #52525b; background: #f4f4f5; border: 1px solid #e4e4e7; border-radius: 999px; font-size: 10px; font-weight: 600; }
 .status-pill--neutral { color:#52525b; background:#f4f4f5; border-color:#e4e4e7; }
 .status-pill--amber { color:#92400e; background:#fffbeb; border-color:#fde68a; }

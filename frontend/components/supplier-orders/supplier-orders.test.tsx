@@ -54,9 +54,9 @@ describe('supplier order UI', () => {
     const approvedEmptyRow = screen.getByText('PO-APPROVED-EMPTY').closest('tr')!;
     const oversizedRow = screen.getByText('PO-APPROVED-OVERSIZED').closest('tr')!;
     const pendingRow = screen.getByText('PO-PENDING').closest('tr')!;
-    expect(screen.getByRole('columnheader', { name: 'PO PDF' })).toBeInTheDocument();
-    expect(screen.getByRole('columnheader', { name: 'DN PDF' })).toBeInTheDocument();
-    expect(screen.getByRole('columnheader', { name: 'Kanban Labels' })).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: 'No.' })).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: 'Actions' })).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: 'Documents' })).toBeInTheDocument();
 
     const poLink = within(approvedRow).getByRole('link', { name: 'Open PO PDF for PO-APPROVED' });
     expect(poLink).toHaveAttribute('href', '/api/purchase-orders/po-approved/documents/po.pdf');
@@ -73,13 +73,10 @@ describe('supplier order UI', () => {
 
     expect(within(approvedEmptyRow).getByRole('link', { name: 'Open PO PDF for PO-APPROVED-EMPTY' })).toHaveAttribute('target', '_blank');
     expect(within(approvedEmptyRow).queryByRole('link', { name: /DN PDF|Kanban labels PDF/ })).not.toBeInTheDocument();
-    expect(within(approvedEmptyRow).getAllByText('—')).toHaveLength(4);
     expect(within(oversizedRow).getByRole('link', { name: 'Open DN PDF for PO-APPROVED-OVERSIZED' })).toBeInTheDocument();
     expect(within(oversizedRow).queryByRole('link', { name: 'Open Kanban labels PDF for PO-APPROVED-OVERSIZED' })).not.toBeInTheDocument();
-    expect(within(oversizedRow).getAllByText('—')).toHaveLength(3);
     expect(within(pendingRow).getByRole('link', { name: 'Open PO PDF for PO-PENDING' })).toHaveAttribute('target', '_blank');
     expect(within(pendingRow).queryByRole('link', { name: /DN PDF|Kanban labels PDF/ })).not.toBeInTheDocument();
-    expect(within(pendingRow).getAllByText('—')).toHaveLength(4);
   });
 
   it('cancels drafts from a compact row menu once and reloads the list', async () => {
