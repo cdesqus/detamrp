@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"order-stock/backend/internal/api"
 	"order-stock/backend/internal/auth"
+	"order-stock/backend/internal/dashboard"
 	"order-stock/backend/internal/database"
 	"order-stock/backend/internal/emailing"
 	"order-stock/backend/internal/inventory"
@@ -47,6 +48,7 @@ func main() {
 	outgoingStore := outgoing.NewStore(db)
 	inventoryStore := inventory.NewStore(db)
 	reportStore := report.NewStore(db)
+	dashboardStore := dashboard.NewStore(db)
 	secretBox, err := emailing.NewSecretBox(requiredEnv("EMAIL_ENCRYPTION_KEY"))
 	if err != nil {
 		log.Fatal(err)
@@ -61,7 +63,7 @@ func main() {
 		address = ":8091"
 	}
 	log.Printf("API listening on %s", address)
-	if err := http.ListenAndServe(address, api.NewServer(api.WithAuthenticator(authService), api.WithMeasurementService(measurementService), api.WithSupplierService(supplierService), api.WithRawMaterialService(rawMaterialService), api.WithSettingsService(settingsService), api.WithPurchaseOrderService(purchaseOrderService), api.WithReceivingStore(receivingStore), api.WithOutgoingStore(outgoingStore), api.WithInventoryStore(inventoryStore), api.WithReportStore(reportStore), api.WithEmailService(emailService))); err != nil {
+	if err := http.ListenAndServe(address, api.NewServer(api.WithAuthenticator(authService), api.WithMeasurementService(measurementService), api.WithSupplierService(supplierService), api.WithRawMaterialService(rawMaterialService), api.WithSettingsService(settingsService), api.WithPurchaseOrderService(purchaseOrderService), api.WithReceivingStore(receivingStore), api.WithOutgoingStore(outgoingStore), api.WithInventoryStore(inventoryStore), api.WithReportStore(reportStore), api.WithEmailService(emailService), api.WithDashboardStore(dashboardStore))); err != nil {
 		log.Fatal(err)
 	}
 }
