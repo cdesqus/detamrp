@@ -10,7 +10,7 @@ Column order begins with:
 
 1. Number
 2. Actions
-3. Documents
+3. Docs
 4. Status
 5. PO Number
 
@@ -30,36 +30,38 @@ Actions use compact icons with accessible labels and hover tooltips.
 - Open detail is always available.
 - Edit is enabled only for Draft orders and users with `po.edit_draft`.
 - Cancel is enabled only for Draft orders and users with `po.edit_draft`; it retains the existing confirmation dialog.
-- The envelope opens a small action popover:
+- The envelope opens a small action popover that always renders both choices:
   - Send to Approval is enabled only for Draft orders and users with `po.submit`; it uses the existing submit endpoint.
-  - Send to Supplier is applicable after approval, including Partially Received and Fully Received orders, but remains disabled in this phase with the tooltip `SMTP is not configured`.
+  - Send to Supplier is applicable after approval, including Partially Received and Fully Received orders, but remains disabled until the supplier email endpoint exists.
   - After SMTP and Email Log are implemented, the same action becomes Send or Resend to Supplier without restructuring the table.
+- The popover does not display SMTP configuration copy.
 - Disabled actions remain visible in muted styling so the operational sequence is understandable.
 - No expand, close-order, print, or download actions are added.
 
 ### Documents
 
-One compact Documents cell contains three separate PDF icons:
+One compact Docs icon opens a popover containing three clearly named entries:
 
-- PO PDF is always available.
-- DN PDF is available after approval and document generation.
-- Kanban PDF is available after approval and within the existing safe label export limit.
+- Purchase Order PDF is always available.
+- Delivery Note PDF is available after approval and document generation.
+- Kanban Labels PDF is available after approval and within the existing safe label export limit.
 
-Each icon opens the PDF in a new tab and has a precise tooltip.
+Unavailable documents remain visible but disabled. Available entries open the PDF in a new tab. The popover closes after selection, outside click, or Escape.
 
 ## Receiving
 
 - Add a continuing row number.
+- Move Document directly after Number, before Status and receiving identifiers.
 - Add pagination with page sizes 20, 50, and 100.
 - Do not add an Actions column.
-- Keep the Receiving PDF as a compact icon in the Document column with a tooltip.
+- Keep the Receiving PDF as a compact `RCV` document control with a tooltip and direct new-tab behavior; no popover is needed for one document.
 - Preserve all current receiving business columns and open-session banner behavior.
 
 ## Visual Rules
 
 - Tables remain dense and modern; do not enlarge rows, headings, buttons, or typography.
 - Actions are positioned on the left after the row number.
-- Icons use the application icon system rather than text abbreviations.
+- Icon controls are reduced to a dense operational size and document controls retain short labels where they improve recognition.
 - Tooltips and accessible names describe every icon.
 - Horizontal scrolling remains available for wide tables.
 
