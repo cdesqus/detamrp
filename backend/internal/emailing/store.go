@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/shopspring/decimal"
 	"order-stock/backend/internal/database"
 )
 
@@ -43,9 +44,13 @@ func (s *Store) SaveSMTP(ctx context.Context, actor Actor, in SMTPSettingsInput,
 }
 
 func (s *Store) CreateLog(ctx context.Context, actor Actor, typ, refType string, refID uuid.UUID, refNumber, recipient, subject string) (id uuid.UUID, err error) {
+	var nullableRefID any
+	if refID != uuid.Nil {
+		nullableRefID = refID
+	}
 	err = database.WithTenant(ctx, s.db, database.TenantContext{TenantID: actor.TenantID, UserID: actor.UserID}, func(tx database.TenantTx) error {
-		return tx.QueryRow(ctx, `INSERT INTO email_logs(tenant_id,email_type,reference_type,reference_id,reference_number,recipient,subject,status,created_by_user_id) VALUES($1,$2,$3,NULLIF($4,'00000000-0000-0000-0000-000000000000'),$5,$6,$7,'PENDING',$8) RETURNING id`,
-			actor.TenantID, typ, refType, refID, refNumber, recipient, subject, actor.UserID).Scan(&id)
+		return tx.QueryRow(ctx, `INSERT INTO email_logs(tenant_id,email_type,reference_type,reference_id,reference_number,recipient,subject,status,created_by_user_id) VALUES($1,$2,$3,$4,$5,$6,$7,'PENDING',$8) RETURNING id`,
+			actor.TenantID, typ, refType, nullableRefID, refNumber, recipient, subject, actor.UserID).Scan(&id)
 	})
 	return
 }
@@ -92,16 +97,18 @@ func (s *Store) ApprovalData(ctx context.Context, actor Actor, poID uuid.UUID) (
 		if err != nil {
 			return err
 		}
-		rows, e := tx.Query(ctx, `SELECT l.raw_material_code,l.raw_material_name,l.base_unit_code,l.qty_per_kanban_snapshot,l.total_kanban,l.ordered_base_qty FROM purchase_order_lines l WHERE l.tenant_id=$1 AND l.purchase_order_id=$2 ORDER BY l.sort_position`, actor.TenantID, poID)
+		rows, e := tx.Query(ctx, `SELECT l.raw_material_code_snapshot,l.raw_material_name_snapshot,l.base_unit_code_snapshot,l.qty_per_kanban_snapshot,l.total_kanban,l.ordered_base_qty FROM purchase_order_lines l WHERE l.tenant_id=$1 AND l.purchase_order_id=$2 ORDER BY l.sort_position`, actor.TenantID, poID)
 		if e != nil {
 			return e
 		}
 		defer rows.Close()
 		for rows.Next() {
 			var x ApprovalMailLine
-			if e = rows.Scan(&x.Code, &x.Name, &x.Unit, &x.QtyPerKanban, &x.TotalKanban, &x.TotalQuantity); e != nil {
+			var kanban decimal.Decimal
+			if e = rows.Scan(&x.Code, &x.Name, &x.Unit, &x.QtyPerKanban, &kanban, &x.TotalQuantity); e != nil {
 				return e
 			}
+			x.TotalKanban = kanban.IntPart()
 			out.Lines = append(out.Lines, x)
 		}
 		return rows.Err()
