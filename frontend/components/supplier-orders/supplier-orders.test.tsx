@@ -105,6 +105,7 @@ describe('supplier order UI', () => {
     const actions = await screen.findByRole('button', { name: 'Actions for PO-DRAFT' });
     expect(screen.getByRole('button', { name: 'Actions for PO-APPROVED' })).toBeInTheDocument();
     await user.click(actions);
+    expect(actions.closest('tr')).toHaveClass('row-menu-open');
     expect(actions).not.toHaveAttribute('aria-haspopup');
     expect(screen.getByTestId('draft-actions-po-draft')).toHaveClass('row-menu-list');
     await user.click(screen.getByRole('button', { name: 'Cancel Draft' }));

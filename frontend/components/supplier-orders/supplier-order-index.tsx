@@ -124,7 +124,7 @@ export function SupplierOrderIndex({ permissions }: Props = {}) {
         const documentsAvailable = ['APPROVED', 'PARTIALLY_RECEIVED', 'FULLY_RECEIVED'].includes(order.status) && order.documents;
         const labelsAvailable = documentsAvailable ? documentsAvailable.kanbanCount <= maxKanbanLabelsPerPDF : false;
         const draft = order.status === 'DRAFT';
-        return <tr key={order.id}>
+        return <tr key={order.id} className={menuOrderId === order.id || docsOrderId === order.id ? 'row-menu-open' : undefined}>
           <td className="transaction-number">{(page - 1) * pageSize + index + 1}</td>
           <td><div className="supplier-order-row-menu">
             <button ref={element => { actionTriggers.current[order.id] = element; openTriggers.current[order.id] = element; }} className="compact-menu-trigger" aria-label={`Actions for ${order.poNumber}`} aria-expanded={menuOrderId === order.id} onClick={() => { setDocsOrderId(''); setMenuOrderId(value => value === order.id ? '' : order.id); }}>Action <span>⌄</span></button>
