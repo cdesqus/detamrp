@@ -13,7 +13,8 @@ export default function LoginPage() {
       body: JSON.stringify({ username, password })
     });
     if (!response.ok) throw new Error('Invalid username or password');
-    router.push('/dashboard');
+    const requested = new URLSearchParams(window.location.search).get('next');
+    router.push(requested?.startsWith('/') && !requested.startsWith('//') ? requested : '/dashboard');
     router.refresh();
   }
 

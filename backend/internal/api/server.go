@@ -6,6 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"order-stock/backend/internal/auth"
+	"order-stock/backend/internal/emailing"
 	"order-stock/backend/internal/inventory"
 	"order-stock/backend/internal/masterdata"
 	"order-stock/backend/internal/outgoing"
@@ -33,6 +34,7 @@ type serverConfig struct {
 	outgoingStore        *outgoing.Store
 	inventoryStore       *inventory.Store
 	reportStore          *report.Store
+	emailService         *emailing.Service
 }
 
 type ServerOption func(*serverConfig)
@@ -71,6 +73,9 @@ func WithInventoryStore(store *inventory.Store) ServerOption {
 }
 func WithReportStore(store *report.Store) ServerOption {
 	return func(c *serverConfig) { c.reportStore = store }
+}
+func WithEmailService(service *emailing.Service) ServerOption {
+	return func(c *serverConfig) { c.emailService = service }
 }
 
 func NewServer(options ...ServerOption) http.Handler {
@@ -111,6 +116,9 @@ func NewServer(options ...ServerOption) http.Handler {
 		}
 		if config.reportStore != nil {
 			report.RegisterRoutes(router, config.reportStore, config.authenticator)
+		}
+		if config.emailService != nil && config.purchaseOrderService != nil {
+			emailing.RegisterRoutes(router, config.emailService, config.purchaseOrderService, config.authenticator)
 		}
 	}
 	return router

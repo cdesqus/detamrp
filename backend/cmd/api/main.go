@@ -11,6 +11,7 @@ import (
 	"order-stock/backend/internal/api"
 	"order-stock/backend/internal/auth"
 	"order-stock/backend/internal/database"
+	"order-stock/backend/internal/emailing"
 	"order-stock/backend/internal/inventory"
 	"order-stock/backend/internal/masterdata"
 	"order-stock/backend/internal/outgoing"
@@ -46,12 +47,21 @@ func main() {
 	outgoingStore := outgoing.NewStore(db)
 	inventoryStore := inventory.NewStore(db)
 	reportStore := report.NewStore(db)
+	secretBox, err := emailing.NewSecretBox(requiredEnv("EMAIL_ENCRYPTION_KEY"))
+	if err != nil {
+		log.Fatal(err)
+	}
+	appBaseURL := os.Getenv("APP_BASE_URL")
+	if appBaseURL == "" {
+		appBaseURL = "http://localhost:3019"
+	}
+	emailService := emailing.NewService(emailing.NewStore(db), secretBox, appBaseURL)
 	address := os.Getenv("HTTP_ADDR")
 	if address == "" {
 		address = ":8091"
 	}
 	log.Printf("API listening on %s", address)
-	if err := http.ListenAndServe(address, api.NewServer(api.WithAuthenticator(authService), api.WithMeasurementService(measurementService), api.WithSupplierService(supplierService), api.WithRawMaterialService(rawMaterialService), api.WithSettingsService(settingsService), api.WithPurchaseOrderService(purchaseOrderService), api.WithReceivingStore(receivingStore), api.WithOutgoingStore(outgoingStore), api.WithInventoryStore(inventoryStore), api.WithReportStore(reportStore))); err != nil {
+	if err := http.ListenAndServe(address, api.NewServer(api.WithAuthenticator(authService), api.WithMeasurementService(measurementService), api.WithSupplierService(supplierService), api.WithRawMaterialService(rawMaterialService), api.WithSettingsService(settingsService), api.WithPurchaseOrderService(purchaseOrderService), api.WithReceivingStore(receivingStore), api.WithOutgoingStore(outgoingStore), api.WithInventoryStore(inventoryStore), api.WithReportStore(reportStore), api.WithEmailService(emailService))); err != nil {
 		log.Fatal(err)
 	}
 }

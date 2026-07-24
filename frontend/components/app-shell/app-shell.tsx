@@ -38,7 +38,11 @@ export function AppShell({ title, children }: { title: string; children: ReactNo
   useEffect(() => {
     setCollapsed(localStorage.getItem(storageKey) === 'true');
     fetch('/api/auth/me', { credentials: 'include' }).then(async response => {
-      if (!response.ok) { router.replace('/login'); return; }
+      if (!response.ok) {
+        const returnTo = window.location.pathname;
+        router.replace(returnTo.startsWith('/supplier-orders/') ? `/login?next=${encodeURIComponent(returnTo)}` : '/login');
+        return;
+      }
       const payload = await response.json() as { user: CurrentUser };
       setUser(payload.user);
     });

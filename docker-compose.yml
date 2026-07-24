@@ -42,6 +42,8 @@ services:
       DEFAULT_TENANT_ID: 00000000-0000-0000-0000-000000000001
       INITIAL_ADMIN_USERNAME: admin
       INITIAL_ADMIN_PASSWORD: change-me-before-production
+      EMAIL_ENCRYPTION_KEY: local-prototype-email-key-change-on-server
+      APP_BASE_URL: http://localhost:3019
     ports: ["8091:8091"]
     depends_on:
       postgres:

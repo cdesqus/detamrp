@@ -129,10 +129,30 @@ export function SupplierOrderIndex({ permissions }: Props = {}) {
   }
 
   async function sendApproval(order: Order) {
-    const response = await fetch(`/api/purchase-orders/${order.id}/submit`, { method: 'POST', credentials: 'include' });
-    if (!response.ok) { setError('Supplier order could not be submitted'); return; }
+    if (order.status === 'DRAFT') {
+      const response = await fetch(`/api/purchase-orders/${order.id}/submit`, { method: 'POST', credentials: 'include' });
+      if (!response.ok) { setError('Supplier order could not be submitted'); return; }
+    }
+    const emailResponse = await fetch(`/api/email/purchase-orders/${order.id}/approval`, { method: 'POST', credentials: 'include' });
+    let emailError = '';
+    if (!emailResponse.ok) {
+      const payload = await emailResponse.json().catch(() => ({})) as { message?: string };
+      emailError = payload.message ?? 'Approval email could not be sent. Configure SMTP Settings and try again.';
+    }
     setMenuOrderId('');
     await load();
+    if (emailError) setError(emailError);
+  }
+
+  async function sendSupplier(order: Order) {
+    setError('');
+    const response = await fetch(`/api/email/purchase-orders/${order.id}/supplier`, { method: 'POST', credentials: 'include' });
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({})) as { message?: string };
+      setError(payload.message ?? 'Supplier email could not be sent.');
+      return;
+    }
+    setMenuOrderId('');
   }
 
   const columnCount = canViewPrices ? 11 : 10;
@@ -151,8 +171,8 @@ export function SupplierOrderIndex({ permissions }: Props = {}) {
             {menuOrderId === order.id && <div id={`draft-actions-${order.id}`} data-testid={`draft-actions-${order.id}`} className="supplier-order-row-menu-popover row-menu-list">
               <button onClick={() => router.push(`/supplier-orders/${order.id}`)}>Open Detail</button>
               {canEditDraft && draft ? <button onClick={() => router.push(`/supplier-orders/${order.id}`)}>Edit Order</button> : <UnavailableMenuItem>Edit Order</UnavailableMenuItem>}
-              {canSubmit && draft ? <button onClick={() => void sendApproval(order)}>Send to Approval</button> : <UnavailableMenuItem>Send to Approval</UnavailableMenuItem>}
-              <UnavailableMenuItem>Send to Supplier</UnavailableMenuItem>
+              {canSubmit && (draft || order.status === 'PENDING_APPROVAL') ? <button onClick={() => void sendApproval(order)}>{draft ? 'Send to Approval' : 'Resend Approval Email'}</button> : <UnavailableMenuItem>Send to Approval</UnavailableMenuItem>}
+              {documentsAvailable ? <button onClick={() => void sendSupplier(order)}>Send to Supplier</button> : <UnavailableMenuItem>Send to Supplier</UnavailableMenuItem>}
               <div className="row-menu-divider" />
               {canEditDraft && draft ? <button className="row-menu-danger" onClick={() => openCancellation(order)}>Cancel Draft</button> : <UnavailableMenuItem>Cancel Draft</UnavailableMenuItem>}
             </div>}
