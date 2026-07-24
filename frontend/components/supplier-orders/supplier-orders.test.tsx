@@ -24,7 +24,7 @@ describe('supplier order UI', () => {
     expect(await screen.findByText('PO-202607-00001')).toBeInTheDocument();
     expect(screen.getByText('SUP-01 â€” PT Prima')).toBeInTheDocument();
     expect(screen.getByText('IDR 12')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Open PO-202607-00001' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Actions for PO-202607-00001' })).toBeInTheDocument();
     expect(fetch).not.toHaveBeenCalledWith('/api/master-data/suppliers?limit=200', { credentials: 'include' });
     await user.click(screen.getByRole('button', { name: 'Create order' }));
     expect(push).toHaveBeenCalledWith('/supplier-orders/new');
@@ -41,6 +41,7 @@ describe('supplier order UI', () => {
   });
 
   it('shows compact new-tab PDF actions only when each document is available', async () => {
+    const user = userEvent.setup();
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response({ items: [
       { id: 'po-approved', poNumber: 'PO-APPROVED', supplierId: 'supplier-1', supplierName: 'PT Prima', orderDate: '2026-07-21', expectedDeliveryDate: '2026-07-25', status: 'APPROVED', currency: 'IDR', documents: { deliveryNoteId: 'dn-1', deliveryNoteNumber: 'DN-202607-00001', kanbanCount: 1000, issuedAt: '2026-07-22T00:00:00Z' } },
       { id: 'po-approved-empty', poNumber: 'PO-APPROVED-EMPTY', supplierId: 'supplier-1', supplierName: 'PT Prima', orderDate: '2026-07-21', expectedDeliveryDate: '2026-07-25', status: 'APPROVED', currency: 'IDR', documents: null },
@@ -58,25 +59,29 @@ describe('supplier order UI', () => {
     expect(screen.getByRole('columnheader', { name: 'Actions' })).toBeInTheDocument();
     expect(screen.getByRole('columnheader', { name: 'Documents' })).toBeInTheDocument();
 
-    const poLink = within(approvedRow).getByRole('link', { name: 'Open PO PDF for PO-APPROVED' });
+    await user.click(within(approvedRow).getByRole('button', { name: 'Documents for PO-APPROVED' }));
+    const poLink = within(approvedRow).getByRole('link', { name: 'Purchase Order PDF for PO-APPROVED' });
     expect(poLink).toHaveAttribute('href', '/api/purchase-orders/po-approved/documents/po.pdf');
     expect(poLink).toHaveAttribute('target', '_blank');
     expect(poLink).toHaveAttribute('rel', 'noopener noreferrer');
-    const deliveryNoteLink = within(approvedRow).getByRole('link', { name: 'Open DN PDF for PO-APPROVED' });
+    const deliveryNoteLink = within(approvedRow).getByRole('link', { name: 'Delivery Note PDF for PO-APPROVED' });
     expect(deliveryNoteLink).toHaveAttribute('href', '/api/purchase-orders/po-approved/documents/delivery-note.pdf');
     expect(deliveryNoteLink).toHaveAttribute('target', '_blank');
     expect(deliveryNoteLink).toHaveAttribute('rel', 'noopener noreferrer');
-    const labelsLink = within(approvedRow).getByRole('link', { name: 'Open Kanban labels PDF for PO-APPROVED' });
+    const labelsLink = within(approvedRow).getByRole('link', { name: 'Kanban Labels PDF for PO-APPROVED' });
     expect(labelsLink).toHaveAttribute('href', '/api/purchase-orders/po-approved/documents/kanban-labels.pdf');
     expect(labelsLink).toHaveAttribute('target', '_blank');
     expect(labelsLink).toHaveAttribute('rel', 'noopener noreferrer');
 
-    expect(within(approvedEmptyRow).getByRole('link', { name: 'Open PO PDF for PO-APPROVED-EMPTY' })).toHaveAttribute('target', '_blank');
-    expect(within(approvedEmptyRow).queryByRole('link', { name: /DN PDF|Kanban labels PDF/ })).not.toBeInTheDocument();
-    expect(within(oversizedRow).getByRole('link', { name: 'Open DN PDF for PO-APPROVED-OVERSIZED' })).toBeInTheDocument();
-    expect(within(oversizedRow).queryByRole('link', { name: 'Open Kanban labels PDF for PO-APPROVED-OVERSIZED' })).not.toBeInTheDocument();
-    expect(within(pendingRow).getByRole('link', { name: 'Open PO PDF for PO-PENDING' })).toHaveAttribute('target', '_blank');
-    expect(within(pendingRow).queryByRole('link', { name: /DN PDF|Kanban labels PDF/ })).not.toBeInTheDocument();
+    await user.click(within(approvedEmptyRow).getByRole('button', { name: 'Documents for PO-APPROVED-EMPTY' }));
+    expect(within(approvedEmptyRow).getByRole('link', { name: 'Purchase Order PDF for PO-APPROVED-EMPTY' })).toHaveAttribute('target', '_blank');
+    expect(within(approvedEmptyRow).getByRole('button', { name: 'Delivery Note PDF' })).toBeDisabled();
+    await user.click(within(oversizedRow).getByRole('button', { name: 'Documents for PO-APPROVED-OVERSIZED' }));
+    expect(within(oversizedRow).getByRole('link', { name: 'Delivery Note PDF for PO-APPROVED-OVERSIZED' })).toBeInTheDocument();
+    expect(within(oversizedRow).getByRole('button', { name: 'Kanban Labels PDF' })).toBeDisabled();
+    await user.click(within(pendingRow).getByRole('button', { name: 'Documents for PO-PENDING' }));
+    expect(within(pendingRow).getByRole('link', { name: 'Purchase Order PDF for PO-PENDING' })).toHaveAttribute('target', '_blank');
+    expect(within(pendingRow).getByRole('button', { name: 'Delivery Note PDF' })).toBeDisabled();
   });
 
   it('cancels drafts from a compact row menu once and reloads the list', async () => {
@@ -98,11 +103,10 @@ describe('supplier order UI', () => {
     render(<SupplierOrderIndex permissions={['po.view', 'po.edit_draft']} />);
 
     const actions = await screen.findByRole('button', { name: 'Actions for PO-DRAFT' });
-    expect(screen.queryByRole('button', { name: 'Actions for PO-APPROVED' })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Open PO-DRAFT' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Actions for PO-APPROVED' })).toBeInTheDocument();
     await user.click(actions);
     expect(actions).not.toHaveAttribute('aria-haspopup');
-    expect(screen.getByTestId('draft-actions-po-draft')).toHaveClass('supplier-order-row-menu-popover--upward');
+    expect(screen.getByTestId('draft-actions-po-draft')).toHaveClass('row-menu-list');
     await user.click(screen.getByRole('button', { name: 'Cancel Draft' }));
     const dialog = screen.getByRole('dialog', { name: 'Cancel draft PO-DRAFT' });
     const confirm = screen.getByRole('button', { name: 'Confirm cancellation' });
@@ -122,8 +126,7 @@ describe('supplier order UI', () => {
     cancellation.resolve(response({ ...orders[0], status: 'CANCELLED' }));
     await waitFor(() => expect(listLoads).toBe(2));
     expect(screen.queryByRole('dialog', { name: 'Cancel draft PO-DRAFT' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Actions for PO-DRAFT' })).not.toBeInTheDocument();
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Open PO-DRAFT' })).toHaveFocus());
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Actions for PO-DRAFT' })).toHaveFocus());
   });
 
   it('does not offer draft cancellation without draft-edit permission', async () => {
@@ -131,8 +134,9 @@ describe('supplier order UI', () => {
 
     render(<SupplierOrderIndex permissions={['po.view']} />);
 
-    expect(await screen.findByRole('button', { name: 'Open PO-DRAFT' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Actions for PO-DRAFT' })).not.toBeInTheDocument();
+    const actions = await screen.findByRole('button', { name: 'Actions for PO-DRAFT' });
+    await userEvent.click(actions);
+    expect(screen.getByRole('button', { name: 'Cancel Draft' })).toBeDisabled();
   });
 
   it('shows cancellation errors and returns focus when Escape closes the confirmation', async () => {
