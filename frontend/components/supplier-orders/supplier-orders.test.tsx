@@ -154,6 +154,27 @@ describe('supplier order UI', () => {
     expect(screen.getByText('Cancel Draft')).toHaveAttribute('aria-disabled', 'true');
   });
 
+  it('closes Action and Docs menus when clicking outside or pressing Escape', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response({ items: [
+      { id: 'po-draft', poNumber: 'PO-DRAFT', supplierId: 'supplier-1', supplierName: 'PT Prima', orderDate: '2026-07-21', expectedDeliveryDate: '2026-07-25', status: 'DRAFT', currency: 'IDR' }
+    ], total: 1 })));
+    const user = userEvent.setup();
+
+    render(<SupplierOrderIndex permissions={['po.view', 'po.edit_draft', 'po.submit']} />);
+    const action = await screen.findByRole('button', { name: 'Actions for PO-DRAFT' });
+    const docs = screen.getByRole('button', { name: 'Documents for PO-DRAFT' });
+
+    await user.click(action);
+    expect(action).toHaveAttribute('aria-expanded', 'true');
+    await user.click(screen.getByRole('heading', { name: 'Supplier Orders' }));
+    expect(action).toHaveAttribute('aria-expanded', 'false');
+
+    await user.click(docs);
+    expect(docs).toHaveAttribute('aria-expanded', 'true');
+    await user.keyboard('{Escape}');
+    expect(docs).toHaveAttribute('aria-expanded', 'false');
+  });
+
   it('shows cancellation errors and returns focus when Escape closes the confirmation', async () => {
     const order = { id: 'po-draft', poNumber: 'PO-DRAFT', supplierId: 'supplier-1', supplierName: 'PT Prima', orderDate: '2026-07-21', expectedDeliveryDate: '2026-07-25', status: 'DRAFT', currency: 'IDR', createdBy: { displayName: 'Admin' } };
     const fetchMock = vi.fn().mockImplementation((url: string, init?: RequestInit) => Promise.resolve(

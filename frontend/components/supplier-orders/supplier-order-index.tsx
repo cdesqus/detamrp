@@ -56,6 +56,26 @@ export function SupplierOrderIndex({ permissions }: Props = {}) {
     finally { if (request === requestSequence.current) setLoading(false); }
   }, [search]);
   useEffect(() => { const timer = setTimeout(load, 200); return () => clearTimeout(timer); }, [load]);
+  useEffect(() => {
+    if (!menuOrderId && !docsOrderId) return;
+    const closeOutside = (event: PointerEvent) => {
+      const target = event.target;
+      if (target instanceof Element && target.closest('.supplier-order-row-menu')) return;
+      setMenuOrderId('');
+      setDocsOrderId('');
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      setMenuOrderId('');
+      setDocsOrderId('');
+    };
+    document.addEventListener('pointerdown', closeOutside);
+    document.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.removeEventListener('pointerdown', closeOutside);
+      document.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [docsOrderId, menuOrderId]);
 
   const closeCancellation = useCallback(() => {
     if (cancelling) return;
