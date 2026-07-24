@@ -1,0 +1,78 @@
+# Supplier Order and Receiving Table Actions Design
+
+## Scope
+
+Redesign the Supplier Orders and Receiving index tables using the compact operational reference supplied by the user. This phase does not implement SMTP delivery or Email Log persistence.
+
+## Supplier Orders
+
+Column order begins with:
+
+1. Number
+2. Actions
+3. Documents
+4. Status
+5. PO Number
+
+The remaining existing business columns follow: Supplier, Order Date, Expected Date, optional Total according to RBAC, Sage Number, and Created By.
+
+### Number and Pagination
+
+- Default page size is 20.
+- Available page sizes are 20, 50, and 100.
+- Row numbering continues across pages; page two begins at 21 when the page size is 20.
+- Search resets the current page to one.
+
+### Actions
+
+Actions use compact icons with accessible labels and hover tooltips.
+
+- Open detail is always available.
+- Edit is enabled only for Draft orders and users with `po.edit_draft`.
+- Cancel is enabled only for Draft orders and users with `po.edit_draft`; it retains the existing confirmation dialog.
+- The envelope opens a small action popover:
+  - Send to Approval is enabled only for Draft orders and users with `po.submit`; it uses the existing submit endpoint.
+  - Send to Supplier is applicable after approval, including Partially Received and Fully Received orders, but remains disabled in this phase with the tooltip `SMTP is not configured`.
+  - After SMTP and Email Log are implemented, the same action becomes Send or Resend to Supplier without restructuring the table.
+- Disabled actions remain visible in muted styling so the operational sequence is understandable.
+- No expand, close-order, print, or download actions are added.
+
+### Documents
+
+One compact Documents cell contains three separate PDF icons:
+
+- PO PDF is always available.
+- DN PDF is available after approval and document generation.
+- Kanban PDF is available after approval and within the existing safe label export limit.
+
+Each icon opens the PDF in a new tab and has a precise tooltip.
+
+## Receiving
+
+- Add a continuing row number.
+- Add pagination with page sizes 20, 50, and 100.
+- Do not add an Actions column.
+- Keep the Receiving PDF as a compact icon in the Document column with a tooltip.
+- Preserve all current receiving business columns and open-session banner behavior.
+
+## Visual Rules
+
+- Tables remain dense and modern; do not enlarge rows, headings, buttons, or typography.
+- Actions are positioned on the left after the row number.
+- Icons use the application icon system rather than text abbreviations.
+- Tooltips and accessible names describe every icon.
+- Horizontal scrolling remains available for wide tables.
+
+## Future Email Integration
+
+SMTP Settings will provide encrypted live configuration and a connection test. Email Log will record recipient, type, reference, subject, delivery state, error, sender, and timestamps. The future supplier action will call a dedicated idempotent send/resend endpoint that attaches PO, DN, and Kanban PDFs. PO transaction status remains independent from email delivery state.
+
+## Tests
+
+- Continuous numbering and page-size changes.
+- Search resets pagination.
+- Icon order, accessible labels, and tooltips.
+- Draft action enablement and post-approval disabled states.
+- Existing submit and cancel flows remain functional.
+- Documents open the correct endpoints.
+- Receiving pagination, numbering, and document icon.
