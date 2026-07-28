@@ -6,6 +6,7 @@ import { createContext, ReactNode, useCallback, useContext, useEffect, useRef, u
 import { Icon } from '../icons';
 import { NotificationCenter } from '../notifications/notification-center';
 import { NotificationItem } from '../notifications/notification-data';
+import { ToastProvider } from '../toast/toast-provider';
 import { navigationGroups } from './navigation';
 
 export type CurrentUser = { username: string; displayName: string; permissions: string[] };
@@ -149,7 +150,7 @@ export function AppShell({ title, children }: { title: string; children: ReactNo
   if (!user) return <main className="loading-page">Loading...</main>;
 
   return (
-    <CurrentUserContext.Provider value={user}><div className={`app-shell${collapsed ? ' sidebar-collapsed' : ''}${drawerOpen ? ' drawer-open' : ''}`}>
+    <ToastProvider><CurrentUserContext.Provider value={user}><div className={`app-shell${collapsed ? ' sidebar-collapsed' : ''}${drawerOpen ? ' drawer-open' : ''}`}>
       <button className="drawer-scrim" aria-label="Close navigation" onClick={() => setDrawerOpen(false)} />
       <aside aria-label="Main navigation">
         <div className="sidebar-brand"><span>OS</span><b>Order Stock</b><button className="sidebar-collapse" aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} aria-expanded={!collapsed} onClick={toggleSidebar}><Icon name={collapsed ? 'chevron-right' : 'chevron-left'} /></button></div>
@@ -207,6 +208,6 @@ export function AppShell({ title, children }: { title: string; children: ReactNo
         </header>
         <main>{children}</main>
       </section>
-    </div></CurrentUserContext.Provider>
+    </div></CurrentUserContext.Provider></ToastProvider>
   );
 }
