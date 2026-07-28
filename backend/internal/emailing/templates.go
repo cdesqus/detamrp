@@ -6,17 +6,45 @@ import (
 	"strings"
 )
 
+func formatEmailNumber(value string) string {
+	value = strings.TrimSpace(value)
+	sign := ""
+	if strings.HasPrefix(value, "-") || strings.HasPrefix(value, "+") {
+		sign, value = value[:1], value[1:]
+	}
+	parts := strings.SplitN(value, ".", 2)
+	integer := strings.TrimLeft(parts[0], "0")
+	if integer == "" {
+		integer = "0"
+	}
+	var grouped strings.Builder
+	for index, digit := range integer {
+		if index > 0 && (len(integer)-index)%3 == 0 {
+			grouped.WriteByte('.')
+		}
+		grouped.WriteRune(digit)
+	}
+	fraction := ""
+	if len(parts) == 2 {
+		fraction = strings.TrimRight(parts[1], "0")
+	}
+	if fraction == "" {
+		return sign + grouped.String()
+	}
+	return sign + grouped.String() + "," + fraction
+}
+
 func approvalHTML(data ApprovalMailData, approveURL, rejectURL, detailURL string) string {
 	var rows strings.Builder
 	for _, line := range data.Lines {
-		fmt.Fprintf(&rows, `<tr><td><b>%s</b><br><span>%s</span></td><td>%s %s</td><td>%d</td><td>%s %s</td></tr>`, html.EscapeString(line.Code), html.EscapeString(line.Name), html.EscapeString(line.QtyPerKanban), html.EscapeString(line.Unit), line.TotalKanban, html.EscapeString(line.TotalQuantity), html.EscapeString(line.Unit))
+		fmt.Fprintf(&rows, `<tr><td><b>%s</b><br><span>%s</span></td><td>%s %s</td><td>%d</td><td>%s %s</td></tr>`, html.EscapeString(line.Code), html.EscapeString(line.Name), html.EscapeString(formatEmailNumber(line.QtyPerKanban)), html.EscapeString(line.Unit), line.TotalKanban, html.EscapeString(formatEmailNumber(line.TotalQuantity)), html.EscapeString(line.Unit))
 	}
 	return emailShell("Purchase Order Approval", fmt.Sprintf(`<p style="margin:0 0 18px;color:#52525b">Hello %s, a purchase order is waiting for your decision.</p>
 <div style="border:1px solid #e4e4e7;border-radius:10px;padding:18px;margin-bottom:18px"><div style="font-size:22px;font-weight:700">%s</div><div style="color:#71717a;margin-top:4px">%s</div><table style="width:100%%;margin-top:16px;font-size:13px"><tr><td>Order Date</td><td><b>%s</b></td><td>Expected Delivery</td><td><b>%s</b></td></tr><tr><td>Created By</td><td><b>%s</b></td><td>Total</td><td><b>%s %s</b></td></tr></table></div>
 <table style="width:100%%;border-collapse:collapse;font-size:12px;margin-bottom:20px"><thead><tr><th align="left">Material</th><th align="left">Qty/Kanban</th><th align="left">Kanban</th><th align="left">Total Qty</th></tr></thead><tbody>%s</tbody></table>
 <div style="text-align:center;margin:24px 0"><a href="%s" style="display:inline-block;background:#18181b;color:white;padding:12px 24px;border-radius:7px;text-decoration:none;font-weight:700">APPROVE</a> <a href="%s" style="display:inline-block;border:1px solid #d4d4d8;color:#991b1b;padding:11px 24px;border-radius:7px;text-decoration:none;font-weight:700">REJECT</a></div>
 <div style="text-align:center"><a href="%s" style="color:#3f3f46">View PO Detail in Order Stock</a></div>`,
-		html.EscapeString(data.ApproverName), html.EscapeString(data.PONumber), html.EscapeString(data.SupplierName), data.OrderDate.Format("02 Jan 2006"), data.ExpectedDeliveryDate.Format("02 Jan 2006"), html.EscapeString(data.CreatedByName), html.EscapeString(data.Currency), html.EscapeString(data.TotalAmount), rows.String(), approveURL, rejectURL, detailURL))
+		html.EscapeString(data.ApproverName), html.EscapeString(data.PONumber), html.EscapeString(data.SupplierName), data.OrderDate.Format("02 Jan 2006"), data.ExpectedDeliveryDate.Format("02 Jan 2006"), html.EscapeString(data.CreatedByName), html.EscapeString(data.Currency), html.EscapeString(formatEmailNumber(data.TotalAmount)), rows.String(), approveURL, rejectURL, detailURL))
 }
 func supplierHTML(poNumber, supplier, dnNumber, expected string, totalMaterials int, totalKanban int64) string {
 	return emailShell("New Purchase Order", fmt.Sprintf(`<p style="color:#52525b">Dear %s,</p><p>Please prepare the materials according to the attached Purchase Order and Delivery Note.</p>
