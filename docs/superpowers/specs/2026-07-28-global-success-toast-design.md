@@ -25,8 +25,8 @@ email actions, including actions that navigate between pages.
 
 ## Architecture
 
-The authenticated App Shell owns a toast provider so feedback survives route
-navigation. A `useToast()` hook exposes `showSuccess(message)`. The provider
+The application root layout owns a toast provider so feedback survives route
+navigation between page-level App Shell instances. A `useToast()` hook exposes `showSuccess(message)`. The provider
 renders a single toast and owns replacement, timer cleanup, manual dismissal,
 and unmount cleanup.
 

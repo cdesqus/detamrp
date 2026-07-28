@@ -4,7 +4,7 @@
 
 **Goal:** Add compact success confirmation that survives navigation for purchase-order email actions.
 
-**Architecture:** Mount a toast context provider inside the authenticated App Shell. Supplier Order Form and Supplier Order Index consume its hook and emit predefined success messages only after successful API completion.
+**Architecture:** Mount a toast context provider in the application root layout so it survives navigation between page-level App Shell instances. Supplier Order Form and Supplier Order Index consume its hook and emit predefined success messages only after successful API completion.
 
 **Tech Stack:** React, Next.js, TypeScript, Vitest, Testing Library, CSS.
 
@@ -34,20 +34,21 @@
 - [ ] Run focused tests and verify green.
 - [ ] Commit as `feat: add global success toast`.
 
-### Task 2: App Shell Integration
+### Task 2: Root Layout Integration
 
 **Files:**
-- Modify: `frontend/components/app-shell/app-shell.tsx`
-- Test: `frontend/components/app-shell/app-shell.test.tsx`
+- Create: `frontend/app/providers.tsx`
+- Modify: `frontend/app/layout.tsx`
+- Test: `frontend/app/providers.test.tsx`
 
 **Interfaces:**
 - Consumes: `ToastProvider`.
-- Produces: toast context throughout authenticated module pages.
+- Produces: toast context that persists throughout application navigation.
 
-- [ ] Add a failing App Shell test proving descendants can emit a toast.
-- [ ] Mount the provider without changing login/auth behavior.
-- [ ] Run the App Shell test and verify green.
-- [ ] Commit as `feat: mount toast provider in app shell`.
+- [ ] Add a failing root provider test proving descendants can emit a toast.
+- [ ] Mount the provider in root layout without changing login/auth behavior.
+- [ ] Run the provider test and verify green.
+- [ ] Commit as `fix: persist toast provider across routes`.
 
 ### Task 3: Supplier Order Success Messages
 
