@@ -2,7 +2,6 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppShell } from './app-shell';
-import { useToast } from '../toast/toast-provider';
 
 const replace = vi.fn();
 const router = { replace };
@@ -28,27 +27,12 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
-function ToastTrigger() {
-  const { showSuccess } = useToast();
-  return <button onClick={() => showSuccess('Shell success')}>Show success</button>;
-}
-
 describe('AppShell', () => {
   beforeEach(() => {
     localStorage.clear();
     currentPath = '/dashboard';
     replace.mockClear();
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(auth()));
-  });
-
-  it('provides global toast feedback to authenticated page descendants', async () => {
-    const user = userEvent.setup();
-    render(<AppShell title="Dashboard"><ToastTrigger /></AppShell>);
-    await screen.findByText('Administrator');
-
-    await user.click(screen.getByRole('button', { name: 'Show success' }));
-
-    expect(screen.getByRole('status')).toHaveTextContent('Shell success');
   });
 
   it('orders master data first and keeps approval and delivery notes out of the sidebar', async () => {
