@@ -13,14 +13,31 @@ import (
 )
 
 type Service struct {
-	store     *Store
+	store     emailStore
 	box       *SecretBox
-	transport SMTPTransport
+	transport mailTransport
 	baseURL   string
 }
 
-func NewService(store *Store, box *SecretBox, baseURL string) *Service {
-	return &Service{store: store, box: box, baseURL: strings.TrimRight(baseURL, "/")}
+type emailStore interface {
+	GetSMTP(context.Context, uuid.UUID) (storedSMTP, error)
+	SaveSMTP(context.Context, Actor, SMTPSettingsInput, []byte, bool) error
+	CreateLog(context.Context, Actor, string, string, uuid.UUID, string, string, string) (uuid.UUID, error)
+	FinishLog(context.Context, uuid.UUID, uuid.UUID, error) error
+	ListLogs(context.Context, Actor, string) ([]EmailLog, error)
+	ApprovalData(context.Context, Actor, uuid.UUID) (ApprovalMailData, error)
+	SaveApprovalToken(context.Context, uuid.UUID, uuid.UUID, []byte, time.Time) error
+	ResolveToken(context.Context, uuid.UUID, []byte) (TokenContext, error)
+	MarkTokenUsed(context.Context, uuid.UUID, []byte) error
+	SupplierEmail(context.Context, uuid.UUID, uuid.UUID) (string, error)
+}
+
+type mailTransport interface {
+	Send(SMTPSettings, string, Message) error
+}
+
+func NewService(store emailStore, box *SecretBox, baseURL string) *Service {
+	return &Service{store: store, box: box, transport: SMTPTransport{}, baseURL: strings.TrimRight(baseURL, "/")}
 }
 func (s *Service) GetSettings(ctx context.Context, actor Actor) (SMTPSettings, error) {
 	x, e := s.store.GetSMTP(ctx, actor.TenantID)
@@ -108,6 +125,17 @@ func (s *Service) SendSupplier(ctx context.Context, actor Actor, order purchaseo
 	if e != nil {
 		return e
 	}
+	message, e := supplierMessage(order, recipient, po, dn, labels)
+	if e != nil {
+		return e
+	}
+	return s.deliver(ctx, actor, "SUPPLIER", "PURCHASE_ORDER", order.ID, order.PONumber, message)
+}
+
+func supplierMessage(order purchaseorder.Order, recipient string, po, dn, labels purchaseorder.PDFDocument) (Message, error) {
+	if order.Documents == nil {
+		return Message{}, errors.New("delivery documents are not available")
+	}
 	totalKanban := int64(0)
 	for _, line := range order.Lines {
 		totalKanban += line.TotalKanban.IntPart()
@@ -118,10 +146,10 @@ func (s *Service) SendSupplier(ctx context.Context, actor Actor, order purchaseo
 		size += len(a.Content)
 	}
 	if size > 20*1024*1024 {
-		return errors.New("email attachments exceed 20 MB")
+		return Message{}, errors.New("email attachments exceed 20 MB")
 	}
 	body := supplierHTML(order.PONumber, order.SupplierName, order.Documents.DeliveryNoteNumber, order.ExpectedDeliveryDate.Format("02 Jan 2006"), len(order.Lines), totalKanban)
-	return s.deliver(ctx, actor, "SUPPLIER", "PURCHASE_ORDER", order.ID, order.PONumber, Message{To: recipient, Subject: "Purchase Order & Delivery Documents — " + order.PONumber, HTML: body, Attachments: attachments})
+	return Message{To: recipient, Subject: "Purchase Order & Delivery Documents — " + order.PONumber, HTML: body, Attachments: attachments}, nil
 }
 func (s *Service) ListLogs(ctx context.Context, actor Actor, search string) ([]EmailLog, error) {
 	return s.store.ListLogs(ctx, actor, search)
