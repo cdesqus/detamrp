@@ -237,7 +237,8 @@ describe('supplier order UI', () => {
       .mockResolvedValueOnce(response({ items: [material], total: 1 }))
       .mockResolvedValueOnce(response(savedOrder))
       .mockResolvedValueOnce(response(savedOrder))
-      .mockResolvedValueOnce(response({ ...savedOrder, status: 'PENDING_APPROVAL' }));
+      .mockResolvedValueOnce(response({ ...savedOrder, status: 'PENDING_APPROVAL' }))
+      .mockResolvedValueOnce(response({ status: 'SENT' }));
     vi.stubGlobal('fetch', fetchMock);
     const user = userEvent.setup();
     render(<SupplierOrderForm permissions={['po.price.view']} />);
@@ -266,7 +267,7 @@ describe('supplier order UI', () => {
     expect(screen.queryByRole('button', { name: 'Cancel draft' })).not.toBeInTheDocument();
     push.mockReset();
     await user.click(screen.getByRole('button', { name: 'Save & Send for Approval' }));
-    await waitFor(() => expect(fetchMock).toHaveBeenLastCalledWith('/api/purchase-orders/po-1/submit', expect.objectContaining({ method: 'POST' })));
+    await waitFor(() => expect(fetchMock).toHaveBeenLastCalledWith('/api/email/purchase-orders/po-1/approval', expect.objectContaining({ method: 'POST' })));
     expect(JSON.parse((fetchMock.mock.calls[3][1] as RequestInit).body as string)).toEqual(expect.objectContaining({ supplierId: 'supplier-1', lines: [{ rawMaterialId: 'material-1', totalKanban: '2' }] }));
     await waitFor(() => expect(push).toHaveBeenCalledWith('/supplier-orders'));
   });
@@ -293,6 +294,32 @@ describe('supplier order UI', () => {
     expect(confirmMock).toHaveBeenCalled();
     expect(screen.getByText('RM-01 — Steel Coil')).toBeInTheDocument();
     expect(screen.getByRole('combobox', { name: 'Supplier' })).toHaveValue('SUP-01 — PT Prima');
+  });
+
+  it('keeps a submitted order pending and explains how to resend when approval email delivery fails', async () => {
+    const draft = {
+      id: 'po-email-failure', poNumber: 'PO-EMAIL-FAILURE', status: 'DRAFT',
+      supplierId: 'supplier-1', supplierName: 'PT Prima', currency: 'IDR',
+      orderDate: '2026-07-21', expectedDeliveryDate: '2026-07-22', notes: '',
+      lines: [{ rawMaterialId: 'material-1', rawMaterialCode: 'RM-01', rawMaterialName: 'Steel Coil', baseUnitCode: 'KG', qtyPerKanbanSnapshot: '1', totalKanban: '2', unitPriceSnapshot: '1' }]
+    };
+    const fetchMock = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+      if (url === '/api/master-data/suppliers?active=true&limit=200') return Promise.resolve(response({ items: [supplier], total: 1 }));
+      if (url.includes('/api/master-data/raw-materials')) return Promise.resolve(response({ items: [material], total: 1 }));
+      if (url === '/api/purchase-orders/po-email-failure' && init?.method === 'PUT') return Promise.resolve(response(draft));
+      if (url === '/api/purchase-orders/po-email-failure/submit') return Promise.resolve(response({ ...draft, status: 'PENDING_APPROVAL' }));
+      if (url === '/api/email/purchase-orders/po-email-failure/approval') return Promise.resolve(response({ message: 'SMTP connection timed out' }, false));
+      return Promise.resolve(response({}));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const user = userEvent.setup();
+
+    render(<SupplierOrderForm initialOrder={draft} />);
+    await user.click(screen.getByRole('button', { name: 'Save & Send for Approval' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('SMTP connection timed out');
+    expect(screen.getByText('This supplier order is pending approval and read-only.')).toBeInTheDocument();
+    expect(push).not.toHaveBeenCalled();
   });
 
   it('keeps committed supplier lines while users incrementally type an alternative and restores on declined confirmation', async () => {

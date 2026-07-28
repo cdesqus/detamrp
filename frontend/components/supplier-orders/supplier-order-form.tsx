@@ -221,6 +221,12 @@ export function SupplierOrderForm({ orderId, initialOrder, permissions }: Props)
       const submission = await fetch(`/api/purchase-orders/${id}/submit`, { method: 'POST', credentials: 'include' });
       if (!submission.ok) { setErrors(errorFields(await submission.json() as ApiError, 'Supplier order could not be submitted')); return; }
       hydrate(await submission.json() as InitialOrder);
+      const email = await fetch(`/api/email/purchase-orders/${id}/approval`, { method: 'POST', credentials: 'include' });
+      if (!email.ok) {
+        const detail = await email.json().catch(() => ({})) as ApiError;
+        setErrors({ _form: detail.message ?? 'Purchase order is pending approval, but the approval email could not be sent. Use Resend Approval Email from Supplier Orders.' });
+        return;
+      }
       router.push('/supplier-orders');
     } catch { setErrors({ _form: 'Supplier order could not be saved' }); }
     finally { setSaving(false); }
