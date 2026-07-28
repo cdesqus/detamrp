@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useCurrentUser } from '../app-shell/app-shell';
 import { OrderStatusBadge } from './order-status';
 import { formatMoney, formatQuantity } from '../../lib/number-format';
+import { useToast } from '../toast/toast-provider';
 
 type Supplier = { id: string; code: string; name: string; currency: string; active: boolean };
 type Material = { id: string; code: string; name: string; supplierId: string; baseUnitCode: string; qtyPerKanban: string; standardUnitPrice: string; active: boolean };
@@ -73,6 +74,7 @@ function errorFields(body: ApiError, fallback: string) { return { ...(body.field
 
 export function SupplierOrderForm({ orderId, initialOrder, permissions }: Props) {
   const router = useRouter();
+  const { showSuccess } = useToast();
   const currentUser = useCurrentUser();
   const permissionList = permissions ?? currentUser?.permissions ?? [];
   const canViewPrices = permissionList.includes('po.price.view');
@@ -227,6 +229,7 @@ export function SupplierOrderForm({ orderId, initialOrder, permissions }: Props)
         setErrors({ _form: detail.message ?? 'Purchase order is pending approval, but the approval email could not be sent. Use Resend Approval Email from Supplier Orders.' });
         return;
       }
+      showSuccess('PO submitted and approval email sent.');
       router.push('/supplier-orders');
     } catch { setErrors({ _form: 'Supplier order could not be saved' }); }
     finally { setSaving(false); }

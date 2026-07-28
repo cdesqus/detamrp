@@ -7,6 +7,7 @@ import { OrderStatusBadge } from './order-status';
 import { formatMoney } from '../../lib/number-format';
 import { pagedItems, TablePagination } from '../table-pagination';
 import { RowMenuPortal } from './row-menu-portal';
+import { useToast } from '../toast/toast-provider';
 
 type Order = { id: string; poNumber: string; supplierId: string; supplierName?: string; orderDate: string; expectedDeliveryDate: string; status: string; totalAmount?: string; currency: string; sagePurchaseOrderNumber?: string; createdBy?: { displayName?: string }; documents?: { deliveryNoteId: string; deliveryNoteNumber: string; kanbanCount: number; issuedAt: string } | null };
 type Props = { permissions?: string[] };
@@ -22,6 +23,7 @@ function UnavailableMenuItem({ children }: { children: string }) {
 }
 export function SupplierOrderIndex({ permissions }: Props = {}) {
   const router = useRouter();
+  const { showSuccess } = useToast();
   const currentUser = useCurrentUser();
   const permissionList = permissions ?? currentUser?.permissions ?? [];
   const canViewPrices = permissionList.includes('po.price.view');
@@ -122,6 +124,7 @@ export function SupplierOrderIndex({ permissions }: Props = {}) {
     setMenuOrderId('');
     await load();
     if (emailError) setError(emailError);
+    else showSuccess('Approval email sent successfully.');
   }
 
   async function sendSupplier(order: Order) {
@@ -133,6 +136,7 @@ export function SupplierOrderIndex({ permissions }: Props = {}) {
       return;
     }
     setMenuOrderId('');
+    showSuccess('Supplier email sent successfully.');
   }
 
   const columnCount = canViewPrices ? 11 : 10;

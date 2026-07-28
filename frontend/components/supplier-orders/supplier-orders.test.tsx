@@ -6,7 +6,9 @@ import { SupplierOrderIndex } from './supplier-order-index';
 import { formatDecimal, multiplyDecimals } from './supplier-order-form';
 
 const push = vi.fn();
+const { showSuccess } = vi.hoisted(() => ({ showSuccess: vi.fn() }));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push, replace: push }) }));
+vi.mock('../toast/toast-provider', () => ({ useToast: () => ({ showSuccess }) }));
 
 const supplier = { id: 'supplier-1', code: 'SUP-01', name: 'PT Prima', currency: 'IDR', active: true };
 const material = { id: 'material-1', code: 'RM-01', name: 'Steel Coil', supplierId: 'supplier-1', baseUnitCode: 'KG', qtyPerKanban: '0.1', standardUnitPrice: '0.2', active: true };
@@ -15,7 +17,7 @@ function response(body: unknown, ok = true) { return { ok, json: async () => bod
 function deferred<T>() { let resolve!: (value: T) => void; const promise = new Promise<T>(value => { resolve = value; }); return { promise, resolve }; }
 
 describe('supplier order UI', () => {
-  beforeEach(() => { push.mockReset(); vi.stubGlobal('confirm', vi.fn(() => true)); });
+  beforeEach(() => { push.mockReset(); showSuccess.mockReset(); vi.stubGlobal('confirm', vi.fn(() => true)); });
 
   it('renders real purchase orders and opens the dedicated create page', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response({ items: [{ id: 'po-1', poNumber: 'PO-202607-00001', supplierId: 'supplier-1', supplierName: 'SUP-01 â€” PT Prima', orderDate: '2026-07-21T00:00:00Z', expectedDeliveryDate: '2026-07-25T00:00:00Z', status: 'DRAFT', totalAmount: '12.500000', currency: 'IDR', createdBy: { displayName: 'Admin' } }], total: 1 })));
@@ -137,6 +139,31 @@ describe('supplier order UI', () => {
     const actions = await screen.findByRole('button', { name: 'Actions for PO-DRAFT' });
     await userEvent.click(actions);
     expect(screen.getByText('Cancel Draft')).toHaveAttribute('aria-disabled', 'true');
+  });
+
+  it('confirms successful approval resend and supplier email delivery', async () => {
+    const orders = [
+      { id: 'po-pending', poNumber: 'PO-PENDING', supplierId: 'supplier-1', supplierName: 'PT Prima', orderDate: '2026-07-21', expectedDeliveryDate: '2026-07-25', status: 'PENDING_APPROVAL', currency: 'IDR' },
+      { id: 'po-approved', poNumber: 'PO-APPROVED', supplierId: 'supplier-1', supplierName: 'PT Prima', orderDate: '2026-07-21', expectedDeliveryDate: '2026-07-25', status: 'APPROVED', currency: 'IDR', documents: { deliveryNoteId: 'dn-1', deliveryNoteNumber: 'DN-1', kanbanCount: 2, issuedAt: '2026-07-22' } }
+    ];
+    const fetchMock = vi.fn().mockImplementation((url: string) => {
+      if (url.startsWith('/api/purchase-orders?')) return Promise.resolve(response({ items: orders, total: 2 }));
+      if (url === '/api/email/purchase-orders/po-pending/approval') return Promise.resolve(response({ status: 'SENT' }));
+      if (url === '/api/email/purchase-orders/po-approved/supplier') return Promise.resolve(response({ status: 'SENT' }));
+      return Promise.resolve(response({}));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const user = userEvent.setup();
+    render(<SupplierOrderIndex permissions={['po.view', 'po.submit']} />);
+
+    await user.click(await screen.findByRole('button', { name: 'Actions for PO-PENDING' }));
+    await user.click(screen.getByRole('button', { name: 'Resend Approval Email' }));
+    await waitFor(() => expect(showSuccess).toHaveBeenCalledWith('Approval email sent successfully.'));
+
+    await user.click(screen.getByRole('button', { name: 'Actions for PO-APPROVED' }));
+    await user.click(screen.getByRole('button', { name: 'Send to Supplier' }));
+    await waitFor(() => expect(showSuccess).toHaveBeenCalledWith('Supplier email sent successfully.'));
+    expect(showSuccess).toHaveBeenCalledTimes(2);
   });
 
   it('keeps unavailable approval and supplier actions visible in the row menu', async () => {
@@ -269,6 +296,7 @@ describe('supplier order UI', () => {
     await user.click(screen.getByRole('button', { name: 'Save & Send for Approval' }));
     await waitFor(() => expect(fetchMock).toHaveBeenLastCalledWith('/api/email/purchase-orders/po-1/approval', expect.objectContaining({ method: 'POST' })));
     expect(JSON.parse((fetchMock.mock.calls[3][1] as RequestInit).body as string)).toEqual(expect.objectContaining({ supplierId: 'supplier-1', lines: [{ rawMaterialId: 'material-1', totalKanban: '2' }] }));
+    expect(showSuccess).toHaveBeenCalledWith('PO submitted and approval email sent.');
     await waitFor(() => expect(push).toHaveBeenCalledWith('/supplier-orders'));
   });
 
@@ -319,6 +347,7 @@ describe('supplier order UI', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent('SMTP connection timed out');
     expect(screen.getByText('This supplier order is pending approval and read-only.')).toBeInTheDocument();
+    expect(showSuccess).not.toHaveBeenCalled();
     expect(push).not.toHaveBeenCalled();
   });
 
