@@ -6,6 +6,7 @@ import { useCurrentUser } from '../app-shell/app-shell';
 import { OrderStatusBadge } from './order-status';
 import { formatMoney } from '../../lib/number-format';
 import { pagedItems, TablePagination } from '../table-pagination';
+import { RowMenuPortal } from './row-menu-portal';
 
 type Order = { id: string; poNumber: string; supplierId: string; supplierName?: string; orderDate: string; expectedDeliveryDate: string; status: string; totalAmount?: string; currency: string; sagePurchaseOrderNumber?: string; createdBy?: { displayName?: string }; documents?: { deliveryNoteId: string; deliveryNoteNumber: string; kanbanCount: number; issuedAt: string } | null };
 type Props = { permissions?: string[] };
@@ -40,7 +41,7 @@ export function SupplierOrderIndex({ permissions }: Props = {}) {
   const [cancelError, setCancelError] = useState('');
   const requestSequence = useRef(0);
   const actionTriggers = useRef<Record<string, HTMLButtonElement | null>>({});
-  const openTriggers = useRef<Record<string, HTMLButtonElement | null>>({});
+  const docsTriggers = useRef<Record<string, HTMLButtonElement | null>>({});
   const dialogRef = useRef<HTMLDivElement | null>(null);
 
   const load = useCallback(async () => {
@@ -56,27 +57,6 @@ export function SupplierOrderIndex({ permissions }: Props = {}) {
     finally { if (request === requestSequence.current) setLoading(false); }
   }, [search]);
   useEffect(() => { const timer = setTimeout(load, 200); return () => clearTimeout(timer); }, [load]);
-  useEffect(() => {
-    if (!menuOrderId && !docsOrderId) return;
-    const closeOutside = (event: PointerEvent) => {
-      const target = event.target;
-      if (target instanceof Element && target.closest('.supplier-order-row-menu')) return;
-      setMenuOrderId('');
-      setDocsOrderId('');
-    };
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') return;
-      setMenuOrderId('');
-      setDocsOrderId('');
-    };
-    document.addEventListener('pointerdown', closeOutside);
-    document.addEventListener('keydown', closeOnEscape);
-    return () => {
-      document.removeEventListener('pointerdown', closeOutside);
-      document.removeEventListener('keydown', closeOnEscape);
-    };
-  }, [docsOrderId, menuOrderId]);
-
   const closeCancellation = useCallback(() => {
     if (cancelling) return;
     const trigger = cancellingOrder ? actionTriggers.current[cancellingOrder.id] : null;
@@ -120,7 +100,7 @@ export function SupplierOrderIndex({ permissions }: Props = {}) {
       const orderId = cancellingOrder.id;
       await load();
       setCancellingOrder(null);
-      window.setTimeout(() => (actionTriggers.current[orderId] ?? openTriggers.current[orderId])?.focus(), 0);
+      window.setTimeout(() => actionTriggers.current[orderId]?.focus(), 0);
     } catch (cause) {
       setCancelError(cause instanceof Error ? cause.message : 'Supplier order could not be cancelled');
     } finally {
@@ -164,26 +144,28 @@ export function SupplierOrderIndex({ permissions }: Props = {}) {
         const documentsAvailable = ['APPROVED', 'PARTIALLY_RECEIVED', 'FULLY_RECEIVED'].includes(order.status) && order.documents;
         const labelsAvailable = documentsAvailable ? documentsAvailable.kanbanCount <= maxKanbanLabelsPerPDF : false;
         const draft = order.status === 'DRAFT';
-        return <tr key={order.id} className={menuOrderId === order.id || docsOrderId === order.id ? 'row-menu-open' : undefined}>
+        const actionTrigger = actionTriggers.current[order.id];
+        const docsTrigger = docsTriggers.current[order.id];
+        return <tr key={order.id}>
           <td className="transaction-number">{(page - 1) * pageSize + index + 1}</td>
           <td><div className="supplier-order-row-menu">
-            <button ref={element => { actionTriggers.current[order.id] = element; openTriggers.current[order.id] = element; }} className="compact-menu-trigger" aria-label={`Actions for ${order.poNumber}`} aria-expanded={menuOrderId === order.id} onClick={() => { setDocsOrderId(''); setMenuOrderId(value => value === order.id ? '' : order.id); }}>Action <span>⌄</span></button>
-            {menuOrderId === order.id && <div id={`draft-actions-${order.id}`} data-testid={`draft-actions-${order.id}`} className="supplier-order-row-menu-popover row-menu-list">
+            <button ref={element => { actionTriggers.current[order.id] = element; }} className="compact-menu-trigger" aria-label={`Actions for ${order.poNumber}`} aria-expanded={menuOrderId === order.id} onClick={() => { setDocsOrderId(''); setMenuOrderId(value => value === order.id ? '' : order.id); }}>Action <span>⌄</span></button>
+            {menuOrderId === order.id && actionTrigger && <RowMenuPortal trigger={actionTrigger} ariaLabel={`Actions for ${order.poNumber}`} onClose={restoreFocus => { setMenuOrderId(''); if (restoreFocus) actionTriggers.current[order.id]?.focus(); }}><div id={`draft-actions-${order.id}`} data-testid={`draft-actions-${order.id}`} className="row-menu-list">
               <button onClick={() => router.push(`/supplier-orders/${order.id}`)}>Open Detail</button>
               {canEditDraft && draft ? <button onClick={() => router.push(`/supplier-orders/${order.id}`)}>Edit Order</button> : <UnavailableMenuItem>Edit Order</UnavailableMenuItem>}
               {canSubmit && (draft || order.status === 'PENDING_APPROVAL') ? <button onClick={() => void sendApproval(order)}>{draft ? 'Send to Approval' : 'Resend Approval Email'}</button> : <UnavailableMenuItem>Send to Approval</UnavailableMenuItem>}
               {documentsAvailable ? <button onClick={() => void sendSupplier(order)}>Send to Supplier</button> : <UnavailableMenuItem>Send to Supplier</UnavailableMenuItem>}
               <div className="row-menu-divider" />
               {canEditDraft && draft ? <button className="row-menu-danger" onClick={() => openCancellation(order)}>Cancel Draft</button> : <UnavailableMenuItem>Cancel Draft</UnavailableMenuItem>}
-            </div>}
+            </div></RowMenuPortal>}
           </div></td>
           <td><div className="supplier-order-row-menu">
-            <button className="compact-menu-trigger" aria-label={`Documents for ${order.poNumber}`} aria-expanded={docsOrderId === order.id} onClick={() => { setMenuOrderId(''); setDocsOrderId(value => value === order.id ? '' : order.id); }}>Docs <span>⌄</span></button>
-            {docsOrderId === order.id && <div className="supplier-order-row-menu-popover row-menu-list">
+            <button ref={element => { docsTriggers.current[order.id] = element; }} className="compact-menu-trigger" aria-label={`Documents for ${order.poNumber}`} aria-expanded={docsOrderId === order.id} onClick={() => { setMenuOrderId(''); setDocsOrderId(value => value === order.id ? '' : order.id); }}>Docs <span>⌄</span></button>
+            {docsOrderId === order.id && docsTrigger && <RowMenuPortal trigger={docsTrigger} ariaLabel={`Documents for ${order.poNumber}`} onClose={restoreFocus => { setDocsOrderId(''); if (restoreFocus) docsTriggers.current[order.id]?.focus(); }}><div className="row-menu-list">
               <DocumentLink href={`/api/purchase-orders/${order.id}/documents/po.pdf`} label={`Purchase Order PDF for ${order.poNumber}`} />
               {documentsAvailable ? <DocumentLink href={`/api/purchase-orders/${order.id}/documents/delivery-note.pdf`} label={`Delivery Note PDF for ${order.poNumber}`} /> : <UnavailableMenuItem>Delivery Note PDF</UnavailableMenuItem>}
               {labelsAvailable ? <DocumentLink href={`/api/purchase-orders/${order.id}/documents/kanban-labels.pdf`} label={`Kanban Labels PDF for ${order.poNumber}`} /> : <UnavailableMenuItem>Kanban Labels PDF</UnavailableMenuItem>}
-            </div>}
+            </div></RowMenuPortal>}
           </div></td>
           <td><OrderStatusBadge status={order.status} /></td><td>{order.poNumber}</td><td>{order.supplierName ?? '—'}</td><td>{date(order.orderDate)}</td><td>{date(order.expectedDeliveryDate)}</td>{canViewPrices && <td>{formatMoney(order.totalAmount, order.currency)}</td>}<td>{order.sagePurchaseOrderNumber || '—'}</td><td>{order.createdBy?.displayName ?? '—'}</td>
         </tr>;

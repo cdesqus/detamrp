@@ -60,28 +60,28 @@ describe('supplier order UI', () => {
     expect(screen.getByRole('columnheader', { name: 'Documents' })).toBeInTheDocument();
 
     await user.click(within(approvedRow).getByRole('button', { name: 'Documents for PO-APPROVED' }));
-    const poLink = within(approvedRow).getByRole('link', { name: 'Purchase Order PDF for PO-APPROVED' });
+    const poLink = screen.getByRole('link', { name: 'Purchase Order PDF for PO-APPROVED' });
     expect(poLink).toHaveAttribute('href', '/api/purchase-orders/po-approved/documents/po.pdf');
     expect(poLink).toHaveAttribute('target', '_blank');
     expect(poLink).toHaveAttribute('rel', 'noopener noreferrer');
-    const deliveryNoteLink = within(approvedRow).getByRole('link', { name: 'Delivery Note PDF for PO-APPROVED' });
+    const deliveryNoteLink = screen.getByRole('link', { name: 'Delivery Note PDF for PO-APPROVED' });
     expect(deliveryNoteLink).toHaveAttribute('href', '/api/purchase-orders/po-approved/documents/delivery-note.pdf');
     expect(deliveryNoteLink).toHaveAttribute('target', '_blank');
     expect(deliveryNoteLink).toHaveAttribute('rel', 'noopener noreferrer');
-    const labelsLink = within(approvedRow).getByRole('link', { name: 'Kanban Labels PDF for PO-APPROVED' });
+    const labelsLink = screen.getByRole('link', { name: 'Kanban Labels PDF for PO-APPROVED' });
     expect(labelsLink).toHaveAttribute('href', '/api/purchase-orders/po-approved/documents/kanban-labels.pdf');
     expect(labelsLink).toHaveAttribute('target', '_blank');
     expect(labelsLink).toHaveAttribute('rel', 'noopener noreferrer');
 
     await user.click(within(approvedEmptyRow).getByRole('button', { name: 'Documents for PO-APPROVED-EMPTY' }));
-    expect(within(approvedEmptyRow).getByRole('link', { name: 'Purchase Order PDF for PO-APPROVED-EMPTY' })).toHaveAttribute('target', '_blank');
-    expect(within(approvedEmptyRow).getByText('Delivery Note PDF')).toHaveAttribute('aria-disabled', 'true');
+    expect(screen.getByRole('link', { name: 'Purchase Order PDF for PO-APPROVED-EMPTY' })).toHaveAttribute('target', '_blank');
+    expect(screen.getByText('Delivery Note PDF')).toHaveAttribute('aria-disabled', 'true');
     await user.click(within(oversizedRow).getByRole('button', { name: 'Documents for PO-APPROVED-OVERSIZED' }));
-    expect(within(oversizedRow).getByRole('link', { name: 'Delivery Note PDF for PO-APPROVED-OVERSIZED' })).toBeInTheDocument();
-    expect(within(oversizedRow).getByText('Kanban Labels PDF')).toHaveAttribute('aria-disabled', 'true');
+    expect(screen.getByRole('link', { name: 'Delivery Note PDF for PO-APPROVED-OVERSIZED' })).toBeInTheDocument();
+    expect(screen.getByText('Kanban Labels PDF')).toHaveAttribute('aria-disabled', 'true');
     await user.click(within(pendingRow).getByRole('button', { name: 'Documents for PO-PENDING' }));
-    expect(within(pendingRow).getByRole('link', { name: 'Purchase Order PDF for PO-PENDING' })).toHaveAttribute('target', '_blank');
-    expect(within(pendingRow).getByText('Delivery Note PDF')).toHaveAttribute('aria-disabled', 'true');
+    expect(screen.getByRole('link', { name: 'Purchase Order PDF for PO-PENDING' })).toHaveAttribute('target', '_blank');
+    expect(screen.getByText('Delivery Note PDF')).toHaveAttribute('aria-disabled', 'true');
   });
 
   it('cancels drafts from a compact row menu once and reloads the list', async () => {
@@ -105,7 +105,6 @@ describe('supplier order UI', () => {
     const actions = await screen.findByRole('button', { name: 'Actions for PO-DRAFT' });
     expect(screen.getByRole('button', { name: 'Actions for PO-APPROVED' })).toBeInTheDocument();
     await user.click(actions);
-    expect(actions.closest('tr')).toHaveClass('row-menu-open');
     expect(actions).not.toHaveAttribute('aria-haspopup');
     expect(screen.getByTestId('draft-actions-po-draft')).toHaveClass('row-menu-list');
     await user.click(screen.getByRole('button', { name: 'Cancel Draft' }));
@@ -166,6 +165,9 @@ describe('supplier order UI', () => {
 
     await user.click(action);
     expect(action).toHaveAttribute('aria-expanded', 'true');
+    const actionMenu = screen.getByRole('menu', { name: 'Actions for PO-DRAFT' });
+    expect(actionMenu.parentElement).toBe(document.body);
+    expect(screen.getByRole('table')).not.toContainElement(actionMenu);
     await user.click(screen.getByRole('heading', { name: 'Supplier Orders' }));
     expect(action).toHaveAttribute('aria-expanded', 'false');
 
