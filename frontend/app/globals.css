@@ -71,6 +71,11 @@ button, input, select, textarea { font: inherit; }
 .notification-empty strong { color: #52525b; font-size: 11px; font-weight: 600; }
 .notification-empty span { max-width: 220px; font-size: 10px; }
 .notification-footer { height: 36px; display: grid; place-items: center; color: #52525b; background: #fafafa; border-top: 1px solid #f0f0f1; font-size: 10px; font-weight: 600; text-decoration: none; }
+.success-toast { position:fixed; z-index:120; top:54px; right:18px; display:flex; align-items:center; gap:8px; max-width:min(360px,calc(100vw - 28px)); min-height:38px; padding:8px 9px 8px 11px; color:#14532d; background:#f0fdf4; border:1px solid #bbf7d0; border-radius:7px; box-shadow:0 8px 24px rgb(0 0 0 / 10%); font-size:11px; }
+.success-toast-icon { display:grid; place-items:center; flex:0 0 18px; width:18px; height:18px; color:#fff; background:#16a34a; border-radius:50%; font-size:11px; font-weight:700; }
+.success-toast > span:nth-child(2) { line-height:1.35; }
+.success-toast button { display:grid; place-items:center; flex:0 0 22px; width:22px; height:22px; padding:0; color:#166534; background:transparent; border:0; border-radius:4px; cursor:pointer; font-size:15px; }
+.success-toast button:hover,.success-toast button:focus-visible { background:#dcfce7; outline:none; }
 .mobile-sidebar-toggle { width: 28px; height: 28px; display: grid; place-items: center; border: 1px solid #e4e4e7; border-radius: 5px; color: #52525b; background: white; cursor: pointer; }
 .mobile-sidebar-toggle, .drawer-scrim { display: none; }
 .app-content main { padding: 20px; }
