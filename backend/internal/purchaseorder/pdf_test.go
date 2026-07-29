@@ -40,7 +40,7 @@ func (image cancelOnPixelImage) At(x, y int) color.Color {
 
 func TestRenderPOPDFIncludesOrRedactsPrices(t *testing.T) {
 	order := Order{
-		PONumber: "PO-202607-00001", SupplierName: "PT Material", Status: StatusApproved,
+		PONumber: "PO-202607-00001", CompanyName: "PT Buyer Indonesia", SupplierName: "PT Material", Status: StatusApproved,
 		OrderDate: time.Date(2026, 7, 22, 0, 0, 0, 0, time.UTC), ExpectedDeliveryDate: time.Date(2026, 7, 25, 0, 0, 0, 0, time.UTC),
 		Currency: "IDR", Notes: "Handle with care", TotalAmount: decimal.NewFromInt(400000), CreatedBy: Actor{DisplayName: "Buyer One"},
 		Lines: []OrderLine{{RawMaterialCode: "RM-001", RawMaterialName: "Steel", BaseUnitCode: "KG", QtyPerKanbanSnapshot: decimal.NewFromInt(10), TotalKanban: decimal.NewFromInt(2), OrderedBaseQty: decimal.NewFromInt(20), UnitPriceSnapshot: decimal.NewFromInt(200000), LineTotal: decimal.NewFromInt(400000)}},
@@ -56,6 +56,12 @@ func TestRenderPOPDFIncludesOrRedactsPrices(t *testing.T) {
 	if !pdfContainsText(priced, "IDR 200.000") || !pdfContainsText(priced, "IDR 400.000") {
 		t.Fatal("authorized prices absent")
 	}
+	if !pdfContainsText(priced, "PT Buyer Indonesia") {
+		t.Fatal("buyer company is missing from priced PO")
+	}
+	if pdfContainsLegacyDarkFill(priced) {
+		t.Fatal("priced PO still uses solid section fills")
+	}
 
 	redacted, err := RenderPOPDF(order, false)
 	if err != nil {
@@ -63,6 +69,12 @@ func TestRenderPOPDFIncludesOrRedactsPrices(t *testing.T) {
 	}
 	if pdfContainsText(redacted, "IDR 200.000") || pdfContainsText(redacted, "IDR 400.000") {
 		t.Fatal("price leaked")
+	}
+	if !pdfContainsText(redacted, "PT Buyer Indonesia") {
+		t.Fatal("buyer company is missing from redacted PO")
+	}
+	if pdfContainsLegacyDarkFill(redacted) {
+		t.Fatal("redacted PO still uses solid section fills")
 	}
 }
 
