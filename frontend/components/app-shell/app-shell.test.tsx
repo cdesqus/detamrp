@@ -1,11 +1,13 @@
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { useEffect } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppShell } from './app-shell';
 
 const replace = vi.fn();
 const router = { replace };
 let currentPath = '/dashboard';
+const adminPermissions = ['dashboard.view', 'master_data.view', 'po.view', 'po.create', 'po.approve', 'inventory.view', 'receiving.view', 'user.manage', 'role.manage', 'smtp_settings.view', 'email_log.view'];
 const director = { username: 'director_demo', displayName: 'Director Demo', permissions: ['po.view', 'po.price.view', 'po.approve', 'po.reject', 'inventory.view'] };
 
 vi.mock('next/navigation', () => ({
@@ -13,7 +15,7 @@ vi.mock('next/navigation', () => ({
   useRouter: () => router
 }));
 
-function auth(user = { username: 'admin', displayName: 'Administrator', permissions: [] as string[] }) {
+function auth(user = { username: 'admin', displayName: 'Administrator', permissions: adminPermissions }) {
   return { ok: true, json: async () => ({ user }) } as Response;
 }
 
@@ -33,6 +35,34 @@ describe('AppShell', () => {
     currentPath = '/dashboard';
     replace.mockClear();
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(auth()));
+  });
+
+  it('shows only permitted links and removes empty navigation groups', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(auth({ username: 'roles', displayName: 'Role Manager', permissions: ['role.manage'] })));
+    currentPath = '/settings/roles';
+    render(<AppShell title="Roles"><div>roles content</div></AppShell>);
+
+    await screen.findByText('Role Manager');
+    expect(screen.getByRole('link', { name: 'Roles & Permissions' })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Users' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Dashboard' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Data Master' })).not.toBeInTheDocument();
+  });
+
+  it('does not mount unauthorized route content and offers the first permitted module', async () => {
+    const mounted = vi.fn();
+    function ProtectedChild() {
+      useEffect(() => { mounted(); }, []);
+      return <div>protected inventory</div>;
+    }
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(auth({ username: 'roles', displayName: 'Role Manager', permissions: ['role.manage'] })));
+    currentPath = '/inventory';
+    render(<AppShell title="Inventory"><ProtectedChild /></AppShell>);
+
+    expect(await screen.findByRole('heading', { name: 'Access Denied' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Go to an available module' })).toHaveAttribute('href', '/settings/roles');
+    expect(screen.queryByText('protected inventory')).not.toBeInTheDocument();
+    expect(mounted).not.toHaveBeenCalled();
   });
 
   it('orders master data first and keeps approval and delivery notes out of the sidebar', async () => {

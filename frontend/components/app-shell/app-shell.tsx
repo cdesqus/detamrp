@@ -6,7 +6,7 @@ import { createContext, ReactNode, useCallback, useContext, useEffect, useRef, u
 import { Icon } from '../icons';
 import { NotificationCenter } from '../notifications/notification-center';
 import { NotificationItem } from '../notifications/notification-data';
-import { navigationGroups } from './navigation';
+import { firstPermittedRoute, navigationGroups, requiredPermissionForPath, visibleNavigationGroups } from './navigation';
 
 export type CurrentUser = { username: string; displayName: string; permissions: string[] };
 type PendingApproval = { id: string; purchaseOrderId: string; version?: number; poNumber?: string; supplierId?: string; supplierName?: string };
@@ -148,13 +148,18 @@ export function AppShell({ title, children }: { title: string; children: ReactNo
 
   if (!user) return <main className="loading-page">Loading...</main>;
 
+  const visibleGroups = visibleNavigationGroups(user.permissions);
+  const requiredPermission = requiredPermissionForPath(pathname);
+  const accessDenied = Boolean(requiredPermission && !user.permissions.includes(requiredPermission));
+  const firstRoute = firstPermittedRoute(user.permissions);
+
   return (
     <CurrentUserContext.Provider value={user}><div className={`app-shell${collapsed ? ' sidebar-collapsed' : ''}${drawerOpen ? ' drawer-open' : ''}`}>
       <button className="drawer-scrim" aria-label="Close navigation" onClick={() => setDrawerOpen(false)} />
       <aside aria-label="Main navigation">
         <div className="sidebar-brand"><span>OS</span><b>Order Stock</b><button className="sidebar-collapse" aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} aria-expanded={!collapsed} onClick={toggleSidebar}><Icon name={collapsed ? 'chevron-right' : 'chevron-left'} /></button></div>
         <nav>
-          {navigationGroups.map((group, groupIndex) => (
+          {visibleGroups.map((group, groupIndex) => (
             <div className="nav-group" key={group.label ?? groupIndex}>
               {group.collapsible ? <button className="nav-group-toggle" aria-expanded={Boolean(openGroups[group.label!])} onClick={() => setOpenGroups(value => ({...value,[group.label!]:!value[group.label!]}))}><Icon name={group.icon ?? 'settings'} /><span className="nav-label">{group.label}</span><Icon name={openGroups[group.label!] ? 'chevron-left' : 'chevron-right'} /></button> : group.label ? <p>{group.label}</p> : null}
               {(!group.collapsible || openGroups[group.label!]) && group.items.map(item => {
@@ -205,7 +210,11 @@ export function AppShell({ title, children }: { title: string; children: ReactNo
             </div>
           </div>
         </header>
-        <main>{children}</main>
+        <main>{accessDenied ? <section className="module-index"><div className="table-empty" role="alert">
+          <h1>Access Denied</h1>
+          <span>You do not have permission to access this module.</span>
+          {firstRoute ? <Link className="table-action" href={firstRoute}>Go to an available module</Link> : <button className="table-action" onClick={() => void logout()}>Logout</button>}
+        </div></section> : children}</main>
       </section>
     </div></CurrentUserContext.Provider>
   );
