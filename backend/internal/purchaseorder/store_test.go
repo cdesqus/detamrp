@@ -23,6 +23,8 @@ func TestOrderSelectIncludesSupplierDisplayName(t *testing.T) {
 	for _, fragment := range []string{
 		"s.name",
 		"join suppliers s on s.tenant_id=p.tenant_id and s.id=p.supplier_id",
+		"join tenant_settings ts on ts.tenant_id=p.tenant_id",
+		"coalesce(nullif(btrim(ts.company_name),''),'order stock')",
 	} {
 		if !strings.Contains(query, fragment) {
 			t.Errorf("order query missing %q", fragment)

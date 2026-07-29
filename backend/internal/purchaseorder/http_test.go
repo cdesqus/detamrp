@@ -161,7 +161,7 @@ func TestPurchaseOrderPDFRoutesStreamInlinePDFsWithSafeFilenames(t *testing.T) {
 		},
 		kanbanLabels: KanbanLabelDocument{
 			PurchaseOrderID: id, PONumber: "PO-202607-00001", DeliveryNoteNumber: "DN-202607-00001",
-			Labels: []KanbanLabel{{KanbanID: "KB-202607-00001", RawMaterialCode: "RM-1", LotNumber: 1}},
+			Labels: []KanbanLabel{{KanbanID: "KB-202607-00001", RawMaterialCode: "RM-1", CardNumber: 1, CardTotal: 1}},
 		},
 	}
 	router := purchaseOrderRouter(t, []string{"po.view"}, repository)

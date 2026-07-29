@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"image"
 	"image/color"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -246,7 +247,7 @@ func TestRenderPDFsEmbedUnicodeText(t *testing.T) {
 	}
 	labels := KanbanLabelDocument{
 		DeliveryNoteNumber: "DN-UTF8", PONumber: "PO-UTF8",
-		Labels: []KanbanLabel{{KanbanID: "KB-UTF8-1", RawMaterialCode: "RM-Ø", RawMaterialName: "Baja élit", BaseUnitCode: "KG", LotNumber: 1}},
+		Labels: []KanbanLabel{{KanbanID: "KB-UTF8-1", RawMaterialCode: "RM-Ø", RawMaterialName: "Baja élit", BaseUnitCode: "KG", CardNumber: 1, CardTotal: 1}},
 	}
 
 	po, err := RenderPOPDF(order, false)
@@ -284,7 +285,7 @@ func TestRenderPDFsKeepLongTextWithinReadableLayout(t *testing.T) {
 	}
 	labels := KanbanLabelDocument{
 		DeliveryNoteNumber: "DN-LONG", PONumber: "PO-LONG",
-		Labels: []KanbanLabel{{KanbanID: "KB-LONG-1", RawMaterialCode: "RM-LONG", RawMaterialName: longName, BaseUnitCode: "KG", LotNumber: 1}},
+		Labels: []KanbanLabel{{KanbanID: "KB-LONG-1", RawMaterialCode: "RM-LONG", RawMaterialName: longName, BaseUnitCode: "KG", CardNumber: 1, CardTotal: 1}},
 	}
 
 	po, err := RenderPOPDF(order, false)
@@ -336,9 +337,9 @@ func TestRenderKanbanLabelsPDFProducesOneOrderedQRCardPerLot(t *testing.T) {
 	document := KanbanLabelDocument{
 		DeliveryNoteNumber: "DN-202607-00001", PONumber: "PO-202607-00001",
 		Labels: []KanbanLabel{
-			{KanbanID: "KB-202607-000001", RawMaterialCode: "RM-A", RawMaterialName: "Alpha", Quantity: decimal.NewFromInt(10), BaseUnitCode: "KG", LotNumber: 1},
-			{KanbanID: "KB-202607-000002", RawMaterialCode: "RM-A", RawMaterialName: "Alpha", Quantity: decimal.NewFromInt(10), BaseUnitCode: "KG", LotNumber: 2},
-			{KanbanID: "KB-202607-000003", RawMaterialCode: "RM-B", RawMaterialName: "Bravo", Quantity: decimal.NewFromInt(5), BaseUnitCode: "L", LotNumber: 1},
+			{KanbanID: "KB-202607-000001", RawMaterialCode: "RM-A", RawMaterialName: "Alpha", Quantity: decimal.NewFromInt(10), BaseUnitCode: "KG", CardNumber: 1, CardTotal: 2},
+			{KanbanID: "KB-202607-000002", RawMaterialCode: "RM-A", RawMaterialName: "Alpha", Quantity: decimal.NewFromInt(10), BaseUnitCode: "KG", CardNumber: 2, CardTotal: 2},
+			{KanbanID: "KB-202607-000003", RawMaterialCode: "RM-B", RawMaterialName: "Bravo", Quantity: decimal.NewFromInt(5), BaseUnitCode: "L", CardNumber: 1, CardTotal: 1},
 		},
 	}
 
@@ -374,7 +375,7 @@ func TestRenderWideKanbanCard(t *testing.T) {
 		Labels: []KanbanLabel{{
 			KanbanID: "KB-202607-00028", RawMaterialCode: "BRG-123-00",
 			RawMaterialName: "COIL MATERIAL", Quantity: decimal.RequireFromString("5.000000"),
-			BaseUnitCode: "PC", LotNumber: 1,
+			BaseUnitCode: "PC", CardNumber: 1, CardTotal: 1,
 		}},
 	}
 	result, err := RenderKanbanLabelsPDF(document)
@@ -400,7 +401,7 @@ func TestKanbanCardPagination(t *testing.T) {
 		document.Labels = append(document.Labels, KanbanLabel{
 			KanbanID: fmt.Sprintf("KB-PAGED-%02d", index), RawMaterialCode: "RM-PAGED",
 			RawMaterialName: "Wide Kanban Card", Quantity: decimal.NewFromInt(5),
-			BaseUnitCode: "PC", LotNumber: index,
+			BaseUnitCode: "PC", CardNumber: index, CardTotal: 4,
 		})
 	}
 	result, err := RenderKanbanLabelsPDF(document)
@@ -429,7 +430,7 @@ func TestKanbanCardsDoNotUseCode128(t *testing.T) {
 
 	_, err := RenderKanbanLabelsPDF(KanbanLabelDocument{Labels: []KanbanLabel{{
 		KanbanID: "KB-QR-ONLY", RawMaterialCode: "RM", RawMaterialName: "QR only",
-		Quantity: decimal.NewFromInt(1), BaseUnitCode: "PC", LotNumber: 1,
+		Quantity: decimal.NewFromInt(1), BaseUnitCode: "PC", CardNumber: 1, CardTotal: 1,
 	}}})
 	if err != nil {
 		t.Fatal(err)
@@ -507,11 +508,13 @@ func TestRenderKanbanLabelsPDFStopsBeforeSerializationAfterLateCancellation(t *t
 
 func TestLoadDeliveryNoteDocumentUsesTenantFilteredQueriesAndAllLines(t *testing.T) {
 	tenantID, orderID, deliveryNoteID := uuid.New(), uuid.New(), uuid.New()
+	orderDate := time.Date(2026, 7, 21, 0, 0, 0, 0, time.UTC)
 	issuedAt := time.Date(2026, 7, 22, 8, 0, 0, 0, time.UTC)
 	query := &documentQueryRecorder{
 		rows: []pgx.Row{
 			documentRow(func(dest ...any) error {
-				*dest[0].(*string), *dest[1].(*string), *dest[2].(*time.Time), *dest[3].(*Status) = "PO-1", "Supplier", issuedAt, StatusApproved
+				*dest[0].(*string), *dest[1].(*string), *dest[2].(*string) = "Buyer PT", "PO-1", "Supplier"
+				*dest[3].(*time.Time), *dest[4].(*time.Time), *dest[5].(*Status) = orderDate, issuedAt, StatusApproved
 				return nil
 			}),
 			documentRow(func(dest ...any) error {
@@ -529,7 +532,7 @@ func TestLoadDeliveryNoteDocumentUsesTenantFilteredQueriesAndAllLines(t *testing
 	if err != nil {
 		t.Fatalf("load delivery note: %v", err)
 	}
-	if document.DeliveryNoteID != deliveryNoteID || len(document.Lines) != 2 {
+	if document.DeliveryNoteID != deliveryNoteID || document.CompanyName != "Buyer PT" || !document.OrderDate.Equal(orderDate) || len(document.Lines) != 2 {
 		t.Fatalf("document = %#v", document)
 	}
 	assertTenantQueries(t, query.calls, tenantID, orderID)
@@ -537,11 +540,13 @@ func TestLoadDeliveryNoteDocumentUsesTenantFilteredQueriesAndAllLines(t *testing
 
 func TestLoadKanbanLabelDocumentUsesStableTenantFilteredOrdering(t *testing.T) {
 	tenantID, orderID, deliveryNoteID := uuid.New(), uuid.New(), uuid.New()
+	orderDate := time.Date(2026, 7, 21, 0, 0, 0, 0, time.UTC)
 	issuedAt := time.Date(2026, 7, 22, 8, 0, 0, 0, time.UTC)
 	query := &documentQueryRecorder{
 		rows: []pgx.Row{
 			documentRow(func(dest ...any) error {
-				*dest[0].(*string), *dest[1].(*string), *dest[2].(*time.Time), *dest[3].(*Status) = "PO-1", "Supplier", issuedAt, StatusApproved
+				*dest[0].(*string), *dest[1].(*string), *dest[2].(*string) = "Buyer PT", "PO-1", "Supplier"
+				*dest[3].(*time.Time), *dest[4].(*time.Time), *dest[5].(*Status) = orderDate, issuedAt, StatusApproved
 				return nil
 			}),
 			documentRow(func(dest ...any) error {
@@ -550,8 +555,9 @@ func TestLoadKanbanLabelDocumentUsesStableTenantFilteredOrdering(t *testing.T) {
 			}),
 		},
 		rowSets: []pgx.Rows{&documentRows{scans: []func(...any) error{
-			func(dest ...any) error { setKanbanLabel(dest, "KB-2", "RM-A", "Alpha", "10", "KG", 2); return nil },
-			func(dest ...any) error { setKanbanLabel(dest, "KB-3", "RM-B", "Bravo", "5", "L", 1); return nil },
+			func(dest ...any) error { setKanbanLabel(dest, "KB-1", "RM-A", "Alpha", "10", "KG", 1, 2); return nil },
+			func(dest ...any) error { setKanbanLabel(dest, "KB-2", "RM-A", "Alpha", "10", "KG", 2, 2); return nil },
+			func(dest ...any) error { setKanbanLabel(dest, "KB-3", "RM-B", "Bravo", "5", "L", 1, 1); return nil },
 		}}},
 	}
 
@@ -559,8 +565,17 @@ func TestLoadKanbanLabelDocumentUsesStableTenantFilteredOrdering(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load labels: %v", err)
 	}
-	if len(document.Labels) != 2 || document.Labels[0].KanbanID != "KB-2" || document.Labels[1].KanbanID != "KB-3" {
+	if len(document.Labels) != 3 || document.CompanyName != "Buyer PT" || !document.OrderDate.Equal(orderDate) {
 		t.Fatalf("labels = %#v", document.Labels)
+	}
+	got := [][2]int{
+		{document.Labels[0].CardNumber, document.Labels[0].CardTotal},
+		{document.Labels[1].CardNumber, document.Labels[1].CardTotal},
+		{document.Labels[2].CardNumber, document.Labels[2].CardTotal},
+	}
+	want := [][2]int{{1, 2}, {2, 2}, {1, 1}}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("card positions = %#v, want %#v", got, want)
 	}
 	if !strings.Contains(strings.ToLower(query.calls[len(query.calls)-1].sql), "order by pol.sort_position,kl.lot_number") {
 		t.Fatalf("labels query lacks stable ordering: %s", query.calls[len(query.calls)-1].sql)
@@ -585,7 +600,8 @@ func TestLoadDeliveryNoteDocumentDistinguishesOtherTenantFromUnavailableDocument
 	t.Run("operational document unavailable", func(t *testing.T) {
 		query := &documentQueryRecorder{rows: []pgx.Row{
 			documentRow(func(dest ...any) error {
-				*dest[0].(*string), *dest[1].(*string), *dest[2].(*time.Time), *dest[3].(*Status) = "PO-1", "Supplier", time.Now(), StatusPendingApproval
+				*dest[0].(*string), *dest[1].(*string), *dest[2].(*string) = "Buyer PT", "PO-1", "Supplier"
+				*dest[3].(*time.Time), *dest[4].(*time.Time), *dest[5].(*Status) = time.Now(), time.Now(), StatusPendingApproval
 				return nil
 			}),
 			documentRow(func(...any) error { return pgx.ErrNoRows }),
@@ -657,10 +673,10 @@ func setDeliveryNoteLine(dest []any, code, name, unit, qtyPerKanban, totalKanban
 	*dest[5].(*decimal.Decimal) = decimal.RequireFromString(totalQuantity)
 }
 
-func setKanbanLabel(dest []any, id, code, name, quantity, unit string, lot int) {
+func setKanbanLabel(dest []any, id, code, name, quantity, unit string, cardNumber, cardTotal int) {
 	*dest[0].(*string), *dest[1].(*string), *dest[2].(*string) = id, code, name
 	*dest[3].(*decimal.Decimal) = decimal.RequireFromString(quantity)
-	*dest[4].(*string), *dest[5].(*int) = unit, lot
+	*dest[4].(*string), *dest[5].(*int), *dest[6].(*int) = unit, cardNumber, cardTotal
 }
 
 func assertTenantQueries(t *testing.T, calls []documentQueryCall, tenantID, orderID uuid.UUID) {

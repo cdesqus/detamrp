@@ -18,11 +18,12 @@ var _ Repository = (*SQLStore)(nil)
 
 func NewSQLStore(db *database.Pool) *SQLStore { return &SQLStore{db: db} }
 
-const orderSelect = `SELECT p.id,p.tenant_id,p.po_number,p.supplier_id,s.name,p.order_date,p.expected_delivery_date,
+const orderSelect = `SELECT p.id,p.tenant_id,p.po_number,COALESCE(NULLIF(BTRIM(ts.company_name),''),'Order Stock'),p.supplier_id,s.name,p.order_date,p.expected_delivery_date,
  p.currency,p.notes,p.status,p.version,p.total_amount,COALESCE(p.sage_purchase_order_number,''),
  COALESCE(p.submitted_approver_user_id,'00000000-0000-0000-0000-000000000000'),p.submitted_approver_display_name,p.submitted_approver_email,
  p.created_by_user_id,cu.display_name,cu.email,p.created_at,p.updated_by_user_id,uu.display_name,uu.email,p.updated_at
  FROM purchase_orders p
+	JOIN tenant_settings ts ON ts.tenant_id=p.tenant_id
 	JOIN suppliers s ON s.tenant_id=p.tenant_id AND s.id=p.supplier_id
 	JOIN users cu ON cu.tenant_id=p.tenant_id AND cu.id=p.created_by_user_id
  JOIN users uu ON uu.tenant_id=p.tenant_id AND uu.id=p.updated_by_user_id`
@@ -57,7 +58,7 @@ const approvalSelect = `SELECT a.id,a.tenant_id,a.purchase_order_id,a.version,a.
 func scanOrder(row pgx.Row) (Order, error) {
 	var order Order
 	err := row.Scan(
-		&order.ID, &order.TenantID, &order.PONumber, &order.SupplierID, &order.SupplierName, &order.OrderDate, &order.ExpectedDeliveryDate,
+		&order.ID, &order.TenantID, &order.PONumber, &order.CompanyName, &order.SupplierID, &order.SupplierName, &order.OrderDate, &order.ExpectedDeliveryDate,
 		&order.Currency, &order.Notes, &order.Status, &order.Version, &order.TotalAmount, &order.SagePurchaseOrderNumber,
 		&order.SubmittedApproverUserID, &order.SubmittedApproverDisplayName, &order.SubmittedApproverEmail,
 		&order.CreatedBy.UserID, &order.CreatedBy.DisplayName, &order.CreatedBy.Email, &order.CreatedAt,

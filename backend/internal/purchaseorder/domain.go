@@ -44,6 +44,7 @@ type Order struct {
 	ID                           uuid.UUID        `json:"id"`
 	TenantID                     uuid.UUID        `json:"tenantId"`
 	PONumber                     string           `json:"poNumber"`
+	CompanyName                  string           `json:"companyName"`
 	SupplierID                   uuid.UUID        `json:"supplierId"`
 	SupplierName                 string           `json:"supplierName"`
 	OrderDate                    time.Time        `json:"orderDate"`
