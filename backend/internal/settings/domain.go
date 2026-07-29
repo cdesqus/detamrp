@@ -162,6 +162,8 @@ func (i *ApprovalConfigInput) Validate() FieldErrors {
 }
 func permissionGroup(code string) string {
 	switch {
+	case strings.HasPrefix(code, "dashboard."):
+		return "Dashboard"
 	case strings.HasPrefix(code, "po."):
 		return "Procurement"
 	case strings.HasPrefix(code, "receiving."), strings.HasPrefix(code, "dn."):
@@ -171,7 +173,7 @@ func permissionGroup(code string) string {
 	case strings.HasPrefix(code, "integration."):
 		return "Integration"
 	case strings.HasPrefix(code, "master_data."):
-		return "Master Data"
+		return "Data Master"
 	default:
 		return "Settings"
 	}

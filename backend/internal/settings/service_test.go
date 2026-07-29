@@ -101,3 +101,20 @@ func TestRoleAndApproverInputValidation(t *testing.T) {
 		t.Fatal("approver must be required")
 	}
 }
+
+func TestPermissionGroupsMatchNavigationModules(t *testing.T) {
+	cases := map[string]string{
+		"dashboard.view":   "Dashboard",
+		"master_data.view": "Data Master",
+		"po.view":          "Procurement",
+		"receiving.view":   "Logistics",
+		"inventory.view":   "Inventory",
+		"integration.view": "Integration",
+		"role.manage":      "Settings",
+	}
+	for code, want := range cases {
+		if got := permissionGroup(code); got != want {
+			t.Errorf("permissionGroup(%q) = %q, want %q", code, got, want)
+		}
+	}
+}
