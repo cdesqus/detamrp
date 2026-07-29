@@ -1,7 +1,8 @@
 package rbac
 
 var Catalog = map[string]string{
-	"po.view": "View supplier orders", "po.create": "Create supplier orders", "po.edit_draft": "Edit draft supplier orders",
+	"dashboard.view": "View dashboard",
+	"po.view":        "View supplier orders", "po.create": "Create supplier orders", "po.edit_draft": "Edit draft supplier orders",
 	"po.submit": "Submit supplier orders", "po.approve": "Approve supplier orders", "po.reject": "Reject supplier orders",
 	"po.price.view": "View purchase prices", "po.unit_price.edit": "Edit purchase prices",
 	"dn.view": "View delivery notes", "dn.issue": "Issue delivery notes", "dn.cancel": "Cancel delivery notes",

@@ -16,7 +16,7 @@ func TestDeniesWhenAnyRequiredPermissionIsMissing(t *testing.T) {
 }
 
 func TestCatalogContainsPrototypeAdministrationAndOperationalPermissions(t *testing.T) {
-	required := []string{"po.approve", "receiving.submit", "inventory.adjust_minus", "smtp_settings.test", "role.manage"}
+	required := []string{"dashboard.view", "po.approve", "receiving.submit", "inventory.adjust_minus", "smtp_settings.test", "role.manage"}
 	for _, permission := range required {
 		if _, ok := Catalog[permission]; !ok {
 			t.Fatalf("catalog missing %s", permission)

@@ -33,7 +33,7 @@ func RegisterRoutes(router *gin.Engine, store *Store, authenticator Authenticato
 		c.Set(rbac.ContextPermissionsKey, user.Permissions)
 		c.Next()
 	}
-	router.GET("/dashboard", authenticate, rbac.RequirePermissions("inventory.view"), func(c *gin.Context) {
+	router.GET("/dashboard", authenticate, rbac.RequirePermissions("dashboard.view"), func(c *gin.Context) {
 		filter, fields := ParseFilter(c.Request.URL.Query(), time.Now())
 		if len(fields) > 0 {
 			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "validation failed", "fields": fields})
