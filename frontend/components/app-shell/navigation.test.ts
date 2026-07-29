@@ -12,6 +12,7 @@ describe('navigation permission policy', () => {
     expect(requiredPermissionForPath('/dashboard')).toBe('dashboard.view');
     expect(requiredPermissionForPath('/receiving/session-1')).toBe('receiving.view');
     expect(requiredPermissionForPath('/settings/roles')).toBe('role.manage');
+    expect(requiredPermissionForPath('/settings/company')).toBe('configuration.manage');
   });
 
   it('keeps permitted items and removes empty groups', () => {

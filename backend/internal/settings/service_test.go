@@ -10,6 +10,15 @@ import (
 type fakeRepo struct {
 	created UserInput
 	updated UserInput
+	company CompanyConfigInput
+}
+
+func (f *fakeRepo) GetCompanyConfig(context.Context, Actor) (CompanyConfig, error) {
+	return CompanyConfig{CompanyName: "Existing Company"}, nil
+}
+func (f *fakeRepo) UpdateCompanyConfig(_ context.Context, _ Actor, in CompanyConfigInput) (CompanyConfig, error) {
+	f.company = in
+	return CompanyConfig{CompanyName: in.CompanyName}, nil
 }
 
 func (f *fakeRepo) ListUsers(context.Context, Actor, ListQuery) ([]User, int, error) {
@@ -56,6 +65,19 @@ func TestServiceNormalizesUserAndRequiresCreatePassword(t *testing.T) {
 	_, err = service.CreateUser(context.Background(), actor, UserInput{Username: "x", DisplayName: "X", Email: "x@example.com", RoleIDs: []uuid.UUID{role}, Active: true})
 	if _, ok := err.(ValidationError); !ok {
 		t.Fatalf("expected validation error, got %v", err)
+	}
+}
+
+func TestServiceNormalizesAndRequiresCompanyName(t *testing.T) {
+	repo := &fakeRepo{}
+	service := NewService(repo)
+	actor := Actor{TenantID: uuid.New(), UserID: uuid.New()}
+	item, err := service.UpdateCompanyConfig(context.Background(), actor, CompanyConfigInput{CompanyName: "  PT Buyer Indonesia  "})
+	if err != nil || item.CompanyName != "PT Buyer Indonesia" || repo.company.CompanyName != "PT Buyer Indonesia" {
+		t.Fatalf("company update = %#v, %v", item, err)
+	}
+	if _, err = service.UpdateCompanyConfig(context.Background(), actor, CompanyConfigInput{}); err == nil {
+		t.Fatal("empty company name was accepted")
 	}
 }
 

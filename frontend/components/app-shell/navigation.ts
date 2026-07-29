@@ -20,6 +20,7 @@ export const navigationGroups: NavigationGroup[] = [
   ] },
   { items: [{ label: 'Reports', href: '/reports', icon: 'report', requiredPermission: 'receiving.view' }] },
   { label: 'Settings', icon: 'settings', collapsible: true, items: [
+    { label: 'Company Settings', href: '/settings/company', icon: 'settings', requiredPermission: 'configuration.manage' },
     { label: 'Users', href: '/settings/users', icon: 'users', requiredPermission: 'user.manage' },
     { label: 'Roles & Permissions', href: '/settings/roles', icon: 'shield', requiredPermission: 'role.manage' },
     { label: 'SMTP Settings', href: '/settings/smtp', icon: 'mail', requiredPermission: 'smtp_settings.view' },
@@ -41,6 +42,7 @@ const routeRules: Array<{ path: string; permission: string; exact?: boolean }> =
   { path: '/outgoing-material', permission: 'inventory.view' },
   { path: '/reports', permission: 'receiving.view' },
   { path: '/settings/users', permission: 'user.manage' },
+  { path: '/settings/company', permission: 'configuration.manage' },
   { path: '/settings/roles', permission: 'role.manage' },
   { path: '/settings/smtp', permission: 'smtp_settings.view' },
   { path: '/settings/email-log', permission: 'email_log.view' }

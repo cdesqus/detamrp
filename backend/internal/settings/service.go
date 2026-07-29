@@ -15,7 +15,20 @@ type Repository interface {
 	ListPermissions(context.Context, Actor) ([]Permission, error)
 	GetApprovalConfig(context.Context, Actor) (ApprovalConfig, error)
 	UpdateApprovalConfig(context.Context, Actor, ApprovalConfigInput) (ApprovalConfig, error)
+	GetCompanyConfig(context.Context, Actor) (CompanyConfig, error)
+	UpdateCompanyConfig(context.Context, Actor, CompanyConfigInput) (CompanyConfig, error)
 }
+
+func (s *Service) GetCompanyConfig(c context.Context, a Actor) (CompanyConfig, error) {
+	return s.repo.GetCompanyConfig(c, a)
+}
+func (s *Service) UpdateCompanyConfig(c context.Context, a Actor, i CompanyConfigInput) (CompanyConfig, error) {
+	if f := i.NormalizeAndValidate(); len(f) > 0 {
+		return CompanyConfig{}, ValidationError{f}
+	}
+	return s.repo.UpdateCompanyConfig(c, a, i)
+}
+
 type Service struct{ repo Repository }
 
 func NewService(r Repository) *Service { return &Service{repo: r} }

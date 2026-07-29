@@ -349,6 +349,18 @@ func (s *SQLStore) UpdateApprovalConfig(ctx context.Context, a Actor, in Approva
 	})
 	return
 }
+func (s *SQLStore) GetCompanyConfig(ctx context.Context, a Actor) (item CompanyConfig, err error) {
+	err = database.WithTenant(ctx, s.db, database.TenantContext{TenantID: a.TenantID, UserID: a.UserID}, func(tx database.TenantTx) error {
+		return tx.QueryRow(ctx, `SELECT company_name FROM tenant_settings WHERE tenant_id=$1`, a.TenantID).Scan(&item.CompanyName)
+	})
+	return
+}
+func (s *SQLStore) UpdateCompanyConfig(ctx context.Context, a Actor, in CompanyConfigInput) (item CompanyConfig, err error) {
+	err = database.WithTenant(ctx, s.db, database.TenantContext{TenantID: a.TenantID, UserID: a.UserID}, func(tx database.TenantTx) error {
+		return tx.QueryRow(ctx, `UPDATE tenant_settings SET company_name=$2,updated_by_user_id=$3,updated_at=now() WHERE tenant_id=$1 RETURNING company_name`, a.TenantID, in.CompanyName, a.UserID).Scan(&item.CompanyName)
+	})
+	return
+}
 func writeError(err error) error {
 	var p *pgconn.PgError
 	if errors.As(err, &p) && p.Code == "23505" {

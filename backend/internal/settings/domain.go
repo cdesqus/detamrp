@@ -73,6 +73,24 @@ type ApprovalConfig struct {
 	DisplayName           string    `json:"displayName"`
 	Email                 string    `json:"email"`
 }
+type CompanyConfig struct {
+	CompanyName string `json:"companyName"`
+}
+type CompanyConfigInput struct {
+	CompanyName string `json:"companyName"`
+}
+
+func (i *CompanyConfigInput) NormalizeAndValidate() FieldErrors {
+	i.CompanyName = strings.TrimSpace(i.CompanyName)
+	if i.CompanyName == "" {
+		return FieldErrors{"companyName": "Company Name is required"}
+	}
+	if len([]rune(i.CompanyName)) > 160 {
+		return FieldErrors{"companyName": "Company Name cannot exceed 160 characters"}
+	}
+	return nil
+}
+
 type UserInput struct {
 	Username                string      `json:"username"`
 	DisplayName             string      `json:"displayName"`

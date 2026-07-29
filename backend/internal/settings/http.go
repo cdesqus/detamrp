@@ -132,6 +132,25 @@ func RegisterRoutes(router *gin.Engine, s *Service, a Authenticator) {
 		}
 		c.JSON(200, item)
 	})
+	g.GET("/company", rbac.RequirePermissions("configuration.manage"), func(c *gin.Context) {
+		item, e := s.GetCompanyConfig(c, actor(c))
+		if fail(c, e) {
+			return
+		}
+		c.JSON(200, item)
+	})
+	g.PUT("/company", rbac.RequirePermissions("configuration.manage"), func(c *gin.Context) {
+		var in CompanyConfigInput
+		if c.ShouldBindJSON(&in) != nil {
+			badJSON(c)
+			return
+		}
+		item, e := s.UpdateCompanyConfig(c, actor(c), in)
+		if fail(c, e) {
+			return
+		}
+		c.JSON(200, item)
+	})
 }
 func authenticate(a Authenticator) gin.HandlerFunc {
 	return func(c *gin.Context) {
