@@ -182,7 +182,8 @@ func TestDeliveryNoteUnitTotals(t *testing.T) {
 
 func TestRenderDeliveryNotePDFUsesModernLayout(t *testing.T) {
 	document := DeliveryNoteDocument{
-		DeliveryNoteNumber: "DN-MODERN", PONumber: "PO-MODERN", SupplierName: "PT Modern",
+		DeliveryNoteNumber: "DN-MODERN", PONumber: "PO-MODERN", CompanyName: "PT Buyer Indonesia", SupplierName: "PT Modern",
+		OrderDate:            time.Date(2026, 7, 21, 0, 0, 0, 0, time.UTC),
 		ExpectedDeliveryDate: time.Date(2026, 7, 25, 0, 0, 0, 0, time.UTC),
 		IssuedAt:             time.Date(2026, 7, 23, 0, 0, 0, 0, time.UTC),
 		Lines: []DeliveryNoteLine{
@@ -196,13 +197,17 @@ func TestRenderDeliveryNotePDFUsesModernLayout(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, text := range []string{
-		"Order Stock", "DELIVERY NOTE", "SCAN FOR RECEIVING", "MATERIAL DETAILS",
+		"PT Buyer Indonesia", "DELIVERY NOTE", "DN-MODERN", "SCAN FOR RECEIVING", "MATERIAL DETAILS",
+		"Order Date", "21 Jul 2026",
 		"REMARKS", "SUPPLIER", "Prepared By", "RECEIVER", "Received By",
 		"Total Kanban", "Total Quantity", "PCS 20", "KG 15",
 	} {
 		if !pdfContainsText(result, text) {
 			t.Errorf("missing modern DN text %q", text)
 		}
+	}
+	if pdfContainsLegacyDarkFill(result) {
+		t.Fatal("Delivery Note still uses solid section fills")
 	}
 	for _, redundant := range []string{"10.000000", "2.000000", "20.000000"} {
 		if pdfContainsText(result, redundant) {

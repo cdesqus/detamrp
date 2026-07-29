@@ -70,6 +70,7 @@ type KanbanLabel struct {
 const maxKanbanLabelsPerPDF = 1_000
 
 const pdfFontFamily = "OrderStockSans"
+const deliveryNoteNumberFontSize = 15.0
 
 func newA4PDF(title string) *fpdf.Fpdf {
 	pdf := fpdf.New("P", "mm", "A4", "")
@@ -234,20 +235,25 @@ func RenderDeliveryNotePDF(document DeliveryNoteDocument) ([]byte, error) {
 }
 
 func writeDeliveryNoteHeader(pdf *fpdf.Fpdf, document DeliveryNoteDocument, qrPNG []byte) {
-	pdf.SetFillColor(24, 24, 27)
-	pdf.Rect(0, 0, 210, 32, "F")
-	pdf.SetTextColor(255, 255, 255)
-	pdf.SetXY(12, 7)
-	pdf.SetFont(pdfFontFamily, "B", 12)
-	pdf.CellFormat(55, 6, "Order Stock", "", 0, "L", false, 0, "")
-	pdf.SetFont(pdfFontFamily, "B", 17)
-	pdf.CellFormat(76, 7, "DELIVERY NOTE", "", 0, "C", false, 0, "")
-	pdf.SetFont(pdfFontFamily, "B", 9)
-	pdf.CellFormat(55, 6, document.DeliveryNoteNumber, "", 1, "R", false, 0, "")
-	pdf.SetX(67)
-	pdf.SetFont(pdfFontFamily, "", 7)
-	pdf.CellFormat(76, 5, "SUPPLIER SHIPPING DOCUMENT", "", 0, "C", false, 0, "")
+	pdf.SetDrawColor(24, 24, 27)
 	pdf.SetTextColor(24, 24, 27)
+	pdf.SetLineWidth(0.35)
+	pdf.Rect(12, 7, 186, 25, "D")
+	pdf.Line(65, 7, 65, 32)
+	pdf.Line(130, 7, 130, 32)
+	pdf.SetXY(15, 10)
+	pdf.SetFont(pdfFontFamily, "B", 9)
+	companyLines := fitPDFTextLines(pdf, pdfCompanyName(document.CompanyName), 47, 3)
+	writePDFTextLines(pdf, 15, 10, 47, 5, companyLines, "L")
+	pdf.SetXY(67, 11)
+	pdf.SetFont(pdfFontFamily, "B", 13)
+	pdf.CellFormat(61, 7, "DELIVERY NOTE", "", 0, "C", false, 0, "")
+	pdf.SetXY(67, 20)
+	pdf.SetFont(pdfFontFamily, "", 7)
+	pdf.CellFormat(61, 5, "SUPPLIER SHIPPING DOCUMENT", "", 0, "C", false, 0, "")
+	pdf.SetFont(pdfFontFamily, "B", deliveryNoteNumberFontSize)
+	numberLines := fitPDFTextLines(pdf, document.DeliveryNoteNumber, 64, 2)
+	writePDFTextLines(pdf, 132, 12, 64, 7, numberLines, "C")
 
 	pdf.SetY(38)
 	pdf.SetFont(pdfFontFamily, "B", 8)
@@ -257,6 +263,7 @@ func writeDeliveryNoteHeader(pdf *fpdf.Fpdf, document DeliveryNoteDocument, qrPN
 	pdf.SetY(45)
 	writeDeliveryNoteMeta(pdf, "Supplier", document.SupplierName)
 	writeDeliveryNoteMeta(pdf, "PO Number", document.PONumber)
+	writeDeliveryNoteMeta(pdf, "Order Date", formatPDFDate(document.OrderDate))
 	writeDeliveryNoteMeta(pdf, "Expected Delivery", formatPDFDate(document.ExpectedDeliveryDate))
 	writeDeliveryNoteMeta(pdf, "Issued Date", formatPDFDate(document.IssuedAt))
 
@@ -308,20 +315,19 @@ func writeDeliveryNoteFooter(pdf *fpdf.Fpdf, lines []DeliveryNoteLine) {
 	}
 	left, _, _, _ := pdf.GetMargins()
 	pdf.SetX(left)
-	pdf.SetFillColor(244, 244, 245)
 	pdf.SetFont(pdfFontFamily, "B", 8)
-	pdf.CellFormat(93, 7, "Total Kanban", "1", 0, "L", true, 0, "")
+	pdf.CellFormat(93, 7, "Total Kanban", "1", 0, "L", false, 0, "")
 	pdf.SetFont(pdfFontFamily, "", 8)
 	pdf.CellFormat(93, 7, formatPDFDecimal(totalKanban, 0), "1", 1, "R", false, 0, "")
 	pdf.SetX(left)
 	pdf.SetFont(pdfFontFamily, "B", 8)
-	pdf.CellFormat(93, 7, "Total Quantity", "1", 0, "L", true, 0, "")
+	pdf.CellFormat(93, 7, "Total Quantity", "1", 0, "L", false, 0, "")
 	pdf.SetFont(pdfFontFamily, "", 8)
 	pdf.CellFormat(93, 7, strings.Join(deliveryNoteUnitTotals(lines), "  |  "), "1", 1, "R", false, 0, "")
 
 	pdf.Ln(3)
 	pdf.SetFont(pdfFontFamily, "B", 8)
-	pdf.CellFormat(186, 6, "REMARKS", "1", 1, "L", true, 0, "")
+	pdf.CellFormat(186, 6, "REMARKS", "1", 1, "L", false, 0, "")
 	pdf.CellFormat(186, 12, "", "1", 1, "L", false, 0, "")
 	pdf.Ln(4)
 	writeDeliveryNoteSignatureBoxes(pdf)
@@ -330,9 +336,8 @@ func writeDeliveryNoteFooter(pdf *fpdf.Fpdf, lines []DeliveryNoteLine) {
 func writeDeliveryNoteTable(pdf *fpdf.Fpdf, widths []float64, headings []string, rows [][]string) {
 	writeHeader := func() {
 		pdf.SetFont(pdfFontFamily, "B", 7)
-		pdf.SetFillColor(244, 244, 245)
 		for index, heading := range headings {
-			pdf.CellFormat(widths[index], 7, heading, "1", 0, "C", true, 0, "")
+			pdf.CellFormat(widths[index], 7, heading, "1", 0, "C", false, 0, "")
 		}
 		pdf.Ln(-1)
 	}
@@ -379,9 +384,8 @@ func writeDeliveryNoteSignatureBoxes(pdf *fpdf.Fpdf) {
 	for index, x := range xPositions {
 		y := baseY
 		pdf.SetXY(x, y)
-		pdf.SetFillColor(244, 244, 245)
 		pdf.SetFont(pdfFontFamily, "B", 8)
-		pdf.CellFormat(90, 6, headings[index], "1", 1, "C", true, 0, "")
+		pdf.CellFormat(90, 6, headings[index], "1", 1, "C", false, 0, "")
 		pdf.SetXY(x, y+6)
 		pdf.SetFont(pdfFontFamily, "", 7)
 		pdf.CellFormat(90, 5, subheadings[index], "1", 1, "C", false, 0, "")
