@@ -372,10 +372,13 @@ func TestRenderWideKanbanCard(t *testing.T) {
 	document := KanbanLabelDocument{
 		DeliveryNoteNumber: "DN-202607-00004",
 		PONumber:           "PO-202607-00009",
+		CompanyName:        "PT Buyer Indonesia",
+		SupplierName:       "PT Supplier Sentosa",
+		OrderDate:          time.Date(2026, 7, 21, 0, 0, 0, 0, time.UTC),
 		Labels: []KanbanLabel{{
 			KanbanID: "KB-202607-00028", RawMaterialCode: "BRG-123-00",
 			RawMaterialName: "COIL MATERIAL", Quantity: decimal.RequireFromString("5.000000"),
-			BaseUnitCode: "PC", CardNumber: 1, CardTotal: 1,
+			BaseUnitCode: "PC", CardNumber: 1, CardTotal: 5,
 		}},
 	}
 	result, err := RenderKanbanLabelsPDF(document)
@@ -383,7 +386,8 @@ func TestRenderWideKanbanCard(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, text := range []string{
-		"KANBAN CARD", "KANBAN ID", "RAW MATERIAL", "QUANTITY", "LOT",
+		"PT Buyer Indonesia", "KANBAN CARD", "KANBAN ID", "PART NUMBER", "PART NAME",
+		"PT Supplier Sentosa", "ORDER DATE", "21 Jul 2026", "QUANTITY", "CARD", "1/5",
 		"DELIVERY NOTE", "PURCHASE ORDER", "KB-202607-00028", "5 PC",
 	} {
 		if !pdfContainsText(result, text) {
@@ -392,6 +396,12 @@ func TestRenderWideKanbanCard(t *testing.T) {
 	}
 	if pdfContainsText(result, "KANBAN LABEL") {
 		t.Fatal("legacy Kanban Label title is still present")
+	}
+	if pdfContainsText(result, "LOT") {
+		t.Fatal("legacy LOT label is still present")
+	}
+	if pdfContainsLegacyDarkFill(result) {
+		t.Fatal("Kanban still uses a dark solid fill")
 	}
 }
 
@@ -717,4 +727,8 @@ func pdfContainsText(document []byte, value string) bool {
 
 func pdfTextCount(document []byte, value string) int {
 	return bytes.Count(document, []byte(value)) + bytes.Count(document, utf16BE(value))
+}
+
+func pdfContainsLegacyDarkFill(document []byte) bool {
+	return bytes.Contains(document, []byte(" re f"))
 }
