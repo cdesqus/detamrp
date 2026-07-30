@@ -26,7 +26,10 @@ type Authenticator interface {
 type serverConfig struct {
 	authenticator        Authenticator
 	cookieSecure         bool
-	measurementService   *masterdata.MeasurementService
+	unitService          *masterdata.UnitService
+	categoryService      *masterdata.CategoryService
+	packingService       *masterdata.PackingService
+	plantService         *masterdata.PlantService
 	supplierService      *masterdata.SupplierService
 	rawMaterialService   *masterdata.RawMaterialService
 	settingsService      *settings.Service
@@ -49,8 +52,17 @@ func WithSecureCookies() ServerOption {
 	return func(config *serverConfig) { config.cookieSecure = true }
 }
 
-func WithMeasurementService(service *masterdata.MeasurementService) ServerOption {
-	return func(config *serverConfig) { config.measurementService = service }
+func WithUnitService(service *masterdata.UnitService) ServerOption {
+	return func(config *serverConfig) { config.unitService = service }
+}
+func WithCategoryService(service *masterdata.CategoryService) ServerOption {
+	return func(config *serverConfig) { config.categoryService = service }
+}
+func WithPackingService(service *masterdata.PackingService) ServerOption {
+	return func(config *serverConfig) { config.packingService = service }
+}
+func WithPlantService(service *masterdata.PlantService) ServerOption {
+	return func(config *serverConfig) { config.plantService = service }
 }
 func WithSupplierService(service *masterdata.SupplierService) ServerOption {
 	return func(config *serverConfig) { config.supplierService = service }
@@ -95,8 +107,17 @@ func NewServer(options ...ServerOption) http.Handler {
 	})
 	if config.authenticator != nil {
 		registerAuthRoutes(router, config)
-		if config.measurementService != nil {
-			masterdata.RegisterMeasurementRoutes(router, config.measurementService, config.authenticator)
+		if config.unitService != nil {
+			masterdata.RegisterUnitRoutes(router, config.unitService, config.authenticator)
+		}
+		if config.categoryService != nil {
+			masterdata.RegisterCategoryRoutes(router, config.categoryService, config.authenticator)
+		}
+		if config.packingService != nil {
+			masterdata.RegisterPackingRoutes(router, config.packingService, config.authenticator)
+		}
+		if config.plantService != nil {
+			masterdata.RegisterPlantRoutes(router, config.plantService, config.authenticator)
 		}
 		if config.supplierService != nil {
 			masterdata.RegisterSupplierRoutes(router, config.supplierService, config.authenticator)

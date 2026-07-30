@@ -469,7 +469,7 @@ func replaceDraftLines(ctx context.Context, tx database.TenantTx, actor Actor, o
 func snapshotLine(ctx context.Context, tx database.TenantTx, tenantID, orderID, supplierID uuid.UUID, input LineInput, position int) (OrderLine, error) {
 	line := OrderLine{TenantID: tenantID, PurchaseOrderID: orderID, RawMaterialID: input.RawMaterialID, TotalKanban: input.TotalKanban, SortPosition: position}
 	err := tx.QueryRow(ctx, `SELECT r.code,r.name,r.base_unit_id,m.code,r.qty_per_kanban,r.standard_unit_price
- FROM raw_materials r JOIN measurements m ON m.tenant_id=r.tenant_id AND m.id=r.base_unit_id AND m.active
+ FROM raw_materials r JOIN units m ON m.tenant_id=r.tenant_id AND m.id=r.base_unit_id AND m.active
 	 WHERE r.tenant_id=$1 AND r.id=$2 AND r.supplier_id=$3 AND r.active FOR SHARE OF r,m`, tenantID, input.RawMaterialID, supplierID).
 		Scan(&line.RawMaterialCode, &line.RawMaterialName, &line.BaseUnitID, &line.BaseUnitCode, &line.QtyPerKanbanSnapshot, &line.UnitPriceSnapshot)
 	if errors.Is(err, pgx.ErrNoRows) {

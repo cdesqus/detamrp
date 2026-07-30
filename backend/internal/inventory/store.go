@@ -32,7 +32,7 @@ SELECT rm.id, rm.code, rm.name, s.id, s.name,
        m.code, rm.minimum_stock
 FROM raw_materials rm
 JOIN suppliers s ON s.tenant_id = rm.tenant_id AND s.id = rm.supplier_id
-JOIN measurements m ON m.tenant_id = rm.tenant_id AND m.id = rm.base_unit_id
+JOIN units m ON m.tenant_id = rm.tenant_id AND m.id = rm.base_unit_id
 LEFT JOIN purchase_order_lines pol
   ON pol.tenant_id = rm.tenant_id AND pol.raw_material_id = rm.id
 LEFT JOIN kanban_lots kl

@@ -161,7 +161,7 @@ func TestInboundMigrationLiveConstraintsAndChangedSourceRerun(t *testing.T) {
 			t.Fatalf("insert capacity PO: %v", err)
 		}
 		if _, err := db.Exec(ctx, `INSERT INTO purchase_order_lines(id,tenant_id,purchase_order_id,raw_material_id,raw_material_code_snapshot,raw_material_name_snapshot,base_unit_id,base_unit_code_snapshot,qty_per_kanban_snapshot,total_kanban,ordered_base_qty,unit_price_snapshot,line_total,sort_position,created_by_user_id,updated_by_user_id)
- VALUES($1,$2,$3,$4,'IN-RM','Inbound Material',$5,'IN-KG',2.5,2,5,4.25,21.25,1,$6,$6)`, lineID, fixture.tenantA, purchaseOrderID, fixture.material, fixture.measurement, fixture.userA); err != nil {
+ VALUES($1,$2,$3,$4,'IN-RM','Inbound Material',$5,'IN-KG',2.5,2,5,4.25,21.25,1,$6,$6)`, lineID, fixture.tenantA, purchaseOrderID, fixture.material, fixture.unit, fixture.userA); err != nil {
 			t.Fatalf("insert capacity PO line: %v", err)
 		}
 		if _, err := db.Exec(ctx, `UPDATE kanban_number_sequences SET next_value=999999 WHERE tenant_id=$1 AND year_month='202607'`, fixture.tenantA); err != nil {
@@ -173,18 +173,18 @@ func TestInboundMigrationLiveConstraintsAndChangedSourceRerun(t *testing.T) {
 }
 
 type inboundMigrationFixture struct {
-	tenantA, tenantB                  uuid.UUID
-	userA, userB                      uuid.UUID
-	measurement, supplierA, supplierB uuid.UUID
-	material                          uuid.UUID
-	po1, po2, po3, poOther, poB       uuid.UUID
-	line1, line2, line3               uuid.UUID
+	tenantA, tenantB            uuid.UUID
+	userA, userB                uuid.UUID
+	unit, supplierA, supplierB  uuid.UUID
+	material                    uuid.UUID
+	po1, po2, po3, poOther, poB uuid.UUID
+	line1, line2, line3         uuid.UUID
 }
 
 func newInboundMigrationFixture() inboundMigrationFixture {
 	return inboundMigrationFixture{
 		tenantA: uuid.New(), tenantB: uuid.New(), userA: uuid.New(), userB: uuid.New(),
-		measurement: uuid.New(), supplierA: uuid.New(), supplierB: uuid.New(), material: uuid.New(),
+		unit: uuid.New(), supplierA: uuid.New(), supplierB: uuid.New(), material: uuid.New(),
 		po1: uuid.New(), po2: uuid.New(), po3: uuid.New(), poOther: uuid.New(), poB: uuid.New(),
 		line1: uuid.New(), line2: uuid.New(), line3: uuid.New(),
 	}
@@ -198,11 +198,11 @@ func (f inboundMigrationFixture) insertInitialSource(ctx context.Context, db *pg
 	}{
 		{`INSERT INTO tenants(id,code,name) VALUES($1,$2,'Inbound Tenant A'),($3,$4,'Inbound Tenant B')`, []any{f.tenantA, "IN-A-" + suffix, f.tenantB, "IN-B-" + suffix}},
 		{`INSERT INTO users(id,tenant_id,username,display_name,email,password_hash) VALUES($1,$2,'inbound-a','Inbound A',$3,'unused'),($4,$5,'inbound-b','Inbound B',$6,'unused')`, []any{f.userA, f.tenantA, "in-a-" + suffix + "@test.invalid", f.userB, f.tenantB, "in-b-" + suffix + "@test.invalid"}},
-		{`INSERT INTO measurements(id,tenant_id,code,name,created_by_user_id,updated_by_user_id) VALUES($1,$2,'IN-KG','Inbound Kg',$3,$3)`, []any{f.measurement, f.tenantA, f.userA}},
+		{`INSERT INTO units(id,tenant_id,code,name,created_by_user_id,updated_by_user_id) VALUES($1,$2,'IN-KG','Inbound Kg',$3,$3)`, []any{f.unit, f.tenantA, f.userA}},
 		{`INSERT INTO suppliers(id,tenant_id,code,sage_supplier_code,name,email,currency,created_by_user_id,updated_by_user_id) VALUES
  ($1,$2,'IN-SA',$3,'Inbound Supplier A','a@test.invalid','IDR',$4,$4),
  ($5,$6,'IN-SB',$7,'Inbound Supplier B','b@test.invalid','IDR',$8,$8)`, []any{f.supplierA, f.tenantA, "SAGE-A-" + suffix, f.userA, f.supplierB, f.tenantB, "SAGE-B-" + suffix, f.userB}},
-		{`INSERT INTO raw_materials(id,tenant_id,code,sage_item_code,name,supplier_id,base_unit_id,qty_per_kanban,standard_unit_price,currency,created_by_user_id,updated_by_user_id) VALUES($1,$2,'IN-RM',$3,'Inbound Material',$4,$5,2.5,4.25,'IDR',$6,$6)`, []any{f.material, f.tenantA, "ITEM-" + suffix, f.supplierA, f.measurement, f.userA}},
+		{`INSERT INTO raw_materials(id,tenant_id,code,sage_item_code,name,supplier_id,base_unit_id,qty_per_kanban,standard_unit_price,currency,created_by_user_id,updated_by_user_id) VALUES($1,$2,'IN-RM',$3,'Inbound Material',$4,$5,2.5,4.25,'IDR',$6,$6)`, []any{f.material, f.tenantA, "ITEM-" + suffix, f.supplierA, f.unit, f.userA}},
 		{`INSERT INTO purchase_orders(id,tenant_id,po_number,supplier_id,order_date,expected_delivery_date,currency,status,created_by_user_id,created_at,updated_by_user_id,updated_at) VALUES
  ($1,$2,'PO-IN-1',$3,'2026-07-10','2026-07-11','IDR','APPROVED',$4,'2026-07-10 00:00:00+00',$4,'2026-07-10 00:00:00+00'),
  ($5,$2,'PO-IN-2',$3,'2026-07-20','2026-07-21','IDR','APPROVED',$4,'2026-07-20 00:00:00+00',$4,'2026-07-20 00:00:00+00'),
@@ -210,7 +210,7 @@ func (f inboundMigrationFixture) insertInitialSource(ctx context.Context, db *pg
  ($7,$8,'PO-IN-B',$9,'2026-07-15','2026-07-16','IDR','APPROVED',$10,'2026-07-15 00:00:00+00',$10,'2026-07-15 00:00:00+00')`, []any{f.po1, f.tenantA, f.supplierA, f.userA, f.po2, f.poOther, f.poB, f.tenantB, f.supplierB, f.userB}},
 		{`INSERT INTO purchase_order_lines(id,tenant_id,purchase_order_id,raw_material_id,raw_material_code_snapshot,raw_material_name_snapshot,base_unit_id,base_unit_code_snapshot,qty_per_kanban_snapshot,total_kanban,ordered_base_qty,unit_price_snapshot,line_total,sort_position,created_by_user_id,updated_by_user_id) VALUES
  ($1,$2,$3,$4,'IN-RM','Inbound Material',$5,'IN-KG',2.5,2,5,4.25,21.25,1,$6,$6),
- ($7,$2,$8,$4,'IN-RM','Inbound Material',$5,'IN-KG',2.5,1,2.5,4.25,10.625,1,$6,$6)`, []any{f.line1, f.tenantA, f.po1, f.material, f.measurement, f.userA, f.line2, f.po2}},
+ ($7,$2,$8,$4,'IN-RM','Inbound Material',$5,'IN-KG',2.5,1,2.5,4.25,10.625,1,$6,$6)`, []any{f.line1, f.tenantA, f.po1, f.material, f.unit, f.userA, f.line2, f.po2}},
 	}
 	for _, statement := range statements {
 		if _, err := db.Exec(ctx, statement.sql, statement.args...); err != nil {
@@ -226,7 +226,7 @@ func (f inboundMigrationFixture) insertEarlierApprovedOrder(ctx context.Context,
 		return err
 	}
 	_, err := db.Exec(ctx, `INSERT INTO purchase_order_lines(id,tenant_id,purchase_order_id,raw_material_id,raw_material_code_snapshot,raw_material_name_snapshot,base_unit_id,base_unit_code_snapshot,qty_per_kanban_snapshot,total_kanban,ordered_base_qty,unit_price_snapshot,line_total,sort_position,created_by_user_id,updated_by_user_id)
- VALUES($1,$2,$3,$4,'IN-RM','Inbound Material',$5,'IN-KG',2.5,1,2.5,4.25,10.625,1,$6,$6)`, f.line3, f.tenantA, f.po3, f.material, f.measurement, f.userA)
+ VALUES($1,$2,$3,$4,'IN-RM','Inbound Material',$5,'IN-KG',2.5,1,2.5,4.25,10.625,1,$6,$6)`, f.line3, f.tenantA, f.po3, f.material, f.unit, f.userA)
 	return err
 }
 
@@ -234,7 +234,7 @@ func (f inboundMigrationFixture) cleanup(ctx context.Context, db *pgxpool.Pool) 
 	tables := []string{
 		"kanban_lots", "delivery_note_lines", "delivery_notes", "delivery_note_number_sequences", "kanban_number_sequences",
 		"purchase_order_approvals", "purchase_order_lines", "purchase_orders", "purchase_order_number_sequences",
-		"raw_materials", "suppliers", "measurements", "users",
+		"raw_materials", "suppliers", "units", "users",
 	}
 	for _, tenantID := range []uuid.UUID{f.tenantA, f.tenantB} {
 		for _, table := range tables {

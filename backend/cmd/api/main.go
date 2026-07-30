@@ -39,7 +39,10 @@ func main() {
 	}
 	authService := auth.NewService(store, 12*time.Hour)
 	masterDataStore := masterdata.NewSQLStore(db)
-	measurementService := masterdata.NewMeasurementService(masterDataStore)
+	unitService := masterdata.NewUnitService(masterDataStore)
+	categoryService := masterdata.NewCategoryService(masterDataStore)
+	packingService := masterdata.NewPackingService(masterDataStore)
+	plantService := masterdata.NewPlantService(masterDataStore)
 	supplierService := masterdata.NewSupplierService(masterDataStore)
 	rawMaterialService := masterdata.NewRawMaterialService(masterDataStore)
 	settingsService := settings.NewService(settings.NewSQLStore(db))
@@ -63,7 +66,7 @@ func main() {
 		address = ":8091"
 	}
 	log.Printf("API listening on %s", address)
-	if err := http.ListenAndServe(address, api.NewServer(api.WithAuthenticator(authService), api.WithMeasurementService(measurementService), api.WithSupplierService(supplierService), api.WithRawMaterialService(rawMaterialService), api.WithSettingsService(settingsService), api.WithPurchaseOrderService(purchaseOrderService), api.WithReceivingStore(receivingStore), api.WithOutgoingStore(outgoingStore), api.WithInventoryStore(inventoryStore), api.WithReportStore(reportStore), api.WithEmailService(emailService), api.WithDashboardStore(dashboardStore))); err != nil {
+	if err := http.ListenAndServe(address, api.NewServer(api.WithAuthenticator(authService), api.WithUnitService(unitService), api.WithCategoryService(categoryService), api.WithPackingService(packingService), api.WithPlantService(plantService), api.WithSupplierService(supplierService), api.WithRawMaterialService(rawMaterialService), api.WithSettingsService(settingsService), api.WithPurchaseOrderService(purchaseOrderService), api.WithReceivingStore(receivingStore), api.WithOutgoingStore(outgoingStore), api.WithInventoryStore(inventoryStore), api.WithReportStore(reportStore), api.WithEmailService(emailService), api.WithDashboardStore(dashboardStore))); err != nil {
 		log.Fatal(err)
 	}
 }
