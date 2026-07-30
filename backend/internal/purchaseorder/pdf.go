@@ -116,40 +116,44 @@ func pdfCompanyName(value string) string {
 func RenderPOPDF(order Order, includePrices bool) ([]byte, error) {
 	pdf := newA4PDF(order.PONumber)
 	pdf.AddPage()
-	pdf.SetDrawColor(24, 24, 27)
-	pdf.SetTextColor(24, 24, 27)
-	pdf.SetLineWidth(0.35)
-	pdf.SetXY(12, 8)
-	pdf.SetFont(pdfFontFamily, "B", 8)
-	pdf.CellFormat(186, 4, pdfCompanyName(order.CompanyName), "", 0, "L", false, 0, "")
-	pdf.SetXY(12, 17)
+	setDocumentInk(pdf)
+	pdf.SetXY(12, 10)
+	pdf.SetFont(pdfFontFamily, "B", 9)
+	pdf.CellFormat(112, 5, pdfCompanyName(order.CompanyName), "", 0, "L", false, 0, "")
+	pdf.SetXY(12, 18)
 	pdf.SetFont(pdfFontFamily, "B", 17)
 	pdf.CellFormat(110, 8, "PURCHASE ORDER", "", 0, "L", false, 0, "")
-	pdf.SetFont(pdfFontFamily, "B", 11)
-	pdf.CellFormat(76, 6, order.PONumber, "", 1, "R", false, 0, "")
-	pdf.SetXY(126, 24)
+	pdf.SetXY(124, 10)
+	pdf.SetFont(pdfFontFamily, "B", 13)
+	pdf.CellFormat(74, 7, order.PONumber, "", 0, "R", false, 0, "")
+	pdf.SetXY(124, 20)
 	pdf.SetFont(pdfFontFamily, "", 7)
 	pdf.CellFormat(72, 4, string(order.Status), "", 0, "R", false, 0, "")
+	pdf.SetLineWidth(0.55)
 	pdf.Line(12, 31, 198, 31)
-	pdf.SetY(37)
-	writePDFSectionTitle(pdf, "SUPPLIER DETAILS")
-	writeKeyValue(pdf, "Supplier", order.SupplierName, 3)
-	writePDFSectionTitle(pdf, "ORDER DETAILS")
-	writeKeyValue(pdf, "Order Date", formatPDFDate(order.OrderDate), 2)
-	writeKeyValue(pdf, "Expected Delivery", formatPDFDate(order.ExpectedDeliveryDate), 2)
-	writeKeyValue(pdf, "Currency", order.Currency, 2)
-	pdf.Ln(2)
+	pdf.SetLineWidth(0.25)
 
-	widths := []float64{23, 47, 15, 24, 20, 27}
-	headings := []string{"Material", "Description", "Unit", "Qty/Kanban", "Kanbans", "Total Qty"}
+	writePOPartyDetails(pdf, order)
+	writePDFSectionTitle(pdf, "ORDER DETAILS")
+	writePOOrderMeta(pdf, order)
+
+	writePDFSectionTitle(pdf, "MATERIAL DETAILS")
+	widths := []float64{22, 36, 25, 23, 12, 23, 18, 27}
+	headings := []string{"Material", "Description", "Category", "Packing", "Unit", "Qty/Card", "Cards", "Total Qty"}
 	if includePrices {
-		widths = []float64{20, 33, 12, 20, 16, 22, 28, 29}
-		headings = []string{"Material", "Description", "Unit", "Qty/Kanban", "Kanbans", "Total Qty", "Unit Price", "Line Total"}
+		widths = []float64{17, 28, 19, 18, 10, 18, 14, 18, 21, 23}
+		headings = []string{"Material", "Description", "Category", "Packing", "Unit", "Qty/Card", "Cards", "Total", "Unit Price", "Amount"}
 	}
 	totalBaseQty := decimal.Zero
 	rows := make([][]string, 0, len(order.Lines))
 	for _, line := range order.Lines {
-		values := []string{line.RawMaterialCode, line.RawMaterialName, line.BaseUnitCode, formatPDFDecimal(line.QtyPerKanbanSnapshot, 6), formatPDFDecimal(line.TotalKanban, 0), formatPDFDecimal(line.OrderedBaseQty, 6)}
+		values := []string{
+			line.RawMaterialCode, line.RawMaterialName,
+			pdfReferenceName(line.CategoryCode, line.CategoryName),
+			pdfReferenceName(line.PackingCode, line.PackingName),
+			line.BaseUnitCode, formatPDFDecimal(line.QtyPerKanbanSnapshot, 6),
+			formatPDFDecimal(line.TotalKanban, 0), formatPDFDecimal(line.OrderedBaseQty, 6),
+		}
 		if includePrices {
 			values = append(values, formatPDFMoney(line.UnitPriceSnapshot, order.Currency), formatPDFMoney(line.LineTotal, order.Currency))
 		}
@@ -157,23 +161,113 @@ func RenderPOPDF(order Order, includePrices bool) ([]byte, error) {
 		totalBaseQty = totalBaseQty.Add(line.OrderedBaseQty)
 	}
 	writePDFTable(pdf, widths, headings, rows)
-	pdf.Ln(3)
+	pdf.Ln(4)
 	writePDFSectionTitle(pdf, "ORDER SUMMARY")
-	writeKeyValue(pdf, "Total Base Quantity", formatPDFDecimal(totalBaseQty, 6), 3)
-	if includePrices {
-		writeKeyValue(pdf, "Total Amount", formatPDFMoney(order.TotalAmount, order.Currency), 3)
-	}
+	writePOSummary(pdf, totalBaseQty, order, includePrices)
 	if strings.TrimSpace(order.Notes) != "" {
+		pdf.Ln(2)
 		writeKeyValue(pdf, "Notes", order.Notes, 8)
 	}
+	pdf.Ln(4)
 	writePDFSectionTitle(pdf, "APPROVAL")
-	writeKeyValue(pdf, "Created By", order.CreatedBy.DisplayName, 3)
 	approver := order.SubmittedApproverDisplayName
 	if approver == "" {
 		approver = "Pending approval"
 	}
-	writeKeyValue(pdf, "Approver", approver, 3)
+	writePOApproval(pdf, order.CreatedBy.DisplayName, approver)
 	return outputPDF(pdf)
+}
+
+func setDocumentInk(pdf *fpdf.Fpdf) {
+	pdf.SetDrawColor(39, 39, 42)
+	pdf.SetTextColor(24, 24, 27)
+	pdf.SetLineWidth(0.25)
+}
+
+func pdfReferenceName(code, name string) string {
+	code = strings.TrimSpace(code)
+	name = strings.TrimSpace(name)
+	switch {
+	case code == "":
+		return name
+	case name == "":
+		return code
+	default:
+		return code + " — " + name
+	}
+}
+
+func writePOPartyDetails(pdf *fpdf.Fpdf, order Order) {
+	const top, columnWidth = 38.0, 90.0
+	writePOPartyColumn(pdf, 12, top, columnWidth, "SUPPLIER DETAILS", order.SupplierName, "")
+	writePOPartyColumn(pdf, 108, top, columnWidth, "DESTINATION PLANT",
+		pdfReferenceName(order.PlantCode, order.PlantName), order.PlantAddress)
+	pdf.SetY(62)
+}
+
+func writePOPartyColumn(pdf *fpdf.Fpdf, x, y, width float64, heading, primary, secondary string) {
+	pdf.SetXY(x, y)
+	pdf.SetFont(pdfFontFamily, "B", 7)
+	pdf.CellFormat(width, 5, heading, "", 0, "L", false, 0, "")
+	pdf.Line(x, y+6, x+width, y+6)
+	pdf.SetFont(pdfFontFamily, "B", 9)
+	writePDFTextLines(pdf, x, y+9, width-2, 5, fitPDFTextLines(pdf, primary, width-2, 2), "L")
+	if strings.TrimSpace(secondary) != "" {
+		pdf.SetFont(pdfFontFamily, "", 7)
+		writePDFTextLines(pdf, x, y+18, width-2, 4, fitPDFTextLines(pdf, secondary, width-2, 1), "L")
+	}
+}
+
+func writePOOrderMeta(pdf *fpdf.Fpdf, order Order) {
+	const y, width = 72.0, 58.0
+	values := [][2]string{
+		{"Order Date", formatPDFDate(order.OrderDate)},
+		{"Expected Delivery", formatPDFDate(order.ExpectedDeliveryDate)},
+		{"Currency", order.Currency},
+	}
+	for index, value := range values {
+		x := 12 + float64(index)*64
+		pdf.SetXY(x, y)
+		pdf.SetFont(pdfFontFamily, "", 7)
+		pdf.CellFormat(width, 4, value[0], "", 0, "L", false, 0, "")
+		pdf.SetXY(x, y+5)
+		pdf.SetFont(pdfFontFamily, "B", 9)
+		pdf.CellFormat(width, 5, value[1], "", 0, "L", false, 0, "")
+		pdf.Line(x, y+11, x+width, y+11)
+	}
+	pdf.SetY(y + 16)
+}
+
+func writePOSummary(pdf *fpdf.Fpdf, totalBaseQty decimal.Decimal, order Order, includePrices bool) {
+	left, _, _, _ := pdf.GetMargins()
+	rows := [][2]string{{"Total Base Quantity", formatPDFDecimal(totalBaseQty, 6)}}
+	if includePrices {
+		rows = append(rows, [2]string{"Total Amount", formatPDFMoney(order.TotalAmount, order.Currency)})
+	}
+	for _, row := range rows {
+		pdf.SetX(left + 92)
+		pdf.SetFont(pdfFontFamily, "", 8)
+		pdf.CellFormat(44, 7, row[0], "", 0, "L", false, 0, "")
+		pdf.SetFont(pdfFontFamily, "B", 9)
+		pdf.CellFormat(50, 7, row[1], "", 1, "R", false, 0, "")
+		pdf.Line(left+92, pdf.GetY(), left+186, pdf.GetY())
+	}
+}
+
+func writePOApproval(pdf *fpdf.Fpdf, createdBy, approver string) {
+	left, _, _, _ := pdf.GetMargins()
+	y := pdf.GetY() + 2
+	for index, value := range [][2]string{{"Created By", createdBy}, {"Approver", approver}} {
+		x := left + float64(index)*96
+		pdf.SetXY(x, y)
+		pdf.SetFont(pdfFontFamily, "", 7)
+		pdf.CellFormat(90, 5, value[0], "", 0, "C", false, 0, "")
+		pdf.Line(x+8, y+22, x+82, y+22)
+		pdf.SetXY(x, y+23)
+		pdf.SetFont(pdfFontFamily, "B", 8)
+		pdf.CellFormat(90, 5, value[1], "", 0, "C", false, 0, "")
+	}
+	pdf.SetY(y + 30)
 }
 
 func formatPDFDecimal(value decimal.Decimal, maximumFractionDigits int) string {
@@ -673,33 +767,46 @@ func writeKeyValue(pdf *fpdf.Fpdf, key, value string, maxLines int) {
 
 func writePDFTable(pdf *fpdf.Fpdf, widths []float64, headings []string, rows [][]string) {
 	writeHeader := func() {
-		pdf.SetFont(pdfFontFamily, "B", 8)
+		left, _, _, _ := pdf.GetMargins()
+		y := pdf.GetY()
+		pdf.SetLineWidth(0.35)
+		pdf.Line(left, y, left+186, y)
+		pdf.SetFont(pdfFontFamily, "B", 6.5)
 		for index, heading := range headings {
-			pdf.CellFormat(widths[index], 7, heading, "1", 0, "C", false, 0, "")
+			pdf.CellFormat(widths[index], 8, heading, "", 0, "L", false, 0, "")
 		}
-		pdf.Ln(-1)
+		pdf.Ln(8)
+		pdf.Line(left, pdf.GetY(), left+186, pdf.GetY())
+		pdf.SetLineWidth(0.2)
 	}
 	writeHeader()
 	for _, values := range rows {
-		pdf.SetFont(pdfFontFamily, "", 8)
+		pdf.SetFont(pdfFontFamily, "", 7)
 		linesByCell := make([][]string, len(values))
-		rowHeight := 7.0
+		rowHeight := 8.0
 		for index, value := range values {
-			linesByCell[index] = fitPDFTextLines(pdf, value, widths[index], 3)
-			rowHeight = max(rowHeight, 2+float64(len(linesByCell[index]))*4)
+			linesByCell[index] = fitPDFTextLines(pdf, value, widths[index]-2, 3)
+			rowHeight = max(rowHeight, 3+float64(len(linesByCell[index]))*4)
 		}
 		if !pdfPageHasRoom(pdf, rowHeight) {
 			pdf.AddPage()
+			pdf.SetFont(pdfFontFamily, "B", 9)
+			pdf.CellFormat(0, 7, "PURCHASE ORDER / MATERIALS CONTINUED", "", 1, "L", false, 0, "")
+			pdf.Ln(2)
 			writeHeader()
-			pdf.SetFont(pdfFontFamily, "", 8)
+			pdf.SetFont(pdfFontFamily, "", 7)
 		}
 		x, y := pdf.GetX(), pdf.GetY()
 		for index, lines := range linesByCell {
-			pdf.Rect(x, y, widths[index], rowHeight, "D")
-			writePDFTextLines(pdf, x, y+1, widths[index], 4, lines, "L")
+			align := "L"
+			if index >= len(values)-3 {
+				align = "R"
+			}
+			writePDFTextLines(pdf, x+1, y+2, widths[index]-2, 4, lines, align)
 			x += widths[index]
 		}
 		left, _, _, _ := pdf.GetMargins()
+		pdf.Line(left, y+rowHeight, left+186, y+rowHeight)
 		pdf.SetXY(left, y+rowHeight)
 	}
 }

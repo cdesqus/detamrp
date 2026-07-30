@@ -41,9 +41,10 @@ func (image cancelOnPixelImage) At(x, y int) color.Color {
 func TestRenderPOPDFIncludesOrRedactsPrices(t *testing.T) {
 	order := Order{
 		PONumber: "PO-202607-00001", CompanyName: "PT Buyer Indonesia", SupplierName: "PT Material", Status: StatusApproved,
+		PlantCode: "PLT-01", PlantName: "Jakarta Plant", PlantAddress: "Kawasan Industri Jakarta",
 		OrderDate: time.Date(2026, 7, 22, 0, 0, 0, 0, time.UTC), ExpectedDeliveryDate: time.Date(2026, 7, 25, 0, 0, 0, 0, time.UTC),
 		Currency: "IDR", Notes: "Handle with care", TotalAmount: decimal.NewFromInt(400000), CreatedBy: Actor{DisplayName: "Buyer One"},
-		Lines: []OrderLine{{RawMaterialCode: "RM-001", RawMaterialName: "Steel", BaseUnitCode: "KG", QtyPerKanbanSnapshot: decimal.NewFromInt(10), TotalKanban: decimal.NewFromInt(2), OrderedBaseQty: decimal.NewFromInt(20), UnitPriceSnapshot: decimal.NewFromInt(200000), LineTotal: decimal.NewFromInt(400000)}},
+		Lines: []OrderLine{{RawMaterialCode: "RM-001", RawMaterialName: "Steel", CategoryCode: "METAL", CategoryName: "Metal", PackingCode: "COIL", PackingName: "Coil", BaseUnitCode: "KG", QtyPerKanbanSnapshot: decimal.NewFromInt(10), TotalKanban: decimal.NewFromInt(2), OrderedBaseQty: decimal.NewFromInt(20), UnitPriceSnapshot: decimal.NewFromInt(200000), LineTotal: decimal.NewFromInt(400000)}},
 	}
 
 	priced, err := RenderPOPDF(order, true)
@@ -58,6 +59,11 @@ func TestRenderPOPDFIncludesOrRedactsPrices(t *testing.T) {
 	}
 	if !pdfContainsText(priced, "PT Buyer Indonesia") {
 		t.Fatal("buyer company is missing from priced PO")
+	}
+	for _, text := range []string{"DESTINATION PLANT", "PLT-01", "Jakarta Plant", "Kawasan Industri Jakarta", "METAL", "Metal", "COIL", "Coil"} {
+		if !pdfContainsText(priced, text) {
+			t.Errorf("priced PO missing reference text %q", text)
+		}
 	}
 	if pdfContainsLegacyDarkFill(priced) {
 		t.Fatal("priced PO still uses solid section fills")
@@ -183,12 +189,13 @@ func TestDeliveryNoteUnitTotals(t *testing.T) {
 func TestRenderDeliveryNotePDFUsesModernLayout(t *testing.T) {
 	document := DeliveryNoteDocument{
 		DeliveryNoteNumber: "DN-MODERN", PONumber: "PO-MODERN", CompanyName: "PT Buyer Indonesia", SupplierName: "PT Modern",
+		PlantCode: "PLT-01", PlantName: "Jakarta Plant", PlantAddress: "Kawasan Industri Jakarta",
 		OrderDate:            time.Date(2026, 7, 21, 0, 0, 0, 0, time.UTC),
 		ExpectedDeliveryDate: time.Date(2026, 7, 25, 0, 0, 0, 0, time.UTC),
 		IssuedAt:             time.Date(2026, 7, 23, 0, 0, 0, 0, time.UTC),
 		Lines: []DeliveryNoteLine{
-			{RawMaterialCode: "RM-PCS", RawMaterialName: "Modern Part", BaseUnitCode: "PCS", QtyPerKanban: decimal.NewFromInt(10), TotalKanban: decimal.NewFromInt(2), TotalQuantity: decimal.NewFromInt(20)},
-			{RawMaterialCode: "RM-KG", RawMaterialName: "Modern Coil", BaseUnitCode: "KG", QtyPerKanban: decimal.NewFromInt(5), TotalKanban: decimal.NewFromInt(3), TotalQuantity: decimal.NewFromInt(15)},
+			{RawMaterialCode: "RM-PCS", RawMaterialName: "Modern Part", CategoryCode: "PART", CategoryName: "Parts", PackingCode: "BOX", PackingName: "Box", BaseUnitCode: "PCS", QtyPerKanban: decimal.NewFromInt(10), TotalKanban: decimal.NewFromInt(2), TotalQuantity: decimal.NewFromInt(20)},
+			{RawMaterialCode: "RM-KG", RawMaterialName: "Modern Coil", CategoryCode: "METAL", CategoryName: "Metal", PackingCode: "COIL", PackingName: "Coil", BaseUnitCode: "KG", QtyPerKanban: decimal.NewFromInt(5), TotalKanban: decimal.NewFromInt(3), TotalQuantity: decimal.NewFromInt(15)},
 		},
 	}
 
@@ -199,6 +206,7 @@ func TestRenderDeliveryNotePDFUsesModernLayout(t *testing.T) {
 	for _, text := range []string{
 		"PT Buyer Indonesia", "DELIVERY NOTE", "DN-MODERN", "SCAN FOR RECEIVING", "MATERIAL DETAILS",
 		"Order Date", "21 Jul 2026",
+		"DESTINATION PLANT", "PLT-01", "Jakarta Plant", "Kawasan Industri Jakarta", "PART", "Parts", "BOX", "Box",
 		"REMARKS", "SUPPLIER", "Prepared By", "RECEIVER", "Received By",
 		"Total Kanban", "Total Quantity", "PCS 20", "KG 15",
 	} {
@@ -391,11 +399,15 @@ func TestRenderWideKanbanCard(t *testing.T) {
 		PONumber:           "PO-202607-00009",
 		CompanyName:        "PT Buyer Indonesia",
 		SupplierName:       "PT Supplier Sentosa",
+		PlantCode:          "PLT-01",
+		PlantName:          "Jakarta Plant",
+		PlantAddress:       "Kawasan Industri Jakarta",
 		OrderDate:          time.Date(2026, 7, 21, 0, 0, 0, 0, time.UTC),
 		Labels: []KanbanLabel{{
 			KanbanID: "KB-202607-00028", RawMaterialCode: "BRG-123-00",
 			RawMaterialName: "COIL MATERIAL", Quantity: decimal.RequireFromString("5.000000"),
-			BaseUnitCode: "PC", CardNumber: 1, CardTotal: 5,
+			BaseUnitCode: "PC", CategoryCode: "METAL", CategoryName: "Metal",
+			PackingCode: "COIL", PackingName: "Coil", CardNumber: 1, CardTotal: 5,
 		}},
 	}
 	result, err := RenderKanbanLabelsPDF(document)
@@ -406,6 +418,7 @@ func TestRenderWideKanbanCard(t *testing.T) {
 		"PT Buyer Indonesia", "KANBAN CARD", "KANBAN ID", "PART NUMBER", "PART NAME",
 		"PT Supplier Sentosa", "ORDER DATE", "21 Jul 2026", "QUANTITY", "CARD", "1/5",
 		"DELIVERY NOTE", "PURCHASE ORDER", "KB-202607-00028", "5 PC",
+		"PLT-01", "Jakarta Plant", "METAL", "Metal", "COIL", "Coil", "Card 1/5",
 	} {
 		if !pdfContainsText(result, text) {
 			t.Errorf("missing Kanban Card text %q", text)
