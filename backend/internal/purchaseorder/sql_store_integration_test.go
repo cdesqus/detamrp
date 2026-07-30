@@ -420,12 +420,20 @@ func assertLivePDFProjectionsTenantScoped(t *testing.T, ctx context.Context, sto
 	if deliveryNote.PurchaseOrderID != purchaseOrderID || deliveryNote.DeliveryNoteID == uuid.Nil || deliveryNote.DeliveryNoteNumber == "" || len(deliveryNote.Lines) != wantLines {
 		t.Fatalf("live delivery note PDF projection = %#v", deliveryNote)
 	}
+	if deliveryNote.PlantCode != "PLANT-A" || deliveryNote.PlantName != "Plant A" ||
+		deliveryNote.Lines[0].CategoryCode != "CHEM" || deliveryNote.Lines[0].PackingCode != "DRUM" {
+		t.Fatalf("live delivery note reference snapshots = %#v", deliveryNote)
+	}
 	labels, err := store.LoadKanbanLabelDocument(ctx, actor, purchaseOrderID)
 	if err != nil {
 		t.Fatalf("load live label PDF projection: %v", err)
 	}
 	if labels.PurchaseOrderID != purchaseOrderID || labels.DeliveryNoteID != deliveryNote.DeliveryNoteID || labels.DeliveryNoteNumber != deliveryNote.DeliveryNoteNumber || len(labels.Labels) != wantLabels {
 		t.Fatalf("live label PDF projection = %#v", labels)
+	}
+	if labels.PlantCode != "PLANT-A" || labels.PlantName != "Plant A" ||
+		labels.Labels[0].CategoryCode != "CHEM" || labels.Labels[0].PackingCode != "DRUM" {
+		t.Fatalf("live label reference snapshots = %#v", labels)
 	}
 	for name, load := range map[string]func() error{
 		"delivery note": func() error {

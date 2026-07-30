@@ -31,6 +31,9 @@ type DeliveryNoteDocument struct {
 	PONumber             string
 	CompanyName          string
 	SupplierName         string
+	PlantCode            string
+	PlantName            string
+	PlantAddress         string
 	OrderDate            time.Time
 	ExpectedDeliveryDate time.Time
 	IssuedAt             time.Time
@@ -41,6 +44,10 @@ type DeliveryNoteLine struct {
 	RawMaterialCode string
 	RawMaterialName string
 	BaseUnitCode    string
+	CategoryCode    string
+	CategoryName    string
+	PackingCode     string
+	PackingName     string
 	QtyPerKanban    decimal.Decimal
 	TotalKanban     decimal.Decimal
 	TotalQuantity   decimal.Decimal
@@ -53,6 +60,9 @@ type KanbanLabelDocument struct {
 	PONumber           string
 	CompanyName        string
 	SupplierName       string
+	PlantCode          string
+	PlantName          string
+	PlantAddress       string
 	OrderDate          time.Time
 	Labels             []KanbanLabel
 }
@@ -63,6 +73,10 @@ type KanbanLabel struct {
 	RawMaterialName string
 	Quantity        decimal.Decimal
 	BaseUnitCode    string
+	CategoryCode    string
+	CategoryName    string
+	PackingCode     string
+	PackingName     string
 	CardNumber      int
 	CardTotal       int
 }
@@ -747,6 +761,9 @@ type documentHeader struct {
 	CompanyName          string
 	PONumber             string
 	SupplierName         string
+	PlantCode            string
+	PlantName            string
+	PlantAddress         string
 	OrderDate            time.Time
 	ExpectedDeliveryDate time.Time
 	Status               Status
@@ -779,9 +796,11 @@ func loadDeliveryNoteDocument(ctx context.Context, query documentQuerier, actor 
 	document := DeliveryNoteDocument{
 		DeliveryNoteID: header.DeliveryNoteID, DeliveryNoteNumber: header.DeliveryNoteNumber,
 		PurchaseOrderID: purchaseOrderID, PONumber: header.PONumber, CompanyName: header.CompanyName, SupplierName: header.SupplierName,
+		PlantCode: header.PlantCode, PlantName: header.PlantName, PlantAddress: header.PlantAddress,
 		OrderDate: header.OrderDate, ExpectedDeliveryDate: header.ExpectedDeliveryDate, IssuedAt: header.IssuedAt,
 	}
 	rows, err := query.Query(ctx, `SELECT pol.raw_material_code_snapshot,pol.raw_material_name_snapshot,pol.base_unit_code_snapshot,
+ pol.category_code_snapshot,pol.category_name_snapshot,pol.packing_code_snapshot,pol.packing_name_snapshot,
  pol.qty_per_kanban_snapshot,pol.total_kanban,pol.ordered_base_qty
  FROM delivery_note_lines dnl
  JOIN purchase_order_lines pol ON pol.tenant_id=dnl.tenant_id AND pol.purchase_order_id=dnl.purchase_order_id AND pol.id=dnl.purchase_order_line_id
@@ -793,7 +812,9 @@ func loadDeliveryNoteDocument(ctx context.Context, query documentQuerier, actor 
 	defer rows.Close()
 	for rows.Next() {
 		var line DeliveryNoteLine
-		if err := rows.Scan(&line.RawMaterialCode, &line.RawMaterialName, &line.BaseUnitCode, &line.QtyPerKanban, &line.TotalKanban, &line.TotalQuantity); err != nil {
+		if err := rows.Scan(&line.RawMaterialCode, &line.RawMaterialName, &line.BaseUnitCode,
+			&line.CategoryCode, &line.CategoryName, &line.PackingCode, &line.PackingName,
+			&line.QtyPerKanban, &line.TotalKanban, &line.TotalQuantity); err != nil {
 			return DeliveryNoteDocument{}, err
 		}
 		document.Lines = append(document.Lines, line)
@@ -815,10 +836,12 @@ func loadKanbanLabelDocument(ctx context.Context, query documentQuerier, actor A
 	document := KanbanLabelDocument{
 		DeliveryNoteID: header.DeliveryNoteID, DeliveryNoteNumber: header.DeliveryNoteNumber,
 		PurchaseOrderID: purchaseOrderID, PONumber: header.PONumber, CompanyName: header.CompanyName,
-		SupplierName: header.SupplierName, OrderDate: header.OrderDate,
+		SupplierName: header.SupplierName, PlantCode: header.PlantCode, PlantName: header.PlantName,
+		PlantAddress: header.PlantAddress, OrderDate: header.OrderDate,
 	}
 	rows, err := query.Query(ctx, `SELECT kl.kanban_id,pol.raw_material_code_snapshot,pol.raw_material_name_snapshot,
- kl.quantity,pol.base_unit_code_snapshot,kl.lot_number,pol.total_kanban::integer
+ kl.quantity,pol.base_unit_code_snapshot,pol.category_code_snapshot,pol.category_name_snapshot,
+ pol.packing_code_snapshot,pol.packing_name_snapshot,kl.lot_number,pol.total_kanban::integer
  FROM delivery_note_lines dnl
  JOIN purchase_order_lines pol ON pol.tenant_id=dnl.tenant_id AND pol.purchase_order_id=dnl.purchase_order_id AND pol.id=dnl.purchase_order_line_id
  JOIN kanban_lots kl ON kl.tenant_id=dnl.tenant_id AND kl.delivery_note_line_id=dnl.id AND kl.purchase_order_line_id=pol.id
@@ -831,7 +854,9 @@ func loadKanbanLabelDocument(ctx context.Context, query documentQuerier, actor A
 	defer rows.Close()
 	for rows.Next() {
 		var label KanbanLabel
-		if err := rows.Scan(&label.KanbanID, &label.RawMaterialCode, &label.RawMaterialName, &label.Quantity, &label.BaseUnitCode, &label.CardNumber, &label.CardTotal); err != nil {
+		if err := rows.Scan(&label.KanbanID, &label.RawMaterialCode, &label.RawMaterialName, &label.Quantity, &label.BaseUnitCode,
+			&label.CategoryCode, &label.CategoryName, &label.PackingCode, &label.PackingName,
+			&label.CardNumber, &label.CardTotal); err != nil {
 			return KanbanLabelDocument{}, err
 		}
 		document.Labels = append(document.Labels, label)
@@ -850,12 +875,14 @@ func loadKanbanLabelDocument(ctx context.Context, query documentQuerier, actor A
 
 func loadOperationalDocumentHeader(ctx context.Context, query documentQuerier, tenantID, purchaseOrderID uuid.UUID, field string) (documentHeader, error) {
 	var header documentHeader
-	err := query.QueryRow(ctx, `SELECT COALESCE(NULLIF(BTRIM(ts.company_name),''),'Order Stock'),p.po_number,s.name,p.order_date,p.expected_delivery_date,p.status
+	err := query.QueryRow(ctx, `SELECT COALESCE(NULLIF(BTRIM(ts.company_name),''),'Order Stock'),p.po_number,s.name,
+ p.plant_code_snapshot,p.plant_name_snapshot,p.plant_address_snapshot,p.order_date,p.expected_delivery_date,p.status
  FROM purchase_orders p
  JOIN tenant_settings ts ON ts.tenant_id=p.tenant_id
  JOIN suppliers s ON s.tenant_id=p.tenant_id AND s.id=p.supplier_id
  WHERE p.tenant_id=$1 AND p.id=$2`, tenantID, purchaseOrderID).
-		Scan(&header.CompanyName, &header.PONumber, &header.SupplierName, &header.OrderDate, &header.ExpectedDeliveryDate, &header.Status)
+		Scan(&header.CompanyName, &header.PONumber, &header.SupplierName, &header.PlantCode, &header.PlantName, &header.PlantAddress,
+			&header.OrderDate, &header.ExpectedDeliveryDate, &header.Status)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return documentHeader{}, NotFoundError{Resource: "purchase order"}
 	}

@@ -540,8 +540,7 @@ func TestLoadDeliveryNoteDocumentUsesTenantFilteredQueriesAndAllLines(t *testing
 	query := &documentQueryRecorder{
 		rows: []pgx.Row{
 			documentRow(func(dest ...any) error {
-				*dest[0].(*string), *dest[1].(*string), *dest[2].(*string) = "Buyer PT", "PO-1", "Supplier"
-				*dest[3].(*time.Time), *dest[4].(*time.Time), *dest[5].(*Status) = orderDate, issuedAt, StatusApproved
+				setDocumentHeader(dest, orderDate, issuedAt, StatusApproved)
 				return nil
 			}),
 			documentRow(func(dest ...any) error {
@@ -559,7 +558,9 @@ func TestLoadDeliveryNoteDocumentUsesTenantFilteredQueriesAndAllLines(t *testing
 	if err != nil {
 		t.Fatalf("load delivery note: %v", err)
 	}
-	if document.DeliveryNoteID != deliveryNoteID || document.CompanyName != "Buyer PT" || !document.OrderDate.Equal(orderDate) || len(document.Lines) != 2 {
+	if document.DeliveryNoteID != deliveryNoteID || document.CompanyName != "Buyer PT" || document.PlantCode != "PLT-01" ||
+		document.Lines[0].CategoryCode != "CAT" || document.Lines[0].PackingCode != "BOX" ||
+		!document.OrderDate.Equal(orderDate) || len(document.Lines) != 2 {
 		t.Fatalf("document = %#v", document)
 	}
 	assertTenantQueries(t, query.calls, tenantID, orderID)
@@ -572,8 +573,7 @@ func TestLoadKanbanLabelDocumentUsesStableTenantFilteredOrdering(t *testing.T) {
 	query := &documentQueryRecorder{
 		rows: []pgx.Row{
 			documentRow(func(dest ...any) error {
-				*dest[0].(*string), *dest[1].(*string), *dest[2].(*string) = "Buyer PT", "PO-1", "Supplier"
-				*dest[3].(*time.Time), *dest[4].(*time.Time), *dest[5].(*Status) = orderDate, issuedAt, StatusApproved
+				setDocumentHeader(dest, orderDate, issuedAt, StatusApproved)
 				return nil
 			}),
 			documentRow(func(dest ...any) error {
@@ -592,7 +592,8 @@ func TestLoadKanbanLabelDocumentUsesStableTenantFilteredOrdering(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load labels: %v", err)
 	}
-	if len(document.Labels) != 3 || document.CompanyName != "Buyer PT" || !document.OrderDate.Equal(orderDate) {
+	if len(document.Labels) != 3 || document.CompanyName != "Buyer PT" || document.PlantCode != "PLT-01" ||
+		document.Labels[0].CategoryCode != "CAT" || document.Labels[0].PackingCode != "BOX" || !document.OrderDate.Equal(orderDate) {
 		t.Fatalf("labels = %#v", document.Labels)
 	}
 	got := [][2]int{
@@ -627,8 +628,7 @@ func TestLoadDeliveryNoteDocumentDistinguishesOtherTenantFromUnavailableDocument
 	t.Run("operational document unavailable", func(t *testing.T) {
 		query := &documentQueryRecorder{rows: []pgx.Row{
 			documentRow(func(dest ...any) error {
-				*dest[0].(*string), *dest[1].(*string), *dest[2].(*string) = "Buyer PT", "PO-1", "Supplier"
-				*dest[3].(*time.Time), *dest[4].(*time.Time), *dest[5].(*Status) = time.Now(), time.Now(), StatusPendingApproval
+				setDocumentHeader(dest, time.Now(), time.Now(), StatusPendingApproval)
 				return nil
 			}),
 			documentRow(func(...any) error { return pgx.ErrNoRows }),
@@ -695,15 +695,26 @@ func (r *documentRows) Scan(dest ...any) error { return r.scans[r.index-1](dest.
 
 func setDeliveryNoteLine(dest []any, code, name, unit, qtyPerKanban, totalKanban, totalQuantity string) {
 	*dest[0].(*string), *dest[1].(*string), *dest[2].(*string) = code, name, unit
-	*dest[3].(*decimal.Decimal) = decimal.RequireFromString(qtyPerKanban)
-	*dest[4].(*decimal.Decimal) = decimal.RequireFromString(totalKanban)
-	*dest[5].(*decimal.Decimal) = decimal.RequireFromString(totalQuantity)
+	*dest[3].(*string), *dest[4].(*string) = "CAT", "Category"
+	*dest[5].(*string), *dest[6].(*string) = "BOX", "Box"
+	*dest[7].(*decimal.Decimal) = decimal.RequireFromString(qtyPerKanban)
+	*dest[8].(*decimal.Decimal) = decimal.RequireFromString(totalKanban)
+	*dest[9].(*decimal.Decimal) = decimal.RequireFromString(totalQuantity)
 }
 
 func setKanbanLabel(dest []any, id, code, name, quantity, unit string, cardNumber, cardTotal int) {
 	*dest[0].(*string), *dest[1].(*string), *dest[2].(*string) = id, code, name
 	*dest[3].(*decimal.Decimal) = decimal.RequireFromString(quantity)
-	*dest[4].(*string), *dest[5].(*int), *dest[6].(*int) = unit, cardNumber, cardTotal
+	*dest[4].(*string) = unit
+	*dest[5].(*string), *dest[6].(*string) = "CAT", "Category"
+	*dest[7].(*string), *dest[8].(*string) = "BOX", "Box"
+	*dest[9].(*int), *dest[10].(*int) = cardNumber, cardTotal
+}
+
+func setDocumentHeader(dest []any, orderDate, expectedDate time.Time, status Status) {
+	*dest[0].(*string), *dest[1].(*string), *dest[2].(*string) = "Buyer PT", "PO-1", "Supplier"
+	*dest[3].(*string), *dest[4].(*string), *dest[5].(*string) = "PLT-01", "Plant One", "Jakarta"
+	*dest[6].(*time.Time), *dest[7].(*time.Time), *dest[8].(*Status) = orderDate, expectedDate, status
 }
 
 func assertTenantQueries(t *testing.T, calls []documentQueryCall, tenantID, orderID uuid.UUID) {
