@@ -39,6 +39,10 @@ func WithTenant(ctx context.Context, beginner TenantBeginner, tenant TenantConte
 		_ = tx.Rollback(ctx)
 		return err
 	}
+	if _, err := tx.Exec(ctx, "SELECT set_config('app.user_id', $1, true)", tenant.UserID.String()); err != nil {
+		_ = tx.Rollback(ctx)
+		return err
+	}
 	if err := callback(tx); err != nil {
 		_ = tx.Rollback(ctx)
 		return err
