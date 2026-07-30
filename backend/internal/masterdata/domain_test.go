@@ -7,8 +7,8 @@ import (
 	"github.com/shopspring/decimal"
 )
 
-func TestMeasurementInputNormalizesAndRejectsKanban(t *testing.T) {
-	input := MeasurementInput{Code: " kanban ", Name: " Lot "}
+func TestUnitInputNormalizesAndRejectsKanban(t *testing.T) {
+	input := UnitInput{Code: " kanban ", Name: " Lot "}
 	errs := input.NormalizeAndValidate()
 	if errs["code"] == "" {
 		t.Fatal("KANBAN was accepted")

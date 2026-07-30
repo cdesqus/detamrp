@@ -19,7 +19,7 @@ type Audit struct {
 	UpdatedAt     time.Time `json:"updatedAt"`
 }
 
-type Measurement struct {
+type Unit struct {
 	ID             uuid.UUID `json:"id"`
 	Code           string    `json:"code"`
 	Name           string    `json:"name"`
@@ -28,12 +28,12 @@ type Measurement struct {
 	Audit
 }
 
-func (m Measurement) Validate() error {
+func (m Unit) Validate() error {
 	if strings.TrimSpace(m.Code) == "" || strings.TrimSpace(m.Name) == "" {
-		return errors.New("measurement code and name are required")
+		return errors.New("unit code and name are required")
 	}
 	if strings.EqualFold(strings.TrimSpace(m.Code), "KANBAN") {
-		return errors.New("KANBAN is a physical lot, not a measurement")
+		return errors.New("KANBAN is a physical lot, not a unit")
 	}
 	return nil
 }

@@ -7,10 +7,10 @@ import (
 	"github.com/shopspring/decimal"
 )
 
-func TestMeasurementRejectsKanbanAsBaseUnit(t *testing.T) {
-	measurement := Measurement{Code: "KANBAN", Name: "Kanban"}
-	if err := measurement.Validate(); err == nil {
-		t.Fatal("KANBAN must not be accepted as a measurement")
+func TestUnitRejectsKanbanAsBaseUnit(t *testing.T) {
+	unit := Unit{Code: "KANBAN", Name: "Kanban"}
+	if err := unit.Validate(); err == nil {
+		t.Fatal("KANBAN must not be accepted as a unit")
 	}
 }
 

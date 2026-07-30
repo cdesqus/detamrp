@@ -18,9 +18,9 @@ type Authenticator interface {
 
 const actorContextKey = "master_data_actor"
 
-func RegisterMeasurementRoutes(router *gin.Engine, service *MeasurementService, authenticator Authenticator) {
+func RegisterUnitRoutes(router *gin.Engine, service *UnitService, authenticator Authenticator) {
 	g := router.Group("/master-data", authenticateMasterData(authenticator))
-	g.GET("/measurements", rbac.RequirePermissions("master_data.view"), func(c *gin.Context) {
+	g.GET("/units", rbac.RequirePermissions("master_data.view"), func(c *gin.Context) {
 		q, ok := listQuery(c)
 		if !ok {
 			return
@@ -30,11 +30,11 @@ func RegisterMeasurementRoutes(router *gin.Engine, service *MeasurementService, 
 			return
 		}
 		if items == nil {
-			items = []Measurement{}
+			items = []Unit{}
 		}
 		c.JSON(http.StatusOK, gin.H{"items": items, "total": total})
 	})
-	g.GET("/measurements/:id", rbac.RequirePermissions("master_data.view"), func(c *gin.Context) {
+	g.GET("/units/:id", rbac.RequirePermissions("master_data.view"), func(c *gin.Context) {
 		id, ok := routeID(c)
 		if !ok {
 			return
@@ -45,8 +45,8 @@ func RegisterMeasurementRoutes(router *gin.Engine, service *MeasurementService, 
 		}
 		c.JSON(http.StatusOK, item)
 	})
-	g.POST("/measurements", rbac.RequirePermissions("master_data.manage"), func(c *gin.Context) {
-		var input MeasurementInput
+	g.POST("/units", rbac.RequirePermissions("master_data.manage"), func(c *gin.Context) {
+		var input UnitInput
 		if err := c.ShouldBindJSON(&input); err != nil {
 			c.JSON(400, gin.H{"error": "invalid_request", "message": "Invalid JSON body"})
 			return
@@ -57,12 +57,12 @@ func RegisterMeasurementRoutes(router *gin.Engine, service *MeasurementService, 
 		}
 		c.JSON(http.StatusCreated, item)
 	})
-	g.PUT("/measurements/:id", rbac.RequirePermissions("master_data.manage"), func(c *gin.Context) {
+	g.PUT("/units/:id", rbac.RequirePermissions("master_data.manage"), func(c *gin.Context) {
 		id, ok := routeID(c)
 		if !ok {
 			return
 		}
-		var input MeasurementInput
+		var input UnitInput
 		if err := c.ShouldBindJSON(&input); err != nil {
 			c.JSON(400, gin.H{"error": "invalid_request", "message": "Invalid JSON body"})
 			return

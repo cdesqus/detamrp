@@ -31,14 +31,14 @@ func (q *ListQuery) Normalize() {
 	}
 }
 
-type MeasurementInput struct {
+type UnitInput struct {
 	Code           string `json:"code"`
 	Name           string `json:"name"`
 	DecimalAllowed bool   `json:"decimalAllowed"`
 	Active         *bool  `json:"active,omitempty"`
 }
 
-func (i *MeasurementInput) NormalizeAndValidate() FieldErrors {
+func (i *UnitInput) NormalizeAndValidate() FieldErrors {
 	i.Code = normalizeCode(i.Code)
 	i.Name = strings.TrimSpace(i.Name)
 	errs := FieldErrors{}
