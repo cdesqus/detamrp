@@ -32,6 +32,42 @@ func TestOrderSelectIncludesSupplierDisplayName(t *testing.T) {
 	}
 }
 
+func TestOrderQueriesIncludePlantAndMaterialReferenceSnapshots(t *testing.T) {
+	for _, fragment := range []string{
+		"p.plant_id", "p.plant_code_snapshot", "p.plant_name_snapshot", "p.plant_address_snapshot",
+	} {
+		if !strings.Contains(strings.ToLower(orderSelect), fragment) {
+			t.Errorf("order query missing %q", fragment)
+		}
+	}
+	for _, fragment := range []string{
+		"l.category_code_snapshot", "l.category_name_snapshot",
+		"l.packing_code_snapshot", "l.packing_name_snapshot",
+	} {
+		if !strings.Contains(strings.ToLower(orderLineSelect), fragment) {
+			t.Errorf("order line query missing %q", fragment)
+		}
+	}
+}
+
+func TestSnapshotQueriesRequireActivePlantCategoryAndPacking(t *testing.T) {
+	plantQuery := strings.ToLower(activePlantSelect)
+	for _, fragment := range []string{"from plants", "tenant_id=$1", "id=$2", "active", "for share"} {
+		if !strings.Contains(plantQuery, fragment) {
+			t.Errorf("active Plant query missing %q", fragment)
+		}
+	}
+	materialQuery := strings.ToLower(snapshotMaterialSelect)
+	for _, fragment := range []string{
+		"join categories c", "c.active", "join packings pk", "pk.active",
+		"c.code", "c.name", "pk.code", "pk.name",
+	} {
+		if !strings.Contains(materialQuery, fragment) {
+			t.Errorf("material snapshot query missing %q", fragment)
+		}
+	}
+}
+
 func TestApprovalSelectIncludesPurchaseOrderAndSupplierDetails(t *testing.T) {
 	query := strings.ToLower(approvalSelect)
 	for _, fragment := range []string{

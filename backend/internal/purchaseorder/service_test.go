@@ -271,6 +271,7 @@ func serviceActor() Actor {
 func validServiceOrderInput() OrderInput {
 	return OrderInput{
 		SupplierID:           uuid.New(),
+		PlantID:              uuid.New(),
 		OrderDate:            time.Date(2026, time.July, 21, 0, 0, 0, 0, time.UTC),
 		ExpectedDeliveryDate: time.Date(2026, time.July, 22, 0, 0, 0, 0, time.UTC),
 		Currency:             "IDR",

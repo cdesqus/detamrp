@@ -49,6 +49,7 @@ func TestSQLStoreLivePurchaseOrderWorkflow(t *testing.T) {
 	buyer := Actor{TenantID: fixture.tenantA, UserID: fixture.buyer, DisplayName: "Live Buyer"}
 	input := OrderInput{
 		SupplierID:           fixture.supplier,
+		PlantID:              fixture.plant,
 		OrderDate:            time.Date(2026, time.July, 21, 0, 0, 0, 0, time.UTC),
 		ExpectedDeliveryDate: time.Date(2026, time.July, 22, 0, 0, 0, 0, time.UTC),
 		Currency:             "IDR",
@@ -62,8 +63,12 @@ func TestSQLStoreLivePurchaseOrderWorkflow(t *testing.T) {
 	if order.SupplierName != "Live Supplier" || len(order.Lines) != 1 {
 		t.Fatalf("unexpected order snapshots: %#v", order)
 	}
+	if order.PlantID != fixture.plant || order.PlantCode != "PLANT-A" || order.PlantName != "Plant A" || order.PlantAddress != "Jakarta" {
+		t.Fatalf("incorrect Plant snapshot: %#v", order)
+	}
 	line := order.Lines[0]
 	if line.RawMaterialCode != "LIVE-RM" || line.RawMaterialName != "Live Material" || line.BaseUnitCode != "KG" ||
+		line.CategoryCode != "CHEM" || line.CategoryName != "Chemical" || line.PackingCode != "DRUM" || line.PackingName != "Drum" ||
 		!line.QtyPerKanbanSnapshot.Equal(decimal.RequireFromString("2.500000")) ||
 		!line.UnitPriceSnapshot.Equal(decimal.RequireFromString("4.250000")) ||
 		!line.LineTotal.Equal(decimal.RequireFromString("31.875000")) {
@@ -168,6 +173,7 @@ func TestSQLStoreApprovalGeneratesDocuments(t *testing.T) {
 	approver := Actor{TenantID: fixture.tenantA, UserID: fixture.approver, DisplayName: "Live Director"}
 	input := OrderInput{
 		SupplierID:           fixture.supplier,
+		PlantID:              fixture.plant,
 		OrderDate:            time.Date(2026, time.July, 21, 0, 0, 0, 0, time.UTC),
 		ExpectedDeliveryDate: time.Date(2026, time.July, 22, 0, 0, 0, 0, time.UTC),
 		Currency:             "IDR",
@@ -215,6 +221,7 @@ func TestSQLStoreApprovalGeneratesDocuments(t *testing.T) {
 
 	failedOrder, err := store.CreateOrder(ctx, buyer, OrderInput{
 		SupplierID:           fixture.supplier,
+		PlantID:              fixture.plant,
 		OrderDate:            time.Date(2026, time.July, 21, 0, 0, 0, 0, time.UTC),
 		ExpectedDeliveryDate: time.Date(2026, time.July, 22, 0, 0, 0, 0, time.UTC),
 		Currency:             "IDR",
@@ -294,7 +301,7 @@ func TestSQLStoreConcurrentApprovalsAllocateUniqueDocumentsAndRejectDuplicateDec
 	var orders []Order
 	for index, count := range []int64{2, 3} {
 		order, err := store.CreateOrder(ctx, buyer, OrderInput{
-			SupplierID: fixture.supplier, OrderDate: time.Date(2026, time.July, 21+index, 0, 0, 0, 0, time.UTC),
+			SupplierID: fixture.supplier, PlantID: fixture.plant, OrderDate: time.Date(2026, time.July, 21+index, 0, 0, 0, 0, time.UTC),
 			ExpectedDeliveryDate: time.Date(2026, time.July, 25, 0, 0, 0, 0, time.UTC), Currency: "IDR",
 			Lines: []LineInput{{RawMaterialID: fixture.material, TotalKanban: decimal.NewFromInt(count)}},
 		})
@@ -439,13 +446,15 @@ func assertLivePDFProjectionsTenantScoped(t *testing.T, ctx context.Context, sto
 
 type liveFixture struct {
 	tenantA, tenantB, buyer, approver, otherUser uuid.UUID
-	role, unit, supplier, material, material2    uuid.UUID
+	role, unit, category, packing, plant         uuid.UUID
+	supplier, material, material2                uuid.UUID
 }
 
 func newLiveFixture() liveFixture {
 	return liveFixture{
 		tenantA: uuid.New(), tenantB: uuid.New(), buyer: uuid.New(), approver: uuid.New(), otherUser: uuid.New(),
-		role: uuid.New(), unit: uuid.New(), supplier: uuid.New(), material: uuid.New(), material2: uuid.New(),
+		role: uuid.New(), unit: uuid.New(), category: uuid.New(), packing: uuid.New(), plant: uuid.New(),
+		supplier: uuid.New(), material: uuid.New(), material2: uuid.New(),
 	}
 }
 
@@ -463,10 +472,14 @@ func (f liveFixture) insert(ctx context.Context, db *pgxpool.Pool) error {
 		{`INSERT INTO role_permissions(tenant_id,role_id,permission_code) VALUES($1,$2,'po.approve')`, []any{f.tenantA, f.role}},
 		{`INSERT INTO user_roles(tenant_id,user_id,role_id) VALUES($1,$2,$3)`, []any{f.tenantA, f.approver, f.role}},
 		{`INSERT INTO units(id,tenant_id,code,name,created_by_user_id,updated_by_user_id) VALUES($1,$2,'KG','Kilogram',$3,$3)`, []any{f.unit, f.tenantA, f.buyer}},
+		{`INSERT INTO categories(id,tenant_id,code,name,created_by_user_id,updated_by_user_id) VALUES($1,$2,'CHEM','Chemical',$3,$3)`, []any{f.category, f.tenantA, f.buyer}},
+		{`INSERT INTO packings(id,tenant_id,code,name,created_by_user_id,updated_by_user_id) VALUES($1,$2,'DRUM','Drum',$3,$3)`, []any{f.packing, f.tenantA, f.buyer}},
+		{`INSERT INTO plants(id,tenant_id,code,name,address,created_by_user_id,updated_by_user_id) VALUES($1,$2,'PLANT-A','Plant A','Jakarta',$3,$3)`, []any{f.plant, f.tenantA, f.buyer}},
 		{`INSERT INTO suppliers(id,tenant_id,code,sage_supplier_code,name,email,currency,created_by_user_id,updated_by_user_id) VALUES($1,$2,'LIVE-SUP','LIVE-SAGE','Live Supplier','supplier@live.test','IDR',$3,$3)`, []any{f.supplier, f.tenantA, f.buyer}},
-		{`INSERT INTO raw_materials(id,tenant_id,code,sage_item_code,name,supplier_id,base_unit_id,qty_per_kanban,standard_unit_price,currency,created_by_user_id,updated_by_user_id) VALUES
- ($1,$2,'LIVE-RM','LIVE-ITEM','Live Material',$3,$4,2.5,4.25,'IDR',$5,$5),
- ($6,$2,'LIVE-RM-2','LIVE-ITEM-2','Live Material 2',$3,$4,4,6.5,'IDR',$5,$5)`, []any{f.material, f.tenantA, f.supplier, f.unit, f.buyer, f.material2}},
+		{`INSERT INTO raw_materials(id,tenant_id,code,sage_item_code,name,supplier_id,base_unit_id,category_id,packing_id,qty_per_kanban,standard_unit_price,currency,created_by_user_id,updated_by_user_id) VALUES
+ ($1,$2,'LIVE-RM','LIVE-ITEM','Live Material',$3,$4,$5,$6,2.5,4.25,'IDR',$7,$7),
+ ($8,$2,'LIVE-RM-2','LIVE-ITEM-2','Live Material 2',$3,$4,$5,$6,4,6.5,'IDR',$7,$7)`,
+			[]any{f.material, f.tenantA, f.supplier, f.unit, f.category, f.packing, f.buyer, f.material2}},
 	}
 	for _, statement := range statements {
 		if _, err := db.Exec(ctx, statement.sql, statement.args...); err != nil {
@@ -477,7 +490,7 @@ func (f liveFixture) insert(ctx context.Context, db *pgxpool.Pool) error {
 }
 
 func (f liveFixture) cleanup(ctx context.Context, db *pgxpool.Pool) error {
-	tables := []string{"kanban_lots", "delivery_note_lines", "delivery_notes", "delivery_note_number_sequences", "kanban_number_sequences", "purchase_order_approvals", "purchase_order_lines", "purchase_orders", "purchase_order_number_sequences", "role_permissions", "user_roles", "raw_materials", "suppliers", "units", "roles", "tenant_settings", "sessions", "users"}
+	tables := []string{"kanban_lots", "delivery_note_lines", "delivery_notes", "delivery_note_number_sequences", "kanban_number_sequences", "purchase_order_approvals", "purchase_order_lines", "purchase_orders", "purchase_order_number_sequences", "role_permissions", "user_roles", "raw_materials", "suppliers", "plants", "packings", "categories", "units", "roles", "tenant_settings", "sessions", "users"}
 	for _, tenantID := range []uuid.UUID{f.tenantA, f.tenantB} {
 		for _, table := range tables {
 			if _, err := db.Exec(ctx, fmt.Sprintf("DELETE FROM %s WHERE tenant_id=$1", table), tenantID); err != nil {

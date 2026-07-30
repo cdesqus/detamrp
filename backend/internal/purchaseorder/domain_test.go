@@ -134,9 +134,19 @@ func TestOrderInputRequiresThreeASCIIAlphabeticCurrencyLetters(t *testing.T) {
 	}
 }
 
+func TestOrderInputRequiresPlant(t *testing.T) {
+	input := validOrderInput()
+	input.PlantID = uuid.Nil
+
+	if errs := input.NormalizeAndValidate(false); errs["plantId"] == "" {
+		t.Fatalf("missing Plant was accepted: %#v", errs)
+	}
+}
+
 func validOrderInput() OrderInput {
 	return OrderInput{
 		SupplierID:           uuid.New(),
+		PlantID:              uuid.New(),
 		OrderDate:            time.Date(2026, time.July, 21, 0, 0, 0, 0, time.UTC),
 		ExpectedDeliveryDate: time.Date(2026, time.July, 21, 0, 0, 0, 0, time.UTC),
 		Currency:             " idr ",

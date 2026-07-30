@@ -348,7 +348,7 @@ func TestPurchaseOrderRoutesRejectUnsupportedStatusFilter(t *testing.T) {
 }
 
 func TestPurchaseOrderRoutesAcceptDateOnlyOrderDates(t *testing.T) {
-	body := `{"supplierId":"` + uuid.New().String() + `","orderDate":"2026-07-21","expectedDeliveryDate":"2026-07-22","currency":"IDR","lines":[{"rawMaterialId":"` + uuid.New().String() + `","totalKanban":"1"}]}`
+	body := `{"supplierId":"` + uuid.New().String() + `","plantId":"` + uuid.New().String() + `","orderDate":"2026-07-21","expectedDeliveryDate":"2026-07-22","currency":"IDR","lines":[{"rawMaterialId":"` + uuid.New().String() + `","totalKanban":"1"}]}`
 	for _, test := range []struct {
 		name       string
 		method     string
@@ -382,7 +382,7 @@ func TestPurchaseOrderRoutesAcceptDateOnlyOrderDates(t *testing.T) {
 
 func TestPurchaseOrderRoutesRejectRFC3339OrderDates(t *testing.T) {
 	router := purchaseOrderRouter(t, []string{"po.create"}, &httpRepository{})
-	body := `{"supplierId":"` + uuid.New().String() + `","orderDate":"2026-07-21T23:30:00-05:00","expectedDeliveryDate":"2026-07-22","currency":"IDR"}`
+	body := `{"supplierId":"` + uuid.New().String() + `","plantId":"` + uuid.New().String() + `","orderDate":"2026-07-21T23:30:00-05:00","expectedDeliveryDate":"2026-07-22","currency":"IDR"}`
 	recorder := serve(router, http.MethodPost, "/purchase-orders", body, "session")
 
 	if recorder.Code != http.StatusBadRequest || !strings.Contains(recorder.Body.String(), `"orderDate"`) {
@@ -475,7 +475,7 @@ func TestPurchaseOrderResponseModelsUseLowerCamelJSON(t *testing.T) {
 	order := Order{ID: uuid.New(), TenantID: uuid.New(), PONumber: "PO-202607-00001", SupplierID: uuid.New(), SupplierName: "Acme", OrderDate: time.Now(), ExpectedDeliveryDate: time.Now(), Currency: "IDR", Notes: "notes", Status: StatusDraft, Version: 1, TotalAmount: decimal.NewFromInt(24), SagePurchaseOrderNumber: "SAGE-1", SubmittedApproverUserID: uuid.New(), SubmittedApproverDisplayName: "Director", SubmittedApproverEmail: "director@example.test", CreatedBy: actor, CreatedAt: time.Now(), UpdatedBy: actor, UpdatedAt: time.Now(), Lines: []OrderLine{line}}
 	approval := Approval{ID: uuid.New(), TenantID: uuid.New(), PurchaseOrderID: order.ID, PONumber: order.PONumber, SupplierID: order.SupplierID, SupplierName: "Acme", Version: 1, ApproverUserID: uuid.New(), ApproverDisplayName: "Director", ApproverEmail: "director@example.test", Status: ApprovalPending, DecisionReason: "", DecidedByUserID: uuid.New(), CreatedBy: actor, CreatedAt: time.Now(), UpdatedBy: actor, UpdatedAt: time.Now()}
 
-	assertJSONKeys(t, order, []string{"id", "tenantId", "poNumber", "supplierId", "supplierName", "orderDate", "expectedDeliveryDate", "currency", "notes", "status", "version", "totalAmount", "sagePurchaseOrderNumber", "submittedApproverUserId", "submittedApproverDisplayName", "submittedApproverEmail", "createdBy", "createdAt", "updatedBy", "updatedAt", "lines", "documents"})
+	assertJSONKeys(t, order, []string{"id", "tenantId", "poNumber", "supplierId", "supplierName", "plantId", "plantCode", "plantName", "plantAddress", "orderDate", "expectedDeliveryDate", "currency", "notes", "status", "version", "totalAmount", "sagePurchaseOrderNumber", "submittedApproverUserId", "submittedApproverDisplayName", "submittedApproverEmail", "createdBy", "createdAt", "updatedBy", "updatedAt", "lines", "documents"})
 	assertJSONKeys(t, line, []string{"id", "tenantId", "purchaseOrderId", "rawMaterialId", "rawMaterialCode", "rawMaterialName", "baseUnitId", "baseUnitCode", "qtyPerKanbanSnapshot", "totalKanban", "orderedBaseQty", "unitPriceSnapshot", "lineTotal", "sortPosition", "createdBy", "createdAt", "updatedBy", "updatedAt"})
 	assertJSONKeys(t, approval, []string{"id", "tenantId", "purchaseOrderId", "poNumber", "supplierId", "supplierName", "version", "approverUserId", "approverDisplayName", "approverEmail", "status", "decisionReason", "decidedAt", "decidedByUserId", "createdBy", "createdAt", "updatedBy", "updatedAt"})
 	assertJSONKeys(t, actor, []string{"tenantId", "userId", "displayName", "email"})
@@ -700,7 +700,7 @@ func serve(router http.Handler, method, path, body, session string) *httptest.Re
 }
 
 func validOrderJSON() string {
-	return `{"supplierId":"` + uuid.New().String() + `","orderDate":"2026-07-21","expectedDeliveryDate":"2026-07-22","currency":"IDR","lines":[{"rawMaterialId":"` + uuid.New().String() + `","totalKanban":"` + decimal.NewFromInt(1).String() + `"}]}`
+	return `{"supplierId":"` + uuid.New().String() + `","plantId":"` + uuid.New().String() + `","orderDate":"2026-07-21","expectedDeliveryDate":"2026-07-22","currency":"IDR","lines":[{"rawMaterialId":"` + uuid.New().String() + `","totalKanban":"` + decimal.NewFromInt(1).String() + `"}]}`
 }
 
 func assertJSONKeys(t *testing.T, value any, keys []string) {

@@ -230,8 +230,11 @@ func projectOrder(order Order, includePrices bool) gin.H {
 		projected := gin.H{
 			"id": line.ID, "tenantId": line.TenantID, "purchaseOrderId": line.PurchaseOrderID,
 			"rawMaterialId": line.RawMaterialID, "rawMaterialCode": line.RawMaterialCode, "rawMaterialName": line.RawMaterialName,
-			"baseUnitId": line.BaseUnitID, "baseUnitCode": line.BaseUnitCode, "qtyPerKanbanSnapshot": line.QtyPerKanbanSnapshot,
-			"totalKanban": line.TotalKanban, "orderedBaseQty": line.OrderedBaseQty, "sortPosition": line.SortPosition,
+			"baseUnitId": line.BaseUnitID, "baseUnitCode": line.BaseUnitCode,
+			"categoryCode": line.CategoryCode, "categoryName": line.CategoryName,
+			"packingCode": line.PackingCode, "packingName": line.PackingName,
+			"qtyPerKanbanSnapshot": line.QtyPerKanbanSnapshot,
+			"totalKanban":          line.TotalKanban, "orderedBaseQty": line.OrderedBaseQty, "sortPosition": line.SortPosition,
 			"createdBy": line.CreatedBy, "createdAt": line.CreatedAt, "updatedBy": line.UpdatedBy, "updatedAt": line.UpdatedAt,
 		}
 		if includePrices {
@@ -243,6 +246,7 @@ func projectOrder(order Order, includePrices bool) gin.H {
 	projected := gin.H{
 		"id": order.ID, "tenantId": order.TenantID, "poNumber": order.PONumber,
 		"supplierId": order.SupplierID, "supplierName": order.SupplierName,
+		"plantId": order.PlantID, "plantCode": order.PlantCode, "plantName": order.PlantName, "plantAddress": order.PlantAddress,
 		"orderDate": order.OrderDate, "expectedDeliveryDate": order.ExpectedDeliveryDate,
 		"currency": order.Currency, "notes": order.Notes, "status": order.Status, "version": order.Version,
 		"sagePurchaseOrderNumber":      order.SagePurchaseOrderNumber,
@@ -311,6 +315,7 @@ func orderInput(c *gin.Context) (OrderInput, bool) {
 	}
 	input := OrderInput{
 		SupplierID: request.SupplierID,
+		PlantID:    request.PlantID,
 		Currency:   request.Currency,
 		Notes:      request.Notes,
 		Lines:      request.Lines,
@@ -332,6 +337,7 @@ func orderInput(c *gin.Context) (OrderInput, bool) {
 
 type orderRequest struct {
 	SupplierID           uuid.UUID   `json:"supplierId"`
+	PlantID              uuid.UUID   `json:"plantId"`
 	OrderDate            string      `json:"orderDate"`
 	ExpectedDeliveryDate string      `json:"expectedDeliveryDate"`
 	Currency             string      `json:"currency"`

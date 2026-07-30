@@ -47,6 +47,10 @@ type Order struct {
 	CompanyName                  string           `json:"companyName"`
 	SupplierID                   uuid.UUID        `json:"supplierId"`
 	SupplierName                 string           `json:"supplierName"`
+	PlantID                      uuid.UUID        `json:"plantId"`
+	PlantCode                    string           `json:"plantCode"`
+	PlantName                    string           `json:"plantName"`
+	PlantAddress                 string           `json:"plantAddress"`
 	OrderDate                    time.Time        `json:"orderDate"`
 	ExpectedDeliveryDate         time.Time        `json:"expectedDeliveryDate"`
 	Currency                     string           `json:"currency"`
@@ -82,6 +86,10 @@ type OrderLine struct {
 	RawMaterialName      string          `json:"rawMaterialName"`
 	BaseUnitID           uuid.UUID       `json:"baseUnitId"`
 	BaseUnitCode         string          `json:"baseUnitCode"`
+	CategoryCode         string          `json:"categoryCode"`
+	CategoryName         string          `json:"categoryName"`
+	PackingCode          string          `json:"packingCode"`
+	PackingName          string          `json:"packingName"`
 	QtyPerKanbanSnapshot decimal.Decimal `json:"qtyPerKanbanSnapshot"`
 	TotalKanban          decimal.Decimal `json:"totalKanban"`
 	OrderedBaseQty       decimal.Decimal `json:"orderedBaseQty"`
@@ -115,6 +123,7 @@ func roundDatabaseDecimal(value decimal.Decimal) decimal.Decimal {
 
 type OrderInput struct {
 	SupplierID           uuid.UUID   `json:"supplierId"`
+	PlantID              uuid.UUID   `json:"plantId"`
 	OrderDate            time.Time   `json:"orderDate"`
 	ExpectedDeliveryDate time.Time   `json:"expectedDeliveryDate"`
 	Currency             string      `json:"currency"`
@@ -133,6 +142,9 @@ func (i *OrderInput) NormalizeAndValidate(requireLines bool) FieldErrors {
 	errs := FieldErrors{}
 	if i.SupplierID == uuid.Nil {
 		errs["supplierId"] = "Supplier is required"
+	}
+	if i.PlantID == uuid.Nil {
+		errs["plantId"] = "Plant is required"
 	}
 	if i.OrderDate.IsZero() {
 		errs["orderDate"] = "Order Date is required"

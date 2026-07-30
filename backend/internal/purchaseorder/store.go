@@ -18,7 +18,9 @@ var _ Repository = (*SQLStore)(nil)
 
 func NewSQLStore(db *database.Pool) *SQLStore { return &SQLStore{db: db} }
 
-const orderSelect = `SELECT p.id,p.tenant_id,p.po_number,COALESCE(NULLIF(BTRIM(ts.company_name),''),'Order Stock'),p.supplier_id,s.name,p.order_date,p.expected_delivery_date,
+const orderSelect = `SELECT p.id,p.tenant_id,p.po_number,COALESCE(NULLIF(BTRIM(ts.company_name),''),'Order Stock'),p.supplier_id,s.name,
+ COALESCE(p.plant_id,'00000000-0000-0000-0000-000000000000'),p.plant_code_snapshot,p.plant_name_snapshot,p.plant_address_snapshot,
+ p.order_date,p.expected_delivery_date,
  p.currency,p.notes,p.status,p.version,p.total_amount,COALESCE(p.sage_purchase_order_number,''),
  COALESCE(p.submitted_approver_user_id,'00000000-0000-0000-0000-000000000000'),p.submitted_approver_display_name,p.submitted_approver_email,
  p.created_by_user_id,cu.display_name,cu.email,p.created_at,p.updated_by_user_id,uu.display_name,uu.email,p.updated_at
@@ -38,7 +40,8 @@ const documentSummarySelect = `SELECT dn.purchase_order_id,dn.id,dn.delivery_not
  GROUP BY dn.purchase_order_id,dn.id,dn.delivery_note_number,dn.issued_at`
 
 const orderLineSelect = `SELECT l.id,l.tenant_id,l.purchase_order_id,l.raw_material_id,l.raw_material_code_snapshot,
- l.raw_material_name_snapshot,l.base_unit_id,l.base_unit_code_snapshot,l.qty_per_kanban_snapshot,l.total_kanban,
+ l.raw_material_name_snapshot,l.base_unit_id,l.base_unit_code_snapshot,l.category_code_snapshot,l.category_name_snapshot,
+ l.packing_code_snapshot,l.packing_name_snapshot,l.qty_per_kanban_snapshot,l.total_kanban,
  l.ordered_base_qty,l.unit_price_snapshot,l.line_total,l.sort_position,l.created_by_user_id,cu.display_name,cu.email,
  l.created_at,l.updated_by_user_id,uu.display_name,uu.email,l.updated_at
  FROM purchase_order_lines l
@@ -55,10 +58,23 @@ const approvalSelect = `SELECT a.id,a.tenant_id,a.purchase_order_id,a.version,a.
  JOIN users cu ON cu.tenant_id=a.tenant_id AND cu.id=a.created_by_user_id
  JOIN users uu ON uu.tenant_id=a.tenant_id AND uu.id=a.updated_by_user_id`
 
+const activePlantSelect = `SELECT code,name,address FROM plants
+ WHERE tenant_id=$1 AND id=$2 AND active FOR SHARE`
+
+const snapshotMaterialSelect = `SELECT r.code,r.name,r.base_unit_id,u.code,c.code,c.name,pk.code,pk.name,
+ r.qty_per_kanban,r.standard_unit_price
+ FROM raw_materials r
+ JOIN units u ON u.tenant_id=r.tenant_id AND u.id=r.base_unit_id AND u.active
+ JOIN categories c ON c.tenant_id=r.tenant_id AND c.id=r.category_id AND c.active
+ JOIN packings pk ON pk.tenant_id=r.tenant_id AND pk.id=r.packing_id AND pk.active
+ WHERE r.tenant_id=$1 AND r.id=$2 AND r.supplier_id=$3 AND r.active
+ FOR SHARE OF r,u,c,pk`
+
 func scanOrder(row pgx.Row) (Order, error) {
 	var order Order
 	err := row.Scan(
-		&order.ID, &order.TenantID, &order.PONumber, &order.CompanyName, &order.SupplierID, &order.SupplierName, &order.OrderDate, &order.ExpectedDeliveryDate,
+		&order.ID, &order.TenantID, &order.PONumber, &order.CompanyName, &order.SupplierID, &order.SupplierName,
+		&order.PlantID, &order.PlantCode, &order.PlantName, &order.PlantAddress, &order.OrderDate, &order.ExpectedDeliveryDate,
 		&order.Currency, &order.Notes, &order.Status, &order.Version, &order.TotalAmount, &order.SagePurchaseOrderNumber,
 		&order.SubmittedApproverUserID, &order.SubmittedApproverDisplayName, &order.SubmittedApproverEmail,
 		&order.CreatedBy.UserID, &order.CreatedBy.DisplayName, &order.CreatedBy.Email, &order.CreatedAt,
@@ -73,7 +89,8 @@ func scanOrderLine(row pgx.Row) (OrderLine, error) {
 	var line OrderLine
 	err := row.Scan(
 		&line.ID, &line.TenantID, &line.PurchaseOrderID, &line.RawMaterialID, &line.RawMaterialCode, &line.RawMaterialName,
-		&line.BaseUnitID, &line.BaseUnitCode, &line.QtyPerKanbanSnapshot, &line.TotalKanban, &line.OrderedBaseQty,
+		&line.BaseUnitID, &line.BaseUnitCode, &line.CategoryCode, &line.CategoryName, &line.PackingCode, &line.PackingName,
+		&line.QtyPerKanbanSnapshot, &line.TotalKanban, &line.OrderedBaseQty,
 		&line.UnitPriceSnapshot, &line.LineTotal, &line.SortPosition,
 		&line.CreatedBy.UserID, &line.CreatedBy.DisplayName, &line.CreatedBy.Email, &line.CreatedAt,
 		&line.UpdatedBy.UserID, &line.UpdatedBy.DisplayName, &line.UpdatedBy.Email, &line.UpdatedAt,
@@ -222,12 +239,19 @@ func (s *SQLStore) CreateOrder(ctx context.Context, actor Actor, input OrderInpu
 		if err != nil {
 			return err
 		}
+		plant, err := activePlantSnapshot(ctx, tx, actor.TenantID, input.PlantID)
+		if err != nil {
+			return err
+		}
 		poNumber, err := nextPONumber(ctx, tx, actor.TenantID, input.OrderDate)
 		if err != nil {
 			return err
 		}
-		if err := tx.QueryRow(ctx, `INSERT INTO purchase_orders(tenant_id,po_number,supplier_id,order_date,expected_delivery_date,currency,notes,created_by_user_id,updated_by_user_id)
- VALUES($1,$2,$3,$4,$5,$6,$7,$8,$8) RETURNING id`, actor.TenantID, poNumber, input.SupplierID, input.OrderDate, input.ExpectedDeliveryDate, currency, input.Notes, actor.UserID).Scan(&order.ID); err != nil {
+		if err := tx.QueryRow(ctx, `INSERT INTO purchase_orders(tenant_id,po_number,supplier_id,plant_id,plant_code_snapshot,
+ plant_name_snapshot,plant_address_snapshot,order_date,expected_delivery_date,currency,notes,created_by_user_id,updated_by_user_id)
+ VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$12) RETURNING id`,
+			actor.TenantID, poNumber, input.SupplierID, input.PlantID, plant.Code, plant.Name, plant.Address,
+			input.OrderDate, input.ExpectedDeliveryDate, currency, input.Notes, actor.UserID).Scan(&order.ID); err != nil {
 			return writeError(err)
 		}
 		if err := replaceDraftLines(ctx, tx, actor, order.ID, input.SupplierID, input.Lines); err != nil {
@@ -248,8 +272,15 @@ func (s *SQLStore) UpdateOrder(ctx context.Context, actor Actor, id uuid.UUID, i
 		if err != nil {
 			return err
 		}
-		if _, err = tx.Exec(ctx, `UPDATE purchase_orders SET supplier_id=$3,order_date=$4,expected_delivery_date=$5,currency=$6,notes=$7,
- updated_by_user_id=$8,updated_at=now() WHERE tenant_id=$1 AND id=$2`, actor.TenantID, id, input.SupplierID, input.OrderDate, input.ExpectedDeliveryDate, currency, input.Notes, actor.UserID); err != nil {
+		plant, err := activePlantSnapshot(ctx, tx, actor.TenantID, input.PlantID)
+		if err != nil {
+			return err
+		}
+		if _, err = tx.Exec(ctx, `UPDATE purchase_orders SET supplier_id=$3,plant_id=$4,plant_code_snapshot=$5,
+ plant_name_snapshot=$6,plant_address_snapshot=$7,order_date=$8,expected_delivery_date=$9,currency=$10,notes=$11,
+ updated_by_user_id=$12,updated_at=now() WHERE tenant_id=$1 AND id=$2`, actor.TenantID, id, input.SupplierID,
+			input.PlantID, plant.Code, plant.Name, plant.Address, input.OrderDate, input.ExpectedDeliveryDate,
+			currency, input.Notes, actor.UserID); err != nil {
 			return writeError(err)
 		}
 		if err = replaceDraftLines(ctx, tx, actor, id, input.SupplierID, input.Lines); err != nil {
@@ -426,6 +457,21 @@ func activeSupplierCurrency(ctx context.Context, tx database.TenantTx, tenantID,
 	return currency, err
 }
 
+type plantSnapshot struct {
+	Code    string
+	Name    string
+	Address string
+}
+
+func activePlantSnapshot(ctx context.Context, tx database.TenantTx, tenantID, plantID uuid.UUID) (plantSnapshot, error) {
+	var plant plantSnapshot
+	err := tx.QueryRow(ctx, activePlantSelect, tenantID, plantID).Scan(&plant.Code, &plant.Name, &plant.Address)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return plantSnapshot{}, ConflictError{Fields: FieldErrors{"plantId": "Select an active Plant"}}
+	}
+	return plant, err
+}
+
 func nextPONumber(ctx context.Context, tx database.TenantTx, tenantID uuid.UUID, orderDate time.Time) (string, error) {
 	yearMonth := orderDate.Format("200601")
 	var sequence int
@@ -453,11 +499,14 @@ func replaceDraftLines(ctx context.Context, tx database.TenantTx, actor Actor, o
 	order.RecalculateTotals()
 	for _, line := range order.Lines {
 		if _, err := tx.Exec(ctx, `INSERT INTO purchase_order_lines(tenant_id,purchase_order_id,raw_material_id,raw_material_code_snapshot,
- raw_material_name_snapshot,base_unit_id,base_unit_code_snapshot,qty_per_kanban_snapshot,total_kanban,ordered_base_qty,
+ raw_material_name_snapshot,base_unit_id,base_unit_code_snapshot,category_code_snapshot,category_name_snapshot,
+ packing_code_snapshot,packing_name_snapshot,qty_per_kanban_snapshot,total_kanban,ordered_base_qty,
  unit_price_snapshot,line_total,sort_position,created_by_user_id,updated_by_user_id)
- VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$14)`, actor.TenantID, orderID, line.RawMaterialID,
-			line.RawMaterialCode, line.RawMaterialName, line.BaseUnitID, line.BaseUnitCode, line.QtyPerKanbanSnapshot,
-			line.TotalKanban, line.OrderedBaseQty, line.UnitPriceSnapshot, line.LineTotal, line.SortPosition, actor.UserID); err != nil {
+ VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$18)`,
+			actor.TenantID, orderID, line.RawMaterialID, line.RawMaterialCode, line.RawMaterialName,
+			line.BaseUnitID, line.BaseUnitCode, line.CategoryCode, line.CategoryName, line.PackingCode, line.PackingName,
+			line.QtyPerKanbanSnapshot, line.TotalKanban, line.OrderedBaseQty, line.UnitPriceSnapshot, line.LineTotal,
+			line.SortPosition, actor.UserID); err != nil {
 			return writeError(err)
 		}
 	}
@@ -468,12 +517,12 @@ func replaceDraftLines(ctx context.Context, tx database.TenantTx, actor Actor, o
 
 func snapshotLine(ctx context.Context, tx database.TenantTx, tenantID, orderID, supplierID uuid.UUID, input LineInput, position int) (OrderLine, error) {
 	line := OrderLine{TenantID: tenantID, PurchaseOrderID: orderID, RawMaterialID: input.RawMaterialID, TotalKanban: input.TotalKanban, SortPosition: position}
-	err := tx.QueryRow(ctx, `SELECT r.code,r.name,r.base_unit_id,m.code,r.qty_per_kanban,r.standard_unit_price
- FROM raw_materials r JOIN units m ON m.tenant_id=r.tenant_id AND m.id=r.base_unit_id AND m.active
-	 WHERE r.tenant_id=$1 AND r.id=$2 AND r.supplier_id=$3 AND r.active FOR SHARE OF r,m`, tenantID, input.RawMaterialID, supplierID).
-		Scan(&line.RawMaterialCode, &line.RawMaterialName, &line.BaseUnitID, &line.BaseUnitCode, &line.QtyPerKanbanSnapshot, &line.UnitPriceSnapshot)
+	err := tx.QueryRow(ctx, snapshotMaterialSelect, tenantID, input.RawMaterialID, supplierID).
+		Scan(&line.RawMaterialCode, &line.RawMaterialName, &line.BaseUnitID, &line.BaseUnitCode,
+			&line.CategoryCode, &line.CategoryName, &line.PackingCode, &line.PackingName,
+			&line.QtyPerKanbanSnapshot, &line.UnitPriceSnapshot)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return OrderLine{}, ConflictError{Fields: FieldErrors{fmt.Sprintf("lines[%d].rawMaterialId", position-1): "Select an active Raw Material for this supplier"}}
+		return OrderLine{}, ConflictError{Fields: FieldErrors{fmt.Sprintf("lines[%d].rawMaterialId", position-1): "Select an active Raw Material with active Unit, Category, and Packing for this supplier"}}
 	}
 	if err != nil {
 		return OrderLine{}, err
@@ -483,7 +532,7 @@ func snapshotLine(ctx context.Context, tx database.TenantTx, tenantID, orderID, 
 }
 
 func validStoredOrder(ctx context.Context, tx database.TenantTx, tenantID uuid.UUID, order Order) (FieldErrors, error) {
-	input := OrderInput{SupplierID: order.SupplierID, OrderDate: order.OrderDate, ExpectedDeliveryDate: order.ExpectedDeliveryDate, Currency: order.Currency}
+	input := OrderInput{SupplierID: order.SupplierID, PlantID: order.PlantID, OrderDate: order.OrderDate, ExpectedDeliveryDate: order.ExpectedDeliveryDate, Currency: order.Currency}
 	for _, line := range order.Lines {
 		input.Lines = append(input.Lines, LineInput{RawMaterialID: line.RawMaterialID, TotalKanban: line.TotalKanban})
 	}
@@ -497,6 +546,16 @@ func validStoredOrder(ctx context.Context, tx database.TenantTx, tenantID uuid.U
 		}
 		return nil, err
 	}
+	if _, err := activePlantSnapshot(ctx, tx, tenantID, order.PlantID); err != nil {
+		var conflict ConflictError
+		if errors.As(err, &conflict) {
+			return FieldErrors{"plantId": "Select an active Plant before submission"}, nil
+		}
+		return nil, err
+	}
+	if order.PlantCode == "" || order.PlantName == "" {
+		return FieldErrors{"plantId": "Plant snapshot is incomplete"}, nil
+	}
 	recalculated := Order{Lines: append([]OrderLine(nil), order.Lines...)}
 	recalculated.RecalculateTotals()
 	if !recalculated.TotalAmount.Equal(order.TotalAmount) {
@@ -504,7 +563,12 @@ func validStoredOrder(ctx context.Context, tx database.TenantTx, tenantID uuid.U
 	}
 	for index, line := range order.Lines {
 		var active bool
-		err := tx.QueryRow(ctx, `SELECT r.active AND r.supplier_id=$3 FROM raw_materials r WHERE r.tenant_id=$1 AND r.id=$2 FOR SHARE`, tenantID, line.RawMaterialID, order.SupplierID).Scan(&active)
+		err := tx.QueryRow(ctx, `SELECT r.active AND r.supplier_id=$3 AND u.active AND c.active AND pk.active
+ FROM raw_materials r
+ JOIN units u ON u.tenant_id=r.tenant_id AND u.id=r.base_unit_id
+ JOIN categories c ON c.tenant_id=r.tenant_id AND c.id=r.category_id
+ JOIN packings pk ON pk.tenant_id=r.tenant_id AND pk.id=r.packing_id
+ WHERE r.tenant_id=$1 AND r.id=$2 FOR SHARE OF r,u,c,pk`, tenantID, line.RawMaterialID, order.SupplierID).Scan(&active)
 		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
 				return FieldErrors{fmt.Sprintf("lines[%d].rawMaterialId", index): "Raw Material is no longer active for this supplier"}, nil
@@ -514,7 +578,8 @@ func validStoredOrder(ctx context.Context, tx database.TenantTx, tenantID uuid.U
 		if !active {
 			return FieldErrors{fmt.Sprintf("lines[%d].rawMaterialId", index): "Raw Material is no longer active for this supplier"}, nil
 		}
-		if !line.QtyPerKanbanSnapshot.IsPositive() || line.UnitPriceSnapshot.IsNegative() || !line.OrderedBaseQty.IsPositive() || line.LineTotal.IsNegative() {
+		if line.CategoryCode == "" || line.CategoryName == "" || line.PackingCode == "" || line.PackingName == "" ||
+			!line.QtyPerKanbanSnapshot.IsPositive() || line.UnitPriceSnapshot.IsNegative() || !line.OrderedBaseQty.IsPositive() || line.LineTotal.IsNegative() {
 			return FieldErrors{fmt.Sprintf("lines[%d]", index): "Raw Material snapshots are invalid"}, nil
 		}
 		if !recalculated.Lines[index].OrderedBaseQty.Equal(line.OrderedBaseQty) || !recalculated.Lines[index].LineTotal.Equal(line.LineTotal) {
