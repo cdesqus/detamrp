@@ -61,6 +61,9 @@ func main() {
 		appBaseURL = "http://localhost:3019"
 	}
 	emailService := emailing.NewService(emailing.NewStore(db), secretBox, appBaseURL)
+	purchaseOrderService.SetDecisionNotifier(func(ctx context.Context, actor purchaseorder.Actor, approvalID uuid.UUID) error {
+		return emailService.SendDecisionResult(ctx, emailing.Actor{TenantID: actor.TenantID, UserID: actor.UserID}, approvalID)
+	})
 	address := os.Getenv("HTTP_ADDR")
 	if address == "" {
 		address = ":8091"

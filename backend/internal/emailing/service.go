@@ -30,6 +30,8 @@ type emailStore interface {
 	ResolveToken(context.Context, uuid.UUID, []byte) (TokenContext, error)
 	MarkTokenUsed(context.Context, uuid.UUID, []byte) error
 	SupplierEmail(context.Context, uuid.UUID, uuid.UUID) (string, error)
+	Branding(context.Context, uuid.UUID) (CompanyBranding, error)
+	DecisionData(context.Context, uuid.UUID, uuid.UUID) (DecisionMailData, error)
 }
 
 type mailTransport interface {
@@ -99,7 +101,12 @@ func (s *Service) Test(ctx context.Context, actor Actor, to string) error {
 	if e != nil || a.Address != to {
 		return errors.New("valid recipient email is required")
 	}
-	return s.deliver(ctx, actor, "TEST", "", uuid.Nil, "", Message{To: to, Subject: "DETA MRP SMTP Test", HTML: emailShell("SMTP Test", `<p>Your DETA MRP SMTP configuration is working.</p>`)})
+	branding, e := s.store.Branding(ctx, actor.TenantID)
+	if e != nil {
+		return e
+	}
+	rendered := emailShellWithBranding(branding, "SMTP Test Successful", `<p style="margin:0;color:#52525b;line-height:1.6">Your SMTP configuration is active and DETA MRP can deliver branded business notifications.</p><div style="margin-top:18px;padding:14px 16px;border:1px solid #bbf7d0;background:#f0fdf4;border-radius:8px;color:#166534"><b>Connection verified</b><br><span style="font-size:13px">Approval and supplier emails are ready to send.</span></div>`)
+	return s.deliver(ctx, actor, "TEST", "", uuid.Nil, "", Message{To: to, Subject: "DETA MRP SMTP Test", HTML: rendered.HTML, Attachments: rendered.Inline})
 }
 func (s *Service) SendApproval(ctx context.Context, actor Actor, poID uuid.UUID) error {
 	data, e := s.store.ApprovalData(ctx, actor, poID)
@@ -114,8 +121,12 @@ func (s *Service) SendApproval(ctx context.Context, actor Actor, poID uuid.UUID)
 		return e
 	}
 	base := fmt.Sprintf("%s/api/public/email-approval?tenant=%s&token=%s", s.baseURL, actor.TenantID, token)
-	html := approvalHTML(data, base+"&decision=approve", base+"&decision=reject", fmt.Sprintf("%s/supplier-orders/%s", s.baseURL, poID))
-	return s.deliver(ctx, actor, "APPROVAL", "PURCHASE_ORDER", poID, data.PONumber, Message{To: data.ApproverEmail, Subject: "Approval Required — " + data.PONumber + " — " + data.SupplierName, HTML: html})
+	branding, e := s.store.Branding(ctx, actor.TenantID)
+	if e != nil {
+		return e
+	}
+	rendered := approvalEmail(data, branding, base+"&decision=approve", base+"&decision=reject", fmt.Sprintf("%s/supplier-orders/%s", s.baseURL, poID))
+	return s.deliver(ctx, actor, "APPROVAL", "PURCHASE_ORDER", poID, data.PONumber, Message{To: data.ApproverEmail, Subject: "Approval Required — " + data.PONumber + " — " + data.SupplierName, HTML: rendered.HTML, Attachments: rendered.Inline})
 }
 func (s *Service) SendSupplier(ctx context.Context, actor Actor, order purchaseorder.Order, po, dn, labels purchaseorder.PDFDocument) error {
 	if order.Documents == nil {
@@ -125,7 +136,11 @@ func (s *Service) SendSupplier(ctx context.Context, actor Actor, order purchaseo
 	if e != nil {
 		return e
 	}
-	message, e := supplierMessage(order, recipient, po, dn, labels)
+	branding, e := s.store.Branding(ctx, actor.TenantID)
+	if e != nil {
+		return e
+	}
+	message, e := supplierMessageWithBranding(order, branding, recipient, po, dn, labels)
 	if e != nil {
 		return e
 	}
@@ -133,14 +148,18 @@ func (s *Service) SendSupplier(ctx context.Context, actor Actor, order purchaseo
 }
 
 func supplierMessage(order purchaseorder.Order, recipient string, po, dn, labels purchaseorder.PDFDocument) (Message, error) {
+	return supplierMessageWithBranding(order, CompanyBranding{CompanyName: order.CompanyName}, recipient, po, dn, labels)
+}
+
+func supplierMessageWithBranding(order purchaseorder.Order, branding CompanyBranding, recipient string, po, dn, labels purchaseorder.PDFDocument) (Message, error) {
 	if order.Documents == nil {
 		return Message{}, errors.New("delivery documents are not available")
 	}
-	totalKanban := int64(0)
-	for _, line := range order.Lines {
-		totalKanban += line.TotalKanban.IntPart()
+	attachments := []Attachment{
+		{Filename: po.Filename, ContentType: "application/pdf", Content: po.Content},
+		{Filename: dn.Filename, ContentType: "application/pdf", Content: dn.Content},
+		{Filename: labels.Filename, ContentType: "application/pdf", Content: labels.Content},
 	}
-	attachments := []Attachment{{po.Filename, "application/pdf", po.Content}, {dn.Filename, "application/pdf", dn.Content}, {labels.Filename, "application/pdf", labels.Content}}
 	size := 0
 	for _, a := range attachments {
 		size += len(a.Content)
@@ -148,9 +167,25 @@ func supplierMessage(order purchaseorder.Order, recipient string, po, dn, labels
 	if size > 20*1024*1024 {
 		return Message{}, errors.New("email attachments exceed 20 MB")
 	}
-	body := supplierHTML(order.PONumber, order.SupplierName, order.Documents.DeliveryNoteNumber, order.ExpectedDeliveryDate.Format("02 Jan 2006"), len(order.Lines), totalKanban)
-	return Message{To: recipient, Subject: "Purchase Order & Delivery Documents — " + order.PONumber, HTML: body, Attachments: attachments}, nil
+	rendered := supplierEmailHTML(order, branding)
+	attachments = append(attachments, rendered.Inline...)
+	return Message{To: recipient, Subject: "Purchase Order & Delivery Documents — " + order.PONumber, HTML: rendered.HTML, Attachments: attachments}, nil
 }
 func (s *Service) ListLogs(ctx context.Context, actor Actor, search string) ([]EmailLog, error) {
 	return s.store.ListLogs(ctx, actor, search)
+}
+
+func (s *Service) SendDecisionResult(ctx context.Context, actor Actor, approvalID uuid.UUID) error {
+	data, err := s.store.DecisionData(ctx, actor.TenantID, approvalID)
+	if err != nil {
+		return err
+	}
+	branding, err := s.store.Branding(ctx, actor.TenantID)
+	if err != nil {
+		return err
+	}
+	rendered := decisionEmail(data, branding)
+	subject := fmt.Sprintf("PO %s — %s", data.Status, data.PONumber)
+	return s.deliver(ctx, actor, "DECISION", "PURCHASE_ORDER", data.PurchaseOrderID, data.PONumber,
+		Message{To: data.RecipientEmail, Subject: subject, HTML: rendered.HTML, Attachments: rendered.Inline})
 }
