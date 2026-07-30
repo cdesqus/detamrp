@@ -13,6 +13,7 @@ describe('navigation permission policy', () => {
     expect(requiredPermissionForPath('/receiving/session-1')).toBe('receiving.view');
     expect(requiredPermissionForPath('/settings/roles')).toBe('role.manage');
     expect(requiredPermissionForPath('/settings/company')).toBe('configuration.manage');
+    expect(requiredPermissionForPath('/settings/activity-log')).toBe('activity_log.view');
     expect(requiredPermissionForPath('/units')).toBe('master_data.view');
     expect(requiredPermissionForPath('/categories')).toBe('master_data.view');
     expect(requiredPermissionForPath('/packings')).toBe('master_data.view');
@@ -35,6 +36,14 @@ describe('navigation permission policy', () => {
     const groups = visibleNavigationGroups(['role.manage']);
     expect(groups.flatMap(group => group.items).map(item => item.label)).toEqual(['Roles & Permissions']);
     expect(groups.map(group => group.label).filter(Boolean)).toEqual(['Settings']);
+  });
+
+  it('shows Activity Log only with its dedicated permission', () => {
+    const visible = visibleNavigationGroups(['activity_log.view'])
+      .flatMap(group => group.items)
+      .map(item => item.label);
+    expect(visible).toEqual(['Activity Log']);
+    expect(firstPermittedRoute(['activity_log.view'])).toBe('/settings/activity-log');
   });
 
   it('selects the first permitted route deterministically', () => {
