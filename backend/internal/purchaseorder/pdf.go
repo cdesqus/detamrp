@@ -652,94 +652,79 @@ func renderKanbanLabelsPDF(ctx context.Context, document KanbanLabelDocument) ([
 }
 
 func writeKanbanCard(pdf *fpdf.Fpdf, document KanbanLabelDocument, label KanbanLabel, index int, x, y, width, height float64, qrPNG []byte) error {
-	pdf.SetDrawColor(24, 24, 27)
-	pdf.SetTextColor(24, 24, 27)
+	setDocumentInk(pdf)
 	pdf.SetLineWidth(0.35)
 	pdf.Rect(x, y, width, height, "D")
 
 	const headerHeight = 15.0
 	pdf.Line(x, y+headerHeight, x+width, y+headerHeight)
 	pdf.SetXY(x+4, y+2)
-	pdf.SetFont(pdfFontFamily, "B", 7)
-	pdf.CellFormat(92, 4, pdfCompanyName(document.CompanyName), "", 0, "L", false, 0, "")
-	pdf.SetXY(x+4, y+6)
+	pdf.SetFont(pdfFontFamily, "B", 8)
+	pdf.CellFormat(54, 5, pdfCompanyName(document.CompanyName), "", 0, "L", false, 0, "")
+	pdf.SetXY(x+58, y+2)
 	pdf.SetFont(pdfFontFamily, "B", 13)
-	pdf.CellFormat(92, 7, "KANBAN CARD", "", 0, "L", false, 0, "")
-	pdf.SetXY(x+98, y+2)
-	pdf.SetFont(pdfFontFamily, "", 7)
-	pdf.CellFormat(84, 4, "KANBAN ID", "", 0, "R", false, 0, "")
-	pdf.SetXY(x+98, y+6)
-	pdf.SetFont(pdfFontFamily, "B", 12)
-	pdf.CellFormat(84, 7, label.KanbanID, "", 0, "R", false, 0, "")
+	pdf.CellFormat(72, 8, "KANBAN CARD", "", 0, "C", false, 0, "")
+	pdf.SetXY(x+132, y+1.5)
+	pdf.SetFont(pdfFontFamily, "", 6)
+	pdf.CellFormat(50, 4, "KANBAN ID", "", 0, "R", false, 0, "")
+	pdf.SetXY(x+132, y+6)
+	pdf.SetFont(pdfFontFamily, "B", 8.5)
+	pdf.CellFormat(50, 5, label.KanbanID, "", 0, "R", false, 0, "")
 
-	qrX, qrY, qrSize := x+4, y+19, 38.0
-	pdf.Rect(qrX-1, qrY-1, qrSize+2, qrSize+2, "D")
+	qrX, qrY, qrSize := x+4, y+19, 34.0
 	imageName := "kanban-qr-" + strconv.Itoa(index)
 	pdf.RegisterImageOptionsReader(imageName, fpdf.ImageOptions{ImageType: "PNG", ReadDpi: false}, bytes.NewReader(qrPNG))
 	pdf.ImageOptions(imageName, qrX, qrY, qrSize, qrSize, false, fpdf.ImageOptions{ImageType: "PNG", ReadDpi: false}, 0, "")
-	pdf.SetXY(qrX-1, qrY+qrSize+2)
-	pdf.SetFont(pdfFontFamily, "B", 7)
-	pdf.CellFormat(qrSize+2, 5, label.KanbanID, "", 0, "C", false, 0, "")
+	pdf.SetXY(qrX, qrY+qrSize+1)
+	pdf.SetFont(pdfFontFamily, "B", 8)
+	pdf.CellFormat(qrSize, 5, formatCardCaption(label), "", 0, "C", false, 0, "")
+	pdf.SetXY(qrX-1, qrY+qrSize+7)
+	pdf.SetFont(pdfFontFamily, "", 5.5)
+	pdf.CellFormat(qrSize+2, 4, label.KanbanID, "", 0, "C", false, 0, "")
 
-	detailX := x + 47
-	detailWidth := width - 51
-	partNumberWidth := 43.0
+	detailX := x + 42
+	detailWidth := width - 46
+	partNumberWidth := 48.0
 	partY := y + 18
-	pdf.Rect(detailX, partY, partNumberWidth, 18, "D")
-	pdf.Rect(detailX+partNumberWidth, partY, detailWidth-partNumberWidth, 18, "D")
-	pdf.SetXY(detailX+2, partY+2)
-	pdf.SetFont(pdfFontFamily, "B", 7)
+	drawKanbanCell(pdf, detailX, partY, partNumberWidth, 20)
+	drawKanbanCell(pdf, detailX+partNumberWidth, partY, detailWidth-partNumberWidth, 20)
+	pdf.SetXY(detailX+2, partY+1)
+	pdf.SetFont(pdfFontFamily, "", 6)
 	pdf.CellFormat(partNumberWidth-4, 4, "PART NUMBER", "", 0, "L", false, 0, "")
-	pdf.SetXY(detailX+2, partY+7)
-	pdf.SetFont(pdfFontFamily, "B", 11)
-	pdf.CellFormat(partNumberWidth-4, 7, label.RawMaterialCode, "", 0, "L", false, 0, "")
-	pdf.SetXY(detailX+partNumberWidth+2, partY+2)
-	pdf.SetFont(pdfFontFamily, "B", 7)
+	pdf.SetXY(detailX+2, partY+6)
+	pdf.SetFont(pdfFontFamily, "B", 12)
+	pdf.CellFormat(partNumberWidth-4, 8, label.RawMaterialCode, "", 0, "L", false, 0, "")
+	pdf.SetXY(detailX+partNumberWidth+2, partY+1)
+	pdf.SetFont(pdfFontFamily, "", 6)
 	pdf.CellFormat(detailWidth-partNumberWidth-4, 4, "PART NAME", "", 0, "L", false, 0, "")
-	pdf.SetFont(pdfFontFamily, "B", 11)
+	pdf.SetFont(pdfFontFamily, "B", 10.5)
 	partName := fitPDFTextLines(pdf, label.RawMaterialName, detailWidth-partNumberWidth-4, 2)
-	writePDFTextLines(pdf, detailX+partNumberWidth+2, partY+7, detailWidth-partNumberWidth-4, 4.5, partName, "L")
+	writePDFTextLines(pdf, detailX+partNumberWidth+2, partY+6, detailWidth-partNumberWidth-4, 5, partName, "L")
 
-	metaY := y + 36
-	supplierWidth := 80.0
-	pdf.Rect(detailX, metaY, supplierWidth, 14, "D")
-	pdf.Rect(detailX+supplierWidth, metaY, detailWidth-supplierWidth, 14, "D")
-	pdf.SetXY(detailX+2, metaY+1)
-	pdf.SetFont(pdfFontFamily, "B", 7)
-	pdf.CellFormat(supplierWidth-4, 4, "SUPPLIER", "", 0, "L", false, 0, "")
-	pdf.SetFont(pdfFontFamily, "", 8)
-	supplier := fitPDFTextLines(pdf, document.SupplierName, supplierWidth-4, 1)
-	writePDFTextLines(pdf, detailX+2, metaY+6, supplierWidth-4, 4, supplier, "L")
-	pdf.SetXY(detailX+supplierWidth+2, metaY+1)
-	pdf.SetFont(pdfFontFamily, "B", 7)
-	pdf.CellFormat(detailWidth-supplierWidth-4, 4, "ORDER DATE", "", 0, "L", false, 0, "")
-	pdf.SetXY(detailX+supplierWidth+2, metaY+6)
-	pdf.SetFont(pdfFontFamily, "", 8)
-	pdf.CellFormat(detailWidth-supplierWidth-4, 5, formatPDFDate(document.OrderDate), "", 0, "L", false, 0, "")
+	infoY := y + 38
+	firstWidths := []float64{45, 45, detailWidth - 90}
+	info := [][2]string{
+		{"CATEGORY", pdfReferenceName(label.CategoryCode, label.CategoryName)},
+		{"PACKING", pdfReferenceName(label.PackingCode, label.PackingName)},
+		{"QUANTITY", formatPDFDecimal(label.Quantity, 6) + " " + label.BaseUnitCode},
+	}
+	infoX := detailX
+	for index, item := range info {
+		writeKanbanGridValue(pdf, infoX, infoY, firstWidths[index], 14, item[0], item[1], index == 2)
+		infoX += firstWidths[index]
+	}
 
-	infoY := y + 50
-	columnWidth := detailWidth / 2
-	pdf.Rect(detailX, infoY, columnWidth, 14, "D")
-	pdf.Rect(detailX+columnWidth, infoY, columnWidth, 14, "D")
-	pdf.SetXY(detailX+2, infoY+1)
-	pdf.SetFont(pdfFontFamily, "B", 7)
-	pdf.CellFormat(columnWidth-4, 4, "QUANTITY", "", 0, "L", false, 0, "")
-	pdf.SetXY(detailX+2, infoY+5)
-	pdf.SetFont(pdfFontFamily, "B", 12)
-	pdf.CellFormat(columnWidth-4, 7, formatPDFDecimal(label.Quantity, 6)+" "+label.BaseUnitCode, "", 0, "L", false, 0, "")
-	pdf.SetXY(detailX+columnWidth+2, infoY+1)
-	pdf.SetFont(pdfFontFamily, "B", 7)
-	pdf.CellFormat(columnWidth-4, 4, "CARD", "", 0, "L", false, 0, "")
-	pdf.SetXY(detailX+columnWidth+2, infoY+5)
-	pdf.SetFont(pdfFontFamily, "B", 12)
-	pdf.CellFormat(columnWidth-4, 7, formatCardPosition(label), "", 0, "L", false, 0, "")
+	partyY := y + 52
+	partyWidth := detailWidth / 2
+	writeKanbanGridValue(pdf, detailX, partyY, partyWidth, 14, "SUPPLIER", document.SupplierName, false)
+	writeKanbanGridValue(pdf, detailX+partyWidth, partyY, partyWidth, 14, "DESTINATION PLANT",
+		pdfReferenceName(document.PlantCode, document.PlantName), false)
 
-	referenceY := y + 64
-	referenceWidth := detailWidth / 2
-	pdf.Rect(detailX, referenceY, referenceWidth, 16, "D")
-	pdf.Rect(detailX+referenceWidth, referenceY, referenceWidth, 16, "D")
-	writeKanbanReference(pdf, detailX, referenceY, referenceWidth, "DELIVERY NOTE", document.DeliveryNoteNumber)
-	writeKanbanReference(pdf, detailX+referenceWidth, referenceY, referenceWidth, "PURCHASE ORDER", document.PONumber)
+	referenceY := y + 66
+	referenceWidth := detailWidth / 3
+	writeKanbanGridValue(pdf, detailX, referenceY, referenceWidth, 14, "ORDER DATE", formatPDFDate(document.OrderDate), false)
+	writeKanbanGridValue(pdf, detailX+referenceWidth, referenceY, referenceWidth, 14, "DELIVERY NOTE", document.DeliveryNoteNumber, false)
+	writeKanbanGridValue(pdf, detailX+referenceWidth*2, referenceY, detailWidth-referenceWidth*2, 14, "PURCHASE ORDER", document.PONumber, false)
 	return pdf.Error()
 }
 
@@ -747,13 +732,26 @@ func formatCardPosition(label KanbanLabel) string {
 	return strconv.Itoa(label.CardNumber) + "/" + strconv.Itoa(label.CardTotal)
 }
 
-func writeKanbanReference(pdf *fpdf.Fpdf, x, y, width float64, label, value string) {
-	pdf.SetXY(x+2, y+2)
-	pdf.SetFont(pdfFontFamily, "B", 7)
-	pdf.CellFormat(width-4, 4, label, "", 0, "L", false, 0, "")
-	pdf.SetFont(pdfFontFamily, "", 8)
-	lines := fitPDFTextLines(pdf, value, width-4, 1)
-	writePDFTextLines(pdf, x+2, y+7, width-4, 4, lines, "L")
+func formatCardCaption(label KanbanLabel) string {
+	return "Card " + formatCardPosition(label)
+}
+
+func drawKanbanCell(pdf *fpdf.Fpdf, x, y, width, height float64) {
+	pdf.Rect(x, y, width, height, "D")
+}
+
+func writeKanbanGridValue(pdf *fpdf.Fpdf, x, y, width, height float64, label, value string, emphasize bool) {
+	drawKanbanCell(pdf, x, y, width, height)
+	pdf.SetXY(x+2, y+1)
+	pdf.SetFont(pdfFontFamily, "", 5.8)
+	pdf.CellFormat(width-4, 3.5, label, "", 0, "L", false, 0, "")
+	size := 7.3
+	if emphasize {
+		size = 10.5
+	}
+	pdf.SetFont(pdfFontFamily, "B", size)
+	lines := fitPDFTextLines(pdf, value, width-4, 2)
+	writePDFTextLines(pdf, x+2, y+5, width-4, 4, lines, "L")
 }
 
 func writeKanbanCutLine(pdf *fpdf.Fpdf, y float64) {

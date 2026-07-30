@@ -391,6 +391,11 @@ func TestRenderKanbanLabelsPDFProducesOneOrderedQRCardPerLot(t *testing.T) {
 			t.Fatalf("encoded[%d]=%q, want %q", index, encoded[index], label.KanbanID)
 		}
 	}
+	for _, caption := range []string{"Card 1/2", "Card 2/2", "Card 1/1"} {
+		if pdfTextCount(result, caption) != 1 {
+			t.Errorf("mixed-material card sequence missing %q", caption)
+		}
+	}
 }
 
 func TestRenderWideKanbanCard(t *testing.T) {
