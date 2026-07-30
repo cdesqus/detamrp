@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"image"
+	_ "image/jpeg"
 	"image/png"
 	"sort"
 	"strconv"
@@ -21,6 +22,7 @@ import (
 	"github.com/shopspring/decimal"
 	"golang.org/x/image/font/gofont/gobold"
 	"golang.org/x/image/font/gofont/goregular"
+	_ "golang.org/x/image/webp"
 	"order-stock/backend/internal/database"
 )
 
@@ -30,6 +32,8 @@ type DeliveryNoteDocument struct {
 	PurchaseOrderID      uuid.UUID
 	PONumber             string
 	CompanyName          string
+	CompanyLogo          []byte
+	CompanyLogoMIME      string
 	SupplierName         string
 	PlantCode            string
 	PlantName            string
@@ -59,6 +63,8 @@ type KanbanLabelDocument struct {
 	PurchaseOrderID    uuid.UUID
 	PONumber           string
 	CompanyName        string
+	CompanyLogo        []byte
+	CompanyLogoMIME    string
 	SupplierName       string
 	PlantCode          string
 	PlantName          string
@@ -105,10 +111,39 @@ func outputPDF(pdf *fpdf.Fpdf) ([]byte, error) {
 	return result.Bytes(), nil
 }
 
+func drawCompanyLogo(pdf *fpdf.Fpdf, content []byte, x, y, width, height float64, name string) bool {
+	if len(content) == 0 {
+		return false
+	}
+	img, _, err := image.Decode(bytes.NewReader(content))
+	if err != nil {
+		return false
+	}
+	var normalized bytes.Buffer
+	if err := png.Encode(&normalized, img); err != nil {
+		return false
+	}
+	bounds := img.Bounds()
+	drawWidth, drawHeight := width, height
+	imageRatio := float64(bounds.Dx()) / float64(bounds.Dy())
+	boxRatio := width / height
+	if imageRatio > boxRatio {
+		drawHeight = width / imageRatio
+		y += (height - drawHeight) / 2
+	} else {
+		drawWidth = height * imageRatio
+		x += (width - drawWidth) / 2
+	}
+	options := fpdf.ImageOptions{ImageType: "PNG", ReadDpi: false}
+	pdf.RegisterImageOptionsReader(name, options, bytes.NewReader(normalized.Bytes()))
+	pdf.ImageOptions(name, x, y, drawWidth, drawHeight, false, options, 0, "")
+	return true
+}
+
 func pdfCompanyName(value string) string {
 	value = strings.TrimSpace(value)
 	if value == "" {
-		return "Order Stock"
+		return "DETA MRP"
 	}
 	return value
 }
@@ -118,8 +153,13 @@ func RenderPOPDF(order Order, includePrices bool) ([]byte, error) {
 	pdf.AddPage()
 	setDocumentInk(pdf)
 	pdf.SetXY(12, 10)
+	companyX := 12.0
+	if drawCompanyLogo(pdf, order.CompanyLogo, 12, 9, 26, 11, "po-company-logo") {
+		companyX = 41
+	}
+	pdf.SetXY(companyX, 10)
 	pdf.SetFont(pdfFontFamily, "B", 9)
-	pdf.CellFormat(112, 5, pdfCompanyName(order.CompanyName), "", 0, "L", false, 0, "")
+	pdf.CellFormat(112-companyX+12, 5, pdfCompanyName(order.CompanyName), "", 0, "L", false, 0, "")
 	pdf.SetXY(12, 18)
 	pdf.SetFont(pdfFontFamily, "B", 17)
 	pdf.CellFormat(110, 8, "PURCHASE ORDER", "", 0, "L", false, 0, "")
@@ -347,10 +387,14 @@ func RenderDeliveryNotePDF(document DeliveryNoteDocument) ([]byte, error) {
 
 func writeDeliveryNoteHeader(pdf *fpdf.Fpdf, document DeliveryNoteDocument, qrPNG []byte) {
 	setDocumentInk(pdf)
-	pdf.SetXY(12, 9)
+	companyX := 12.0
+	if drawCompanyLogo(pdf, document.CompanyLogo, 12, 9, 18, 12, "dn-company-logo") {
+		companyX = 32
+	}
+	pdf.SetXY(companyX, 9)
 	pdf.SetFont(pdfFontFamily, "B", 9)
-	companyLines := fitPDFTextLines(pdf, pdfCompanyName(document.CompanyName), 52, 2)
-	writePDFTextLines(pdf, 12, 9, 52, 5, companyLines, "L")
+	companyLines := fitPDFTextLines(pdf, pdfCompanyName(document.CompanyName), 64-companyX, 2)
+	writePDFTextLines(pdf, companyX, 9, 64-companyX, 5, companyLines, "L")
 	pdf.SetXY(65, 10)
 	pdf.SetFont(pdfFontFamily, "B", 13)
 	pdf.CellFormat(68, 7, "DELIVERY NOTE", "", 0, "C", false, 0, "")
@@ -658,9 +702,13 @@ func writeKanbanCard(pdf *fpdf.Fpdf, document KanbanLabelDocument, label KanbanL
 
 	const headerHeight = 15.0
 	pdf.Line(x, y+headerHeight, x+width, y+headerHeight)
-	pdf.SetXY(x+4, y+2)
+	companyX := x + 4
+	if drawCompanyLogo(pdf, document.CompanyLogo, x+3, y+2, 15, 10, "kanban-company-logo-"+strconv.Itoa(index)) {
+		companyX = x + 20
+	}
+	pdf.SetXY(companyX, y+2)
 	pdf.SetFont(pdfFontFamily, "B", 8)
-	pdf.CellFormat(54, 5, pdfCompanyName(document.CompanyName), "", 0, "L", false, 0, "")
+	pdf.CellFormat(x+58-companyX, 5, pdfCompanyName(document.CompanyName), "", 0, "L", false, 0, "")
 	pdf.SetXY(x+58, y+2)
 	pdf.SetFont(pdfFontFamily, "B", 13)
 	pdf.CellFormat(72, 8, "KANBAN CARD", "", 0, "C", false, 0, "")
@@ -1008,7 +1056,7 @@ func loadKanbanLabelDocument(ctx context.Context, query documentQuerier, actor A
 
 func loadOperationalDocumentHeader(ctx context.Context, query documentQuerier, tenantID, purchaseOrderID uuid.UUID, field string) (documentHeader, error) {
 	var header documentHeader
-	err := query.QueryRow(ctx, `SELECT COALESCE(NULLIF(BTRIM(ts.company_name),''),'Order Stock'),p.po_number,s.name,
+	err := query.QueryRow(ctx, `SELECT COALESCE(NULLIF(BTRIM(ts.company_name),''),'DETA MRP'),p.po_number,s.name,
  p.plant_code_snapshot,p.plant_name_snapshot,p.plant_address_snapshot,p.order_date,p.expected_delivery_date,p.status
  FROM purchase_orders p
  JOIN tenant_settings ts ON ts.tenant_id=p.tenant_id

@@ -99,7 +99,7 @@ func (s *Service) Test(ctx context.Context, actor Actor, to string) error {
 	if e != nil || a.Address != to {
 		return errors.New("valid recipient email is required")
 	}
-	return s.deliver(ctx, actor, "TEST", "", uuid.Nil, "", Message{To: to, Subject: "Order Stock SMTP Test", HTML: emailShell("SMTP Test", `<p>Your Order Stock SMTP configuration is working.</p>`)})
+	return s.deliver(ctx, actor, "TEST", "", uuid.Nil, "", Message{To: to, Subject: "DETA MRP SMTP Test", HTML: emailShell("SMTP Test", `<p>Your DETA MRP SMTP configuration is working.</p>`)})
 }
 func (s *Service) SendApproval(ctx context.Context, actor Actor, poID uuid.UUID) error {
 	data, e := s.store.ApprovalData(ctx, actor, poID)

@@ -24,6 +24,10 @@ func Open(ctx context.Context, databaseURL string) (*Pool, error) {
 
 func (p *Pool) Close() { p.pool.Close() }
 
+func (p *Pool) QueryRow(ctx context.Context, sql string, args ...any) pgx.Row {
+	return p.pool.QueryRow(ctx, sql, args...)
+}
+
 func (p *Pool) BeginTenantTx(ctx context.Context) (TenantTx, error) {
 	tx, err := p.pool.Begin(ctx)
 	if err != nil {

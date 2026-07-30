@@ -2,11 +2,30 @@
 * { box-sizing: border-box; }
 body { margin: 0; background: #fafafa; }
 button, input, select, textarea { font: inherit; }
-.login-page { min-height: 100vh; display: grid; place-items: center; padding: 24px; background: #f7f7f8; }
+.login-page { min-height: 100vh; display: grid; place-items: center; padding: 24px; background: #f7f7f8 center / cover no-repeat; }
 .login-panel { width: min(360px, 100%); padding: 28px; background: white; border: 1px solid #e4e4e7; border-radius: 10px; box-shadow: 0 8px 28px rgb(0 0 0 / 5%); }
 .brand-mark, .sidebar-brand span { display: grid; place-items: center; width: 30px; height: 30px; color: white; background: #18181b; border-radius: 7px; font-size: 12px; font-weight: 700; }
 .login-panel h1 { margin: 16px 0 4px; font-size: 20px; font-weight: 600; }
 .login-panel > p, .muted { margin: 0; color: #71717a; }
+.login-logo { display: block; width: auto; max-width: 180px; height: 56px; object-fit: contain; }
+.product-name { display: block; margin: 4px 0; color: #3f3f46; font-size: 12px; letter-spacing: .12em; }
+.sidebar-brand img { width: 34px; height: 34px; object-fit: contain; }
+.sidebar-brand b { display: grid; line-height: 1.1; }
+.sidebar-brand b small { color: #71717a; font-size: 9px; letter-spacing: .08em; }
+.company-branding-card { gap: 20px; }
+.branding-field { display: grid; grid-template-columns: 180px 1fr; gap: 18px; align-items: center; padding-top: 18px; border-top: 1px solid #e4e4e7; }
+.branding-preview { display: grid; place-items: center; height: 90px; overflow: hidden; border: 1px dashed #d4d4d8; border-radius: 8px; background: #fafafa; color: #71717a; font-weight: 700; }
+.branding-preview.login-background { height: 112px; }
+.branding-preview img { width: 100%; height: 100%; object-fit: contain; }
+.branding-preview.login-background img { object-fit: cover; }
+.branding-controls { display: grid; gap: 7px; }
+.branding-controls small { color: #71717a; }
+.branding-controls div { display: flex; gap: 8px; }
+.branding-controls input[type="file"] { max-width: 100%; padding: 8px; border: 1px solid #e4e4e7; border-radius: 7px; background: #fafafa; }
+.branding-controls button { min-height: 34px; padding: 0 13px; border: 1px solid #d4d4d8; border-radius: 7px; background: white; color: #27272a; cursor: pointer; }
+.branding-controls button:first-child { border-color: #27272a; background: #27272a; color: white; }
+.branding-controls button:disabled { opacity: .5; cursor: default; }
+@media (max-width: 640px) { .branding-field { grid-template-columns: 1fr; } }
 .login-form { display: grid; gap: 7px; margin-top: 24px; }
 .login-form label { margin-top: 6px; color: #52525b; font-size: 13px; font-weight: 500; }
 .login-form input { height: 38px; padding: 0 10px; border: 1px solid #d4d4d8; border-radius: 6px; outline: none; }

@@ -22,7 +22,8 @@ describe('navigation permission policy', () => {
   it('groups Unit Category and Packing below Measurements', () => {
     const dataMaster = visibleNavigationGroups(['master_data.view']).find(group => group.label === 'Data Master');
     expect(dataMaster?.items.map(item => item.label)).toEqual(['Measurements', 'Plants', 'Suppliers', 'Raw Materials']);
-    expect(dataMaster?.items[0].items?.map(item => [item.label, item.href])).toEqual([
+    const measurements = dataMaster?.items[0];
+    expect(measurements && 'items' in measurements ? measurements.items.map(item => [item.label, item.href]) : []).toEqual([
       ['Unit', '/units'],
       ['Category', '/categories'],
       ['Packing', '/packings']

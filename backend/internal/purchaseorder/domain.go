@@ -45,6 +45,8 @@ type Order struct {
 	TenantID                     uuid.UUID        `json:"tenantId"`
 	PONumber                     string           `json:"poNumber"`
 	CompanyName                  string           `json:"companyName"`
+	CompanyLogo                  []byte           `json:"-"`
+	CompanyLogoMIME              string           `json:"-"`
 	SupplierID                   uuid.UUID        `json:"supplierId"`
 	SupplierName                 string           `json:"supplierName"`
 	PlantID                      uuid.UUID        `json:"plantId"`

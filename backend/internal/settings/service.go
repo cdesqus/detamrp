@@ -17,6 +17,41 @@ type Repository interface {
 	UpdateApprovalConfig(context.Context, Actor, ApprovalConfigInput) (ApprovalConfig, error)
 	GetCompanyConfig(context.Context, Actor) (CompanyConfig, error)
 	UpdateCompanyConfig(context.Context, Actor, CompanyConfigInput) (CompanyConfig, error)
+	UpdateCompanyMedia(context.Context, Actor, string, BrandingInput) (CompanyConfig, error)
+	DeleteCompanyMedia(context.Context, Actor, string) (CompanyConfig, error)
+	GetPublicBranding(context.Context) (CompanyConfig, error)
+	GetPublicBrandingMedia(context.Context, string) (BrandingMedia, error)
+}
+
+func (s *Service) UpdateCompanyMedia(c context.Context, a Actor, kind string, i BrandingInput) (CompanyConfig, error) {
+	max := logoMaxBytes
+	field := "logo"
+	if kind == "login-background" {
+		max, field = loginBackgroundMaxBytes, "loginBackground"
+	} else if kind != "logo" {
+		return CompanyConfig{}, NotFoundError{"branding media"}
+	}
+	mime, err := validateBrandingImage(i.Content, i.ContentType, max)
+	if err != nil {
+		return CompanyConfig{}, ValidationError{FieldErrors{field: err.Error()}}
+	}
+	i.ContentType = mime
+	return s.repo.UpdateCompanyMedia(c, a, kind, i)
+}
+func (s *Service) DeleteCompanyMedia(c context.Context, a Actor, kind string) (CompanyConfig, error) {
+	if kind != "logo" && kind != "login-background" {
+		return CompanyConfig{}, NotFoundError{"branding media"}
+	}
+	return s.repo.DeleteCompanyMedia(c, a, kind)
+}
+func (s *Service) GetPublicBranding(c context.Context) (CompanyConfig, error) {
+	return s.repo.GetPublicBranding(c)
+}
+func (s *Service) GetPublicBrandingMedia(c context.Context, kind string) (BrandingMedia, error) {
+	if kind != "logo" && kind != "login-background" {
+		return BrandingMedia{}, NotFoundError{"branding media"}
+	}
+	return s.repo.GetPublicBrandingMedia(c, kind)
 }
 
 func (s *Service) GetCompanyConfig(c context.Context, a Actor) (CompanyConfig, error) {

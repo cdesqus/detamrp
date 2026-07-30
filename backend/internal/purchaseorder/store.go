@@ -18,7 +18,14 @@ var _ Repository = (*SQLStore)(nil)
 
 func NewSQLStore(db *database.Pool) *SQLStore { return &SQLStore{db: db} }
 
-const orderSelect = `SELECT p.id,p.tenant_id,p.po_number,COALESCE(NULLIF(BTRIM(ts.company_name),''),'Order Stock'),p.supplier_id,s.name,
+func (s *SQLStore) LoadCompanyLogo(ctx context.Context, actor Actor) (content []byte, mime string, err error) {
+	err = database.WithTenant(ctx, s.db, tenantContext(actor), func(tx database.TenantTx) error {
+		return tx.QueryRow(ctx, `SELECT COALESCE(company_logo,''::bytea),COALESCE(company_logo_mime,'') FROM tenant_settings WHERE tenant_id=$1`, actor.TenantID).Scan(&content, &mime)
+	})
+	return
+}
+
+const orderSelect = `SELECT p.id,p.tenant_id,p.po_number,COALESCE(NULLIF(BTRIM(ts.company_name),''),'DETA MRP'),p.supplier_id,s.name,
  COALESCE(p.plant_id,'00000000-0000-0000-0000-000000000000'),p.plant_code_snapshot,p.plant_name_snapshot,p.plant_address_snapshot,
  p.order_date,p.expected_delivery_date,
  p.currency,p.notes,p.status,p.version,p.total_amount,COALESCE(p.sage_purchase_order_number,''),

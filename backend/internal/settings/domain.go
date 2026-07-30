@@ -74,11 +74,28 @@ type ApprovalConfig struct {
 	Email                 string    `json:"email"`
 }
 type CompanyConfig struct {
-	CompanyName string `json:"companyName"`
+	CompanyName        string  `json:"companyName"`
+	LogoURL            *string `json:"logoUrl"`
+	LoginBackgroundURL *string `json:"loginBackgroundUrl"`
 }
 type CompanyConfigInput struct {
 	CompanyName string `json:"companyName"`
 }
+
+type BrandingMedia struct {
+	Content     []byte
+	ContentType string
+}
+
+type BrandingInput struct {
+	Content     []byte
+	ContentType string
+}
+
+const (
+	logoMaxBytes            = 2 << 20
+	loginBackgroundMaxBytes = 5 << 20
+)
 
 func (i *CompanyConfigInput) NormalizeAndValidate() FieldErrors {
 	i.CompanyName = strings.TrimSpace(i.CompanyName)

@@ -3,7 +3,7 @@
 import { FormEvent, useEffect, useState } from 'react';
 
 type Settings={host:string;port:number;security:string;username:string;passwordSet:boolean;fromName:string;fromEmail:string};
-const empty:Settings={host:'',port:587,security:'STARTTLS',username:'',passwordSet:false,fromName:'Order Stock',fromEmail:''};
+const empty:Settings={host:'',port:587,security:'STARTTLS',username:'',passwordSet:false,fromName:'DETA MRP',fromEmail:''};
 
 export function SMTPSettings(){
   const [value,setValue]=useState<Settings>(empty);const [password,setPassword]=useState('');const [testTo,setTestTo]=useState('');

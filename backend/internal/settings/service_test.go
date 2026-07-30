@@ -20,6 +20,18 @@ func (f *fakeRepo) UpdateCompanyConfig(_ context.Context, _ Actor, in CompanyCon
 	f.company = in
 	return CompanyConfig{CompanyName: in.CompanyName}, nil
 }
+func (f *fakeRepo) UpdateCompanyMedia(context.Context, Actor, string, BrandingInput) (CompanyConfig, error) {
+	return CompanyConfig{}, nil
+}
+func (f *fakeRepo) DeleteCompanyMedia(context.Context, Actor, string) (CompanyConfig, error) {
+	return CompanyConfig{}, nil
+}
+func (f *fakeRepo) GetPublicBranding(context.Context) (CompanyConfig, error) {
+	return CompanyConfig{CompanyName: "DETA MRP"}, nil
+}
+func (f *fakeRepo) GetPublicBrandingMedia(context.Context, string) (BrandingMedia, error) {
+	return BrandingMedia{}, NotFoundError{"branding media"}
+}
 
 func (f *fakeRepo) ListUsers(context.Context, Actor, ListQuery) ([]User, int, error) {
 	return nil, 0, nil

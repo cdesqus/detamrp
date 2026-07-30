@@ -48,6 +48,20 @@ type Service struct {
 	renderKanbanLabelsPDF func(context.Context, KanbanLabelDocument) ([]byte, error)
 }
 
+type companyLogoRepository interface {
+	LoadCompanyLogo(context.Context, Actor) ([]byte, string, error)
+}
+
+func (s *Service) applyCompanyLogo(ctx context.Context, actor Actor, content *[]byte, mime *string) error {
+	repo, ok := s.repo.(companyLogoRepository)
+	if !ok {
+		return nil
+	}
+	var err error
+	*content, *mime, err = repo.LoadCompanyLogo(ctx, actor)
+	return err
+}
+
 func NewService(repo Repository) *Service {
 	return &Service{
 		repo:                  repo,
@@ -71,6 +85,9 @@ func (s *Service) PurchaseOrderPDF(ctx context.Context, actor Actor, id uuid.UUI
 	if err != nil {
 		return PDFDocument{}, err
 	}
+	if err := s.applyCompanyLogo(ctx, actor, &order.CompanyLogo, &order.CompanyLogoMIME); err != nil {
+		return PDFDocument{}, err
+	}
 	content, err := s.renderPOPDF(order, includePrices)
 	if err != nil {
 		return PDFDocument{}, documentRenderError(id, "purchase_order", err)
@@ -83,6 +100,9 @@ func (s *Service) DeliveryNotePDF(ctx context.Context, actor Actor, id uuid.UUID
 	if err != nil {
 		return PDFDocument{}, err
 	}
+	if err := s.applyCompanyLogo(ctx, actor, &document.CompanyLogo, &document.CompanyLogoMIME); err != nil {
+		return PDFDocument{}, err
+	}
 	content, err := s.renderDeliveryNotePDF(document)
 	if err != nil {
 		return PDFDocument{}, documentRenderError(id, "delivery_note", err)
@@ -93,6 +113,9 @@ func (s *Service) DeliveryNotePDF(ctx context.Context, actor Actor, id uuid.UUID
 func (s *Service) KanbanLabelsPDF(ctx context.Context, actor Actor, id uuid.UUID) (PDFDocument, error) {
 	document, err := s.repo.LoadKanbanLabelDocument(ctx, actor, id)
 	if err != nil {
+		return PDFDocument{}, err
+	}
+	if err := s.applyCompanyLogo(ctx, actor, &document.CompanyLogo, &document.CompanyLogoMIME); err != nil {
 		return PDFDocument{}, err
 	}
 	if err := ctx.Err(); err != nil {
