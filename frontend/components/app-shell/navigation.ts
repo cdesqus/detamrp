@@ -31,7 +31,8 @@ export const navigationGroups: NavigationGroup[] = [
     { label: 'Users', href: '/settings/users', icon: 'users', requiredPermission: 'user.manage' },
     { label: 'Roles & Permissions', href: '/settings/roles', icon: 'shield', requiredPermission: 'role.manage' },
     { label: 'SMTP Settings', href: '/settings/smtp', icon: 'mail', requiredPermission: 'smtp_settings.view' },
-    { label: 'Email Log', href: '/settings/email-log', icon: 'history', requiredPermission: 'email_log.view' }
+    { label: 'Email Log', href: '/settings/email-log', icon: 'history', requiredPermission: 'email_log.view' },
+    { label: 'Activity Log', href: '/settings/activity-log', icon: 'history', requiredPermission: 'activity_log.view' }
   ] }
 ];
 
@@ -55,7 +56,8 @@ const routeRules: Array<{ path: string; permission: string; exact?: boolean }> =
   { path: '/settings/company', permission: 'configuration.manage' },
   { path: '/settings/roles', permission: 'role.manage' },
   { path: '/settings/smtp', permission: 'smtp_settings.view' },
-  { path: '/settings/email-log', permission: 'email_log.view' }
+  { path: '/settings/email-log', permission: 'email_log.view' },
+  { path: '/settings/activity-log', permission: 'activity_log.view' }
 ];
 
 export function visibleNavigationGroups(permissions: string[]): NavigationGroup[] {
