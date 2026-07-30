@@ -83,17 +83,40 @@ type Message struct {
 type Attachment struct {
 	Filename, ContentType string
 	Content               []byte
+	Inline                bool
+	ContentID             string
+}
+
+type CompanyBranding struct {
+	CompanyName string
+	Logo        []byte
+	LogoMIME    string
+}
+
+type renderedEmail struct {
+	HTML   string
+	Inline []Attachment
 }
 
 type ApprovalMailData struct {
 	ApprovalID, PurchaseOrderID, ApproverUserID                        uuid.UUID
 	PONumber, SupplierName, ApproverEmail, ApproverName, CreatedByName string
+	CompanyName, PlantCode, PlantName, PlantAddress, Status            string
 	OrderDate, ExpectedDeliveryDate                                    time.Time
 	Currency, TotalAmount, Notes                                       string
 	Lines                                                              []ApprovalMailLine
 }
 type ApprovalMailLine struct {
-	Code, Name, Unit, QtyPerKanban string
-	TotalKanban                    int64
-	TotalQuantity                  string
+	Code, Name, CategoryCode, CategoryName, PackingCode, PackingName string
+	Unit, QtyPerKanban, TotalQuantity, UnitPrice, LineTotal          string
+	TotalKanban                                                      int64
+}
+
+type DecisionMailData struct {
+	PurchaseOrderID                    uuid.UUID
+	PONumber, SupplierName             string
+	PlantCode, PlantName, PlantAddress string
+	RecipientEmail, RecipientName      string
+	Status, DecisionActor, Reason      string
+	DecisionAt                         time.Time
 }

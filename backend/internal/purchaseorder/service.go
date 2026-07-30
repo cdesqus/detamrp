@@ -46,6 +46,7 @@ type Service struct {
 	renderPOPDF           func(Order, bool) ([]byte, error)
 	renderDeliveryNotePDF func(DeliveryNoteDocument) ([]byte, error)
 	renderKanbanLabelsPDF func(context.Context, KanbanLabelDocument) ([]byte, error)
+	decisionNotifier      func(context.Context, Actor, uuid.UUID) error
 }
 
 type companyLogoRepository interface {
@@ -69,6 +70,10 @@ func NewService(repo Repository) *Service {
 		renderDeliveryNotePDF: RenderDeliveryNotePDF,
 		renderKanbanLabelsPDF: renderKanbanLabelsPDF,
 	}
+}
+
+func (s *Service) SetDecisionNotifier(notifier func(context.Context, Actor, uuid.UUID) error) {
+	s.decisionNotifier = notifier
 }
 
 func (s *Service) List(ctx context.Context, actor Actor, query ListQuery) ([]Order, int, error) {
@@ -208,14 +213,22 @@ func (s *Service) ListApprovals(ctx context.Context, actor Actor, query ListQuer
 
 func (s *Service) Approve(ctx context.Context, actor Actor, id uuid.UUID, input DecisionInput) (Approval, error) {
 	input.NormalizeAndValidate(false)
-	return s.repo.Approve(ctx, actor, id, input)
+	approval, err := s.repo.Approve(ctx, actor, id, input)
+	if err == nil && s.decisionNotifier != nil {
+		_ = s.decisionNotifier(ctx, actor, id)
+	}
+	return approval, err
 }
 
 func (s *Service) Reject(ctx context.Context, actor Actor, id uuid.UUID, input DecisionInput) (Approval, error) {
 	if fields := input.NormalizeAndValidate(true); len(fields) > 0 {
 		return Approval{}, ValidationError{Fields: fields}
 	}
-	return s.repo.Reject(ctx, actor, id, input)
+	approval, err := s.repo.Reject(ctx, actor, id, input)
+	if err == nil && s.decisionNotifier != nil {
+		_ = s.decisionNotifier(ctx, actor, id)
+	}
+	return approval, err
 }
 
 func draftConflict(action string) ConflictError {

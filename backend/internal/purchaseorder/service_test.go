@@ -83,6 +83,29 @@ func TestServiceNormalizesBeforeCreatingDraft(t *testing.T) {
 	}
 }
 
+func TestServiceNotifiesDecisionResultAfterApproveAndReject(t *testing.T) {
+	repo := &fakeRepository{}
+	service := NewService(repo)
+	actor, approvalID := serviceActor(), uuid.New()
+	var notified []uuid.UUID
+	service.SetDecisionNotifier(func(_ context.Context, got Actor, gotID uuid.UUID) error {
+		if got.TenantID != actor.TenantID || got.UserID != actor.UserID {
+			t.Fatal("notifier actor mismatch")
+		}
+		notified = append(notified, gotID)
+		return errors.New("email unavailable")
+	})
+	if _, err := service.Approve(context.Background(), actor, approvalID, DecisionInput{}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.Reject(context.Background(), actor, approvalID, DecisionInput{Reason: "price"}); err != nil {
+		t.Fatal(err)
+	}
+	if len(notified) != 2 || notified[0] != approvalID || notified[1] != approvalID {
+		t.Fatalf("decision notifications = %#v", notified)
+	}
+}
+
 func TestServiceRendersPurchaseOrderPDFWithRequestedPriceVisibility(t *testing.T) {
 	id := uuid.New()
 	repo := &fakeRepository{order: Order{ID: id, PONumber: "PO-1"}}

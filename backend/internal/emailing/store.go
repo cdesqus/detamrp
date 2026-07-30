@@ -30,6 +30,14 @@ func (s *Store) GetSMTP(ctx context.Context, tenantID uuid.UUID) (out storedSMTP
 	return
 }
 
+func (s *Store) Branding(ctx context.Context, tenantID uuid.UUID) (out CompanyBranding, err error) {
+	err = database.WithTenant(ctx, s.db, database.TenantContext{TenantID: tenantID}, func(tx database.TenantTx) error {
+		return tx.QueryRow(ctx, `SELECT COALESCE(NULLIF(BTRIM(company_name),''),'DETA MRP'),COALESCE(company_logo,''::bytea),COALESCE(company_logo_mime,'') FROM tenant_settings WHERE tenant_id=$1`, tenantID).
+			Scan(&out.CompanyName, &out.Logo, &out.LogoMIME)
+	})
+	return
+}
+
 func (s *Store) SaveSMTP(ctx context.Context, actor Actor, in SMTPSettingsInput, encrypted []byte, keepPassword bool) error {
 	return database.WithTenant(ctx, s.db, database.TenantContext{TenantID: actor.TenantID, UserID: actor.UserID}, func(tx database.TenantTx) error {
 		if keepPassword {
@@ -90,14 +98,19 @@ func (s *Store) ListLogs(ctx context.Context, actor Actor, search string) (items
 
 func (s *Store) ApprovalData(ctx context.Context, actor Actor, poID uuid.UUID) (out ApprovalMailData, err error) {
 	err = database.WithTenant(ctx, s.db, database.TenantContext{TenantID: actor.TenantID}, func(tx database.TenantTx) error {
-		err := tx.QueryRow(ctx, `SELECT a.id,p.id,a.approver_user_id,p.po_number,s.name,a.approver_email,a.approver_display_name,cu.display_name,p.order_date,p.expected_delivery_date,p.currency,p.total_amount,p.notes
+		err := tx.QueryRow(ctx, `SELECT a.id,p.id,a.approver_user_id,p.po_number,s.name,a.approver_email,a.approver_display_name,cu.display_name,
+		 p.plant_code_snapshot,p.plant_name_snapshot,p.plant_address_snapshot,p.status,p.order_date,p.expected_delivery_date,p.currency,p.total_amount,p.notes
 		 FROM purchase_orders p JOIN suppliers s ON s.tenant_id=p.tenant_id AND s.id=p.supplier_id JOIN purchase_order_approvals a ON a.tenant_id=p.tenant_id AND a.purchase_order_id=p.id AND a.status='PENDING'
 		 JOIN users cu ON cu.tenant_id=p.tenant_id AND cu.id=p.created_by_user_id WHERE p.tenant_id=$1 AND p.id=$2 ORDER BY a.version DESC LIMIT 1`,
-			actor.TenantID, poID).Scan(&out.ApprovalID, &out.PurchaseOrderID, &out.ApproverUserID, &out.PONumber, &out.SupplierName, &out.ApproverEmail, &out.ApproverName, &out.CreatedByName, &out.OrderDate, &out.ExpectedDeliveryDate, &out.Currency, &out.TotalAmount, &out.Notes)
+			actor.TenantID, poID).Scan(&out.ApprovalID, &out.PurchaseOrderID, &out.ApproverUserID, &out.PONumber, &out.SupplierName, &out.ApproverEmail, &out.ApproverName, &out.CreatedByName,
+			&out.PlantCode, &out.PlantName, &out.PlantAddress, &out.Status, &out.OrderDate, &out.ExpectedDeliveryDate, &out.Currency, &out.TotalAmount, &out.Notes)
 		if err != nil {
 			return err
 		}
-		rows, e := tx.Query(ctx, `SELECT l.raw_material_code_snapshot,l.raw_material_name_snapshot,l.base_unit_code_snapshot,l.qty_per_kanban_snapshot,l.total_kanban,l.ordered_base_qty FROM purchase_order_lines l WHERE l.tenant_id=$1 AND l.purchase_order_id=$2 ORDER BY l.sort_position`, actor.TenantID, poID)
+		rows, e := tx.Query(ctx, `SELECT l.raw_material_code_snapshot,l.raw_material_name_snapshot,
+		 l.category_code_snapshot,l.category_name_snapshot,l.packing_code_snapshot,l.packing_name_snapshot,
+		 l.base_unit_code_snapshot,l.qty_per_kanban_snapshot,l.total_kanban,l.ordered_base_qty,l.unit_price_snapshot,l.line_total
+		 FROM purchase_order_lines l WHERE l.tenant_id=$1 AND l.purchase_order_id=$2 ORDER BY l.sort_position`, actor.TenantID, poID)
 		if e != nil {
 			return e
 		}
@@ -105,7 +118,8 @@ func (s *Store) ApprovalData(ctx context.Context, actor Actor, poID uuid.UUID) (
 		for rows.Next() {
 			var x ApprovalMailLine
 			var kanban decimal.Decimal
-			if e = rows.Scan(&x.Code, &x.Name, &x.Unit, &x.QtyPerKanban, &kanban, &x.TotalQuantity); e != nil {
+			if e = rows.Scan(&x.Code, &x.Name, &x.CategoryCode, &x.CategoryName, &x.PackingCode, &x.PackingName,
+				&x.Unit, &x.QtyPerKanban, &kanban, &x.TotalQuantity, &x.UnitPrice, &x.LineTotal); e != nil {
 				return e
 			}
 			x.TotalKanban = kanban.IntPart()
@@ -151,6 +165,21 @@ func (s *Store) MarkTokenUsed(ctx context.Context, tenantID uuid.UUID, hash []by
 func (s *Store) SupplierEmail(ctx context.Context, tenantID, supplierID uuid.UUID) (email string, err error) {
 	err = database.WithTenant(ctx, s.db, database.TenantContext{TenantID: tenantID}, func(tx database.TenantTx) error {
 		return tx.QueryRow(ctx, `SELECT email FROM suppliers WHERE tenant_id=$1 AND id=$2 AND active`, tenantID, supplierID).Scan(&email)
+	})
+	return
+}
+
+func (s *Store) DecisionData(ctx context.Context, tenantID, approvalID uuid.UUID) (out DecisionMailData, err error) {
+	err = database.WithTenant(ctx, s.db, database.TenantContext{TenantID: tenantID}, func(tx database.TenantTx) error {
+		return tx.QueryRow(ctx, `SELECT p.id,p.po_number,s.name,p.plant_code_snapshot,p.plant_name_snapshot,p.plant_address_snapshot,
+		 creator.email,creator.display_name,a.status,a.approver_display_name,a.decided_at,a.decision_reason
+		 FROM purchase_order_approvals a
+		 JOIN purchase_orders p ON p.tenant_id=a.tenant_id AND p.id=a.purchase_order_id
+		 JOIN suppliers s ON s.tenant_id=p.tenant_id AND s.id=p.supplier_id
+		 JOIN users creator ON creator.tenant_id=p.tenant_id AND creator.id=p.created_by_user_id
+		 WHERE a.tenant_id=$1 AND a.id=$2 AND a.status IN ('APPROVED','REJECTED')`,
+			tenantID, approvalID).Scan(&out.PurchaseOrderID, &out.PONumber, &out.SupplierName, &out.PlantCode, &out.PlantName, &out.PlantAddress,
+			&out.RecipientEmail, &out.RecipientName, &out.Status, &out.DecisionActor, &out.DecisionAt, &out.Reason)
 	})
 	return
 }
