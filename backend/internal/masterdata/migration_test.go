@@ -70,3 +70,24 @@ func TestMasterReferenceMigrationDefinesUnitsCategoriesPackingsAndPlants(t *test
 		}
 	}
 }
+
+func TestMaterialReferenceSnapshotMigrationLinksCategoryAndPacking(t *testing.T) {
+	path := filepath.Join("..", "..", "..", "database", "migrations", "013_material_po_reference_snapshots.sql")
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read material reference snapshot migration: %v", err)
+	}
+	sql := strings.ToLower(string(content))
+	for _, fragment := range []string{
+		"add column category_id uuid",
+		"add column packing_id uuid",
+		"foreign key (tenant_id, category_id) references categories(tenant_id, id)",
+		"foreign key (tenant_id, packing_id) references packings(tenant_id, id)",
+		"raw_materials_tenant_category_idx",
+		"raw_materials_tenant_packing_idx",
+	} {
+		if !strings.Contains(sql, fragment) {
+			t.Errorf("migration missing %q", fragment)
+		}
+	}
+}

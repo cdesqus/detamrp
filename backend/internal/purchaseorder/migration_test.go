@@ -65,3 +65,28 @@ func TestMigrationCanReconcileAnUntrackedExistingPurchaseOrderSchema(t *testing.
 		}
 	}
 }
+
+func TestReferenceSnapshotMigrationAddsPlantCategoryAndPackingHistory(t *testing.T) {
+	path := filepath.Join("..", "..", "..", "database", "migrations", "013_material_po_reference_snapshots.sql")
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read reference snapshot migration: %v", err)
+	}
+	sql := strings.ToLower(string(content))
+	for _, fragment := range []string{
+		"add column plant_id uuid",
+		"plant_code_snapshot text not null default ''",
+		"plant_name_snapshot text not null default ''",
+		"plant_address_snapshot text not null default ''",
+		"category_code_snapshot text not null default ''",
+		"category_name_snapshot text not null default ''",
+		"packing_code_snapshot text not null default ''",
+		"packing_name_snapshot text not null default ''",
+		"foreign key (tenant_id, plant_id) references plants(tenant_id, id)",
+		"purchase_orders_tenant_plant_idx",
+	} {
+		if !strings.Contains(sql, fragment) {
+			t.Errorf("migration missing %q", fragment)
+		}
+	}
+}
