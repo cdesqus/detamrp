@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { loadRawMaterialOptions } from './page';
+import { loadRawMaterialOptions } from './raw-material-options';
 
 describe('Raw Material master options', () => {
   it('loads active Supplier Unit Category and Packing options', async () => {

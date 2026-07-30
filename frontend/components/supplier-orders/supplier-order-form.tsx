@@ -8,9 +8,10 @@ import { formatMoney, formatQuantity } from '../../lib/number-format';
 import { useToast } from '../toast/toast-provider';
 
 type Supplier = { id: string; code: string; name: string; currency: string; active: boolean };
-type Material = { id: string; code: string; name: string; supplierId: string; baseUnitCode: string; qtyPerKanban: string; standardUnitPrice: string; active: boolean };
-type OrderLine = { rawMaterialId: string; rawMaterialCode: string; rawMaterialName: string; baseUnitCode: string; qtyPerKanbanSnapshot: string; totalKanban: string; unitPriceSnapshot?: string };
-type InitialOrder = { id: string; poNumber?: string; status: string; supplierId: string; supplierName?: string; currency: string; sagePurchaseOrderNumber?: string; orderDate: string; expectedDeliveryDate: string; notes?: string; lines: OrderLine[]; documents?: { deliveryNoteId: string; deliveryNoteNumber: string; kanbanCount: number; issuedAt: string } | null };
+type Plant = { id: string; code: string; name: string; address: string; active: boolean };
+type Material = { id: string; code: string; name: string; supplierId: string; baseUnitCode: string; categoryCode: string; categoryName: string; packingCode: string; packingName: string; qtyPerKanban: string; standardUnitPrice: string; active: boolean };
+type OrderLine = { rawMaterialId: string; rawMaterialCode: string; rawMaterialName: string; baseUnitCode: string; categoryCode?: string; categoryName?: string; packingCode?: string; packingName?: string; qtyPerKanbanSnapshot: string; totalKanban: string; unitPriceSnapshot?: string };
+type InitialOrder = { id: string; poNumber?: string; status: string; supplierId: string; supplierName?: string; plantId?: string; plantCode?: string; plantName?: string; plantAddress?: string; currency: string; sagePurchaseOrderNumber?: string; orderDate: string; expectedDeliveryDate: string; notes?: string; lines: OrderLine[]; documents?: { deliveryNoteId: string; deliveryNoteNumber: string; kanbanCount: number; issuedAt: string } | null };
 type Props = { orderId?: string; initialOrder?: InitialOrder; permissions?: string[] };
 type ApiError = { message?: string; fields?: Record<string, string> };
 type Decimal = { value: bigint; scale: number };
@@ -69,7 +70,7 @@ function addDecimals(left: string | number | undefined, right: string | number |
 }
 
 function isValidKanban(value: string) { return /^\d+$/.test(value) && BigInt(value) > 0n && BigInt(value) <= maxTotalKanban; }
-function lineFromMaterial(material: Material): OrderLine { return { rawMaterialId: material.id, rawMaterialCode: material.code, rawMaterialName: material.name, baseUnitCode: material.baseUnitCode, qtyPerKanbanSnapshot: String(material.qtyPerKanban), totalKanban: '1', unitPriceSnapshot: String(material.standardUnitPrice) }; }
+function lineFromMaterial(material: Material): OrderLine { return { rawMaterialId: material.id, rawMaterialCode: material.code, rawMaterialName: material.name, baseUnitCode: material.baseUnitCode, categoryCode: material.categoryCode, categoryName: material.categoryName, packingCode: material.packingCode, packingName: material.packingName, qtyPerKanbanSnapshot: String(material.qtyPerKanban), totalKanban: '1', unitPriceSnapshot: String(material.standardUnitPrice) }; }
 function errorFields(body: ApiError, fallback: string) { return { ...(body.fields ?? {}), _form: body.message ?? body.fields?._form ?? fallback }; }
 
 export function SupplierOrderForm({ orderId, initialOrder, permissions }: Props) {
@@ -88,6 +89,9 @@ export function SupplierOrderForm({ orderId, initialOrder, permissions }: Props)
   const [supplierId, setSupplierId] = useState(initialOrder?.supplierId ?? '');
   const [supplierName, setSupplierName] = useState(initialOrder?.supplierName ?? '');
   const [supplierQuery, setSupplierQuery] = useState('');
+  const [plants, setPlants] = useState<Plant[]>([]);
+  const [plantId, setPlantId] = useState(initialOrder?.plantId ?? '');
+  const [plantName, setPlantName] = useState(initialOrder?.plantName ?? '');
   const [materials, setMaterials] = useState<Material[]>([]);
   const [materialText, setMaterialText] = useState('');
   const [selectedMaterial, setSelectedMaterial] = useState<Material | null>(null);
@@ -98,6 +102,7 @@ export function SupplierOrderForm({ orderId, initialOrder, permissions }: Props)
   const [lines, setLines] = useState<OrderLine[]>(initialOrder?.lines ?? []);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [supplierError, setSupplierError] = useState('');
+  const [plantError, setPlantError] = useState('');
   const [materialError, setMaterialError] = useState('');
   const [detailError, setDetailError] = useState('');
   const [detailAttempt, setDetailAttempt] = useState(0);
@@ -113,6 +118,7 @@ export function SupplierOrderForm({ orderId, initialOrder, permissions }: Props)
 
   const hydrate = useCallback((order: InitialOrder) => {
     setSavedId(order.id); setStatus(order.status); setPONumber(order.poNumber ?? ''); setSageNumber(order.sagePurchaseOrderNumber ?? ''); setSupplierId(order.supplierId); setSupplierName(order.supplierName ?? '');
+    setPlantId(order.plantId ?? ''); setPlantName(order.plantName ?? '');
     setCurrency(order.currency); setOrderDate(dateOnly(order.orderDate)); setExpectedDeliveryDate(dateOnly(order.expectedDeliveryDate));
     setNotes(order.notes ?? ''); setLines(order.lines ?? []);
   }, []);
@@ -127,7 +133,17 @@ export function SupplierOrderForm({ orderId, initialOrder, permissions }: Props)
     } catch { setSupplierError('Suppliers could not be loaded.'); }
   }, []);
 
-  useEffect(() => { if (editable) void loadSuppliers(); }, [editable, loadSuppliers]);
+  const loadPlants = useCallback(async () => {
+    setPlantError('');
+    try {
+      const response = await fetch('/api/master-data/plants?active=true&limit=200', { credentials: 'include' });
+      if (!response.ok) throw new Error();
+      const data = await response.json() as { items: Plant[] };
+      setPlants(data.items ?? []);
+    } catch { setPlantError('Plants could not be loaded.'); }
+  }, []);
+
+  useEffect(() => { if (editable) { void loadSuppliers(); void loadPlants(); } }, [editable, loadPlants, loadSuppliers]);
   useEffect(() => {
     if (!editable || !supplierId) return;
     const supplier = suppliers.find(item => item.id === supplierId);
@@ -197,6 +213,7 @@ export function SupplierOrderForm({ orderId, initialOrder, permissions }: Props)
   const validate = () => {
     const next: Record<string, string> = {};
     if (!supplierId) next.supplierId = 'Supplier is required';
+    if (!plantId) next.plantId = 'Plant is required';
     if (!orderDate) next.orderDate = 'Order Date is required';
     if (!expectedDeliveryDate) next.expectedDeliveryDate = 'Expected Delivery Date is required';
     else if (orderDate && expectedDeliveryDate < orderDate) next.expectedDeliveryDate = 'Expected Delivery Date cannot precede Order Date';
@@ -206,7 +223,7 @@ export function SupplierOrderForm({ orderId, initialOrder, permissions }: Props)
     });
     return next;
   };
-  const payload = () => ({ supplierId, orderDate, expectedDeliveryDate, currency, notes, lines: lines.map(line => ({ rawMaterialId: line.rawMaterialId, totalKanban: line.totalKanban })) });
+  const payload = () => ({ supplierId, plantId, orderDate, expectedDeliveryDate, currency, notes, lines: lines.map(line => ({ rawMaterialId: line.rawMaterialId, totalKanban: line.totalKanban })) });
   const total = useMemo(() => lines.reduce((result, line) => addDecimals(result, multiplyDecimals(multiplyDecimals(line.qtyPerKanbanSnapshot, line.totalKanban || '0'), line.unitPriceSnapshot)), '0.000000'), [lines]);
 
   async function save(submit: boolean) {
@@ -258,15 +275,17 @@ export function SupplierOrderForm({ orderId, initialOrder, permissions }: Props)
   if (detailLoading) return <section className="supplier-order-form">{detailBack}<div className="table-empty">Loading supplier order...</div></section>;
   if (detailError) return <section className="supplier-order-form">{detailBack}<div className="table-empty"><strong>Could not load supplier order</strong><span>{detailError}</span><button className="table-action" onClick={() => setDetailAttempt(value => value + 1)}>Retry</button></div></section>;
   const availableMaterials = materials.filter(item => !lines.some(line => line.rawMaterialId === item.id));
-  const unplacedErrors = Object.entries(errors).filter(([key]) => key !== '_form' && key !== 'supplierId' && key !== 'orderDate' && key !== 'expectedDeliveryDate' && key !== 'lines' && !/^lines\[\d+\]\.(totalKanban|rawMaterialId)$/.test(key) && !/^lines\[\d+\]$/.test(key));
+  const unplacedErrors = Object.entries(errors).filter(([key]) => key !== '_form' && key !== 'supplierId' && key !== 'plantId' && key !== 'orderDate' && key !== 'expectedDeliveryDate' && key !== 'lines' && !/^lines\[\d+\]\.(totalKanban|rawMaterialId)$/.test(key) && !/^lines\[\d+\]$/.test(key));
   return <section className="supplier-order-form">
     {detailBack}
     <div className="page-title-row"><div><h1>{poNumber || 'New Supplier Order'}</h1><p className="muted">{editable ? 'Complete the order and save it as a draft or send it for approval.' : `This supplier order is ${status.replaceAll('_', ' ').toLowerCase()} and read-only.`}</p></div>{poNumber && <OrderStatusBadge status={status} />}</div>
     {errors._form && <p className="form-error" role="alert">{errors._form}</p>}
     {unplacedErrors.length > 0 && <div className="form-error" role="alert"><ul>{unplacedErrors.map(([key, message]) => <li key={key}>{message}</li>)}</ul></div>}
     {supplierError && <p className="form-error" role="alert">{supplierError} <button className="table-action" onClick={() => void loadSuppliers()}>Retry</button></p>}
+    {plantError && <p className="form-error" role="alert">{plantError} <button className="table-action" onClick={() => void loadPlants()}>Retry</button></p>}
     <div className="supplier-order-card"><div className="supplier-order-fields">
       <label>Supplier{editable ? <><input aria-label="Supplier" list="supplier-options" value={supplierQuery} onChange={event => changeSupplierText(event.target.value)} onBlur={restoreSupplierQuery} /><datalist id="supplier-options">{suppliers.map(item => <option key={item.id} value={optionLabel(item)} />)}</datalist></> : <output aria-label="Supplier">{supplierName || supplierId || '—'}</output>}{errors.supplierId && <small role="alert">{errors.supplierId}</small>}</label>
+      <label>Plant{editable ? <select aria-label="Plant" value={plantId} onChange={event => { const id = event.target.value; setPlantId(id); setPlantName(plants.find(item => item.id === id)?.name ?? ''); }}><option value="">Select Plant</option>{plants.map(item => <option key={item.id} value={item.id}>{optionLabel(item)}</option>)}</select> : <output aria-label="Plant">{plantName || initialOrder?.plantCode || plantId || '—'}</output>}{errors.plantId && <small role="alert">{errors.plantId}</small>}</label>
       <label>Order Date<input type="date" value={orderDate} disabled={!editable} onChange={event => setOrderDate(event.target.value)} />{errors.orderDate && <small role="alert">{errors.orderDate}</small>}</label>
       <label>Expected Delivery Date<input type="date" min={orderDate} value={expectedDeliveryDate} disabled={!editable} onChange={event => setExpectedDeliveryDate(event.target.value)} />{errors.expectedDeliveryDate && <small role="alert">{errors.expectedDeliveryDate}</small>}</label>
       <label>Currency<input value={currency} aria-label="Currency" readOnly /></label>
@@ -275,7 +294,7 @@ export function SupplierOrderForm({ orderId, initialOrder, permissions }: Props)
     </div></div>
     <div className="supplier-order-card supplier-order-materials"><div className="supplier-order-material-toolbar"><div><strong>Raw Materials</strong><span>Snapshots are read-only after selection.</span></div>{editable && <div className="material-add"><input aria-label="Raw Material" list="material-options" disabled={!supplierId} value={materialText} onChange={event => changeMaterialText(event.target.value)} /><datalist id="material-options">{availableMaterials.map(item => <option key={item.id} value={optionLabel(item)} />)}</datalist><button type="button" className="primary-button" disabled={!supplierId || !selectedMaterial} onClick={addMaterial}>+ Raw Material</button></div>}</div>
       {materialError && <p className="form-error" role="alert">{materialError}</p>}
-      <div className="table-frame"><table><thead><tr><th>Raw Material</th><th>Base Unit</th><th>Qty / Kanban</th><th>Total Kanban</th><th>Total Quantity</th>{canViewPrices && <><th>Unit Price</th><th>Amount</th></>}{editable && <th></th>}</tr></thead><tbody>{lines.length === 0 ? <tr><td colSpan={5 + (canViewPrices ? 2 : 0) + (editable ? 1 : 0)}><div className="table-empty">No Raw Materials selected.</div></td></tr> : lines.map((line, index) => { const quantity = multiplyDecimals(line.qtyPerKanbanSnapshot, line.totalKanban || '0'); const amount = multiplyDecimals(quantity, line.unitPriceSnapshot); const lineError = errors[fieldKey(index)]; const rawMaterialError = errors[materialFieldKey(index)] ?? errors[`lines[${index}]`]; return <tr key={line.rawMaterialId}><td aria-describedby={rawMaterialError ? `material-error-${index}` : undefined}>{line.rawMaterialCode} — {line.rawMaterialName}{rawMaterialError && <small id={`material-error-${index}`} role="alert">{rawMaterialError}</small>}</td><td>{line.baseUnitCode}</td><td><output>{formatQuantity(line.qtyPerKanbanSnapshot)}</output></td><td><input aria-label={`Total Kanban for ${line.rawMaterialName}`} aria-describedby={lineError ? `kanban-error-${index}` : undefined} type="number" min="1" max="99999999999999" step="1" value={line.totalKanban} disabled={!editable} onChange={event => changeKanban(line.rawMaterialId, event.target.value)} />{lineError && <small id={`kanban-error-${index}`} role="alert">{lineError}</small>}</td><td><output>{formatQuantity(quantity)}</output></td>{canViewPrices && <><td><output>{formatMoney(line.unitPriceSnapshot,currency)}</output></td><td><output>{formatMoney(amount,currency)}</output></td></>}{editable && <td><button type="button" className="table-action" aria-label={`Remove ${line.rawMaterialName}`} onClick={() => setLines(current => current.filter(item => item.rawMaterialId !== line.rawMaterialId))}>Remove</button></td>}</tr>; })}</tbody>{canViewPrices && <tfoot><tr><td colSpan={6}>Order Total</td><td><output>{formatMoney(total,currency)}</output></td>{editable && <td></td>}</tr></tfoot>}</table></div></div>
+      <div className="table-frame"><table><thead><tr><th>Raw Material</th><th>Category</th><th>Packing</th><th>Base Unit</th><th>Qty / Kanban</th><th>Total Kanban</th><th>Total Quantity</th>{canViewPrices && <><th>Unit Price</th><th>Amount</th></>}{editable && <th></th>}</tr></thead><tbody>{lines.length === 0 ? <tr><td colSpan={7 + (canViewPrices ? 2 : 0) + (editable ? 1 : 0)}><div className="table-empty">No Raw Materials selected.</div></td></tr> : lines.map((line, index) => { const quantity = multiplyDecimals(line.qtyPerKanbanSnapshot, line.totalKanban || '0'); const amount = multiplyDecimals(quantity, line.unitPriceSnapshot); const lineError = errors[fieldKey(index)]; const rawMaterialError = errors[materialFieldKey(index)] ?? errors[`lines[${index}]`]; return <tr key={line.rawMaterialId}><td aria-describedby={rawMaterialError ? `material-error-${index}` : undefined}>{line.rawMaterialCode} — {line.rawMaterialName}{rawMaterialError && <small id={`material-error-${index}`} role="alert">{rawMaterialError}</small>}</td><td>{line.categoryCode} — {line.categoryName}</td><td>{line.packingCode} — {line.packingName}</td><td>{line.baseUnitCode}</td><td><output>{formatQuantity(line.qtyPerKanbanSnapshot)}</output></td><td><input aria-label={`Total Kanban for ${line.rawMaterialName}`} aria-describedby={lineError ? `kanban-error-${index}` : undefined} type="number" min="1" max="99999999999999" step="1" value={line.totalKanban} disabled={!editable} onChange={event => changeKanban(line.rawMaterialId, event.target.value)} />{lineError && <small id={`kanban-error-${index}`} role="alert">{lineError}</small>}</td><td><output>{formatQuantity(quantity)}</output></td>{canViewPrices && <><td><output>{formatMoney(line.unitPriceSnapshot,currency)}</output></td><td><output>{formatMoney(amount,currency)}</output></td></>}{editable && <td><button type="button" className="table-action" aria-label={`Remove ${line.rawMaterialName}`} onClick={() => setLines(current => current.filter(item => item.rawMaterialId !== line.rawMaterialId))}>Remove</button></td>}</tr>; })}</tbody>{canViewPrices && <tfoot><tr><td colSpan={8}>Order Total</td><td><output>{formatMoney(total,currency)}</output></td>{editable && <td></td>}</tr></tfoot>}</table></div></div>
     {editable && <div className="supplier-order-actions"><div>{errors.lines && <small role="alert">{errors.lines}</small>}</div><div>{!savedId && <button type="button" onClick={() => router.push('/supplier-orders')} disabled={saving}>Back</button>}<button type="button" onClick={() => save(false)} disabled={saving}>Save as Draft</button><button type="button" className="primary-button" onClick={() => save(true)} disabled={saving}>Save &amp; Send for Approval</button></div></div>}
     {approval && <div className="supplier-order-actions"><div><small>Review the complete order before making a decision.</small></div><div>{canReject && <button type="button" aria-label={`Reject ${poNumber}`} onClick={() => { setDecision('reject'); setDecisionError(''); setReasonError(''); }}>Reject</button>}{canApprove && <button type="button" className="primary-button" aria-label={`Approve ${poNumber}`} onClick={() => { setDecision('approve'); setDecisionError(''); }}>Approve</button>}</div></div>}
     {decision && approval ? <><button className="crud-scrim" aria-label="Close decision form" onClick={() => !deciding && setDecision(null)} /><div className="crud-modal crud-modal--compact" role="dialog" aria-modal="true" aria-label={`${decision === 'approve' ? 'Approve' : 'Reject'} ${poNumber}`}><div className="crud-modal-heading"><div><strong>{decision === 'approve' ? 'Approve' : 'Reject'} {poNumber}</strong><span>{decision === 'approve' ? 'This decision cannot be undone.' : 'Provide a brief reason for the requester.'}</span></div><button aria-label="Close decision form" onClick={() => setDecision(null)} disabled={deciding}>×</button></div><form onSubmit={submitDecision}>{decisionError && <p className="form-error" role="alert">{decisionError}</p>}{decision === 'reject' ? <div className="crud-fields"><label className="approval-reason"><span>Rejection reason *</span><textarea autoFocus aria-label="Rejection reason" aria-invalid={Boolean(reasonError)} value={decisionReason} onChange={event => { setDecisionReason(event.target.value); setReasonError(''); }} />{reasonError && <small className="form-error" role="alert">{reasonError}</small>}</label></div> : <div className="crud-fields"><p>Confirm approval of this purchase order.</p></div>}<div className="crud-actions"><button type="button" onClick={() => setDecision(null)} disabled={deciding}>Cancel</button><button autoFocus={decision === 'approve'} className="primary-button" disabled={deciding}>{deciding ? `${decision === 'approve' ? 'Approving' : 'Rejecting'}...` : `${decision === 'approve' ? 'Approve' : 'Reject'} order`}</button></div></form></div></> : null}

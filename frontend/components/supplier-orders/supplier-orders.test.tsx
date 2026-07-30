@@ -11,13 +11,46 @@ vi.mock('next/navigation', () => ({ useRouter: () => ({ push, replace: push }) }
 vi.mock('../toast/toast-provider', () => ({ useToast: () => ({ showSuccess }) }));
 
 const supplier = { id: 'supplier-1', code: 'SUP-01', name: 'PT Prima', currency: 'IDR', active: true };
-const material = { id: 'material-1', code: 'RM-01', name: 'Steel Coil', supplierId: 'supplier-1', baseUnitCode: 'KG', qtyPerKanban: '0.1', standardUnitPrice: '0.2', active: true };
+const plant = { id: 'plant-1', code: 'PLT-01', name: 'Jakarta Plant', address: 'Jakarta', active: true };
+const material = { id: 'material-1', code: 'RM-01', name: 'Steel Coil', supplierId: 'supplier-1', baseUnitCode: 'KG', categoryCode: 'METAL', categoryName: 'Metal', packingCode: 'COIL', packingName: 'Coil', qtyPerKanban: '0.1', standardUnitPrice: '0.2', active: true };
 
 function response(body: unknown, ok = true) { return { ok, json: async () => body } as Response; }
 function deferred<T>() { let resolve!: (value: T) => void; const promise = new Promise<T>(value => { resolve = value; }); return { promise, resolve }; }
 
 describe('supplier order UI', () => {
   beforeEach(() => { push.mockReset(); showSuccess.mockReset(); vi.stubGlobal('confirm', vi.fn(() => true)); });
+
+  it('requires one Plant for the PO and saves its ID with material references visible', async () => {
+    const draft = {
+      id: 'po-plant', status: 'DRAFT', supplierId: supplier.id, supplierName: supplier.name,
+      plantId: plant.id, plantCode: plant.code, plantName: plant.name, plantAddress: plant.address,
+      currency: 'IDR', orderDate: '2026-07-21', expectedDeliveryDate: '2026-07-22', notes: '',
+      lines: [{ rawMaterialId: material.id, rawMaterialCode: material.code, rawMaterialName: material.name,
+        baseUnitCode: material.baseUnitCode, categoryCode: material.categoryCode, categoryName: material.categoryName,
+        packingCode: material.packingCode, packingName: material.packingName,
+        qtyPerKanbanSnapshot: '1', totalKanban: '1', unitPriceSnapshot: '1' }]
+    };
+    const fetchMock = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+      if (url.includes('/master-data/suppliers')) return Promise.resolve(response({ items: [supplier] }));
+      if (url.includes('/master-data/plants')) return Promise.resolve(response({ items: [plant] }));
+      if (url.includes('/master-data/raw-materials')) return Promise.resolve(response({ items: [material] }));
+      if (url === '/api/purchase-orders/po-plant' && init?.method === 'PUT') return Promise.resolve(response(draft));
+      return Promise.resolve(response({}));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const user = userEvent.setup();
+
+    render(<SupplierOrderForm initialOrder={draft} />);
+
+    expect(await screen.findByRole('combobox', { name: 'Plant' })).toHaveValue(plant.id);
+    expect(screen.getByText(/METAL.*Metal/)).toBeInTheDocument();
+    expect(screen.getByText(/COIL.*Coil/)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Save as Draft' }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/purchase-orders/po-plant', expect.objectContaining({ method: 'PUT' })));
+    const mutation = fetchMock.mock.calls.find(([url, init]) => url === '/api/purchase-orders/po-plant' && (init as RequestInit)?.method === 'PUT');
+    expect(JSON.parse((mutation?.[1] as RequestInit).body as string)).toEqual(expect.objectContaining({ plantId: plant.id }));
+  });
 
   it('renders real purchase orders and opens the dedicated create page', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response({ items: [{ id: 'po-1', poNumber: 'PO-202607-00001', supplierId: 'supplier-1', supplierName: 'SUP-01 â€” PT Prima', orderDate: '2026-07-21T00:00:00Z', expectedDeliveryDate: '2026-07-25T00:00:00Z', status: 'DRAFT', totalAmount: '12.500000', currency: 'IDR', createdBy: { displayName: 'Admin' } }], total: 1 })));
@@ -258,9 +291,10 @@ describe('supplier order UI', () => {
   });
 
   it('filters material choices by searchable supplier, calculates without float drift, and sends both save actions', async () => {
-    const savedOrder = { id: 'po-1', poNumber: 'PO-202607-00001', status: 'DRAFT', supplierId: 'supplier-1', currency: 'IDR', orderDate: '2026-07-21', expectedDeliveryDate: '2026-07-21', notes: '', lines: [{ rawMaterialId: 'material-1', rawMaterialCode: 'RM-01', rawMaterialName: 'Steel Coil', baseUnitCode: 'KG', qtyPerKanbanSnapshot: '0.1', totalKanban: '2', unitPriceSnapshot: '0.2' }] };
+    const savedOrder = { id: 'po-1', poNumber: 'PO-202607-00001', status: 'DRAFT', supplierId: 'supplier-1', plantId: plant.id, plantName: plant.name, currency: 'IDR', orderDate: '2026-07-21', expectedDeliveryDate: '2026-07-21', notes: '', lines: [{ rawMaterialId: 'material-1', rawMaterialCode: 'RM-01', rawMaterialName: 'Steel Coil', baseUnitCode: 'KG', categoryCode: 'METAL', categoryName: 'Metal', packingCode: 'COIL', packingName: 'Coil', qtyPerKanbanSnapshot: '0.1', totalKanban: '2', unitPriceSnapshot: '0.2' }] };
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(response({ items: [supplier], total: 1 }))
+      .mockResolvedValueOnce(response({ items: [plant], total: 1 }))
       .mockResolvedValueOnce(response({ items: [material], total: 1 }))
       .mockResolvedValueOnce(response(savedOrder))
       .mockResolvedValueOnce(response(savedOrder))
@@ -276,6 +310,7 @@ describe('supplier order UI', () => {
     await user.clear(screen.getByRole('combobox', { name: 'Supplier' }));
     await user.type(screen.getByRole('combobox', { name: 'Supplier' }), 'SUP-01 — PT Prima');
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/master-data/raw-materials?active=true&limit=200&supplierId=supplier-1', expect.anything()));
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Plant' }), plant.id);
     await waitFor(() => expect(document.querySelector('#material-options option')).toBeTruthy());
     await user.type(screen.getByRole('combobox', { name: 'Raw Material' }), 'Steel');
     expect(document.querySelector('#material-options option')).toHaveValue('RM-01 — Steel Coil');
@@ -289,13 +324,15 @@ describe('supplier order UI', () => {
     expect(screen.getByText('0,2')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Save as Draft' }));
     await waitFor(() => expect(fetchMock).toHaveBeenLastCalledWith('/api/purchase-orders', expect.objectContaining({ method: 'POST' })));
-    expect(JSON.parse((fetchMock.mock.calls[2][1] as RequestInit).body as string)).toEqual(expect.objectContaining({ supplierId: 'supplier-1', lines: [{ rawMaterialId: 'material-1', totalKanban: '2' }] }));
+    const firstSave = fetchMock.mock.calls.find(([url, init]) => url === '/api/purchase-orders' && (init as RequestInit)?.method === 'POST');
+    expect(JSON.parse((firstSave?.[1] as RequestInit).body as string)).toEqual(expect.objectContaining({ supplierId: 'supplier-1', plantId: plant.id, lines: [{ rawMaterialId: 'material-1', totalKanban: '2' }] }));
     await waitFor(() => expect(push).toHaveBeenCalledWith('/supplier-orders'));
     expect(screen.queryByRole('button', { name: 'Cancel draft' })).not.toBeInTheDocument();
     push.mockReset();
     await user.click(screen.getByRole('button', { name: 'Save & Send for Approval' }));
     await waitFor(() => expect(fetchMock).toHaveBeenLastCalledWith('/api/email/purchase-orders/po-1/approval', expect.objectContaining({ method: 'POST' })));
-    expect(JSON.parse((fetchMock.mock.calls[3][1] as RequestInit).body as string)).toEqual(expect.objectContaining({ supplierId: 'supplier-1', lines: [{ rawMaterialId: 'material-1', totalKanban: '2' }] }));
+    const secondSave = fetchMock.mock.calls.filter(([url, init]) => url === '/api/purchase-orders/po-1' && (init as RequestInit)?.method === 'PUT').at(-1);
+    expect(JSON.parse((secondSave?.[1] as RequestInit).body as string)).toEqual(expect.objectContaining({ supplierId: 'supplier-1', plantId: plant.id, lines: [{ rawMaterialId: 'material-1', totalKanban: '2' }] }));
     expect(showSuccess).toHaveBeenCalledWith('PO submitted and approval email sent.');
     await waitFor(() => expect(push).toHaveBeenCalledWith('/supplier-orders'));
   });
@@ -304,6 +341,7 @@ describe('supplier order UI', () => {
     const other = { ...supplier, id: 'supplier-2', code: 'SUP-02', name: 'PT Dua' };
     vi.stubGlobal('fetch', vi.fn()
       .mockResolvedValueOnce(response({ items: [supplier, other], total: 2 }))
+      .mockResolvedValueOnce(response({ items: [plant], total: 1 }))
       .mockResolvedValueOnce(response({ items: [material], total: 1 })));
     const user = userEvent.setup();
     const confirmMock = vi.fn(() => false);
@@ -327,12 +365,13 @@ describe('supplier order UI', () => {
   it('keeps a submitted order pending and explains how to resend when approval email delivery fails', async () => {
     const draft = {
       id: 'po-email-failure', poNumber: 'PO-EMAIL-FAILURE', status: 'DRAFT',
-      supplierId: 'supplier-1', supplierName: 'PT Prima', currency: 'IDR',
+      supplierId: 'supplier-1', supplierName: 'PT Prima', plantId: plant.id, plantName: plant.name, currency: 'IDR',
       orderDate: '2026-07-21', expectedDeliveryDate: '2026-07-22', notes: '',
       lines: [{ rawMaterialId: 'material-1', rawMaterialCode: 'RM-01', rawMaterialName: 'Steel Coil', baseUnitCode: 'KG', qtyPerKanbanSnapshot: '1', totalKanban: '2', unitPriceSnapshot: '1' }]
     };
     const fetchMock = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
       if (url === '/api/master-data/suppliers?active=true&limit=200') return Promise.resolve(response({ items: [supplier], total: 1 }));
+      if (url === '/api/master-data/plants?active=true&limit=200') return Promise.resolve(response({ items: [plant], total: 1 }));
       if (url.includes('/api/master-data/raw-materials')) return Promise.resolve(response({ items: [material], total: 1 }));
       if (url === '/api/purchase-orders/po-email-failure' && init?.method === 'PUT') return Promise.resolve(response(draft));
       if (url === '/api/purchase-orders/po-email-failure/submit') return Promise.resolve(response({ ...draft, status: 'PENDING_APPROVAL' }));
@@ -353,11 +392,11 @@ describe('supplier order UI', () => {
 
   it('keeps committed supplier lines while users incrementally type an alternative and restores on declined confirmation', async () => {
     const other = { ...supplier, id: 'supplier-2', code: 'SUP-02', name: 'PT Dua' };
-    vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => Promise.resolve(response(url.includes('suppliers') ? { items: [supplier, other] } : { items: [material] }))));
+    vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => Promise.resolve(response(url.includes('suppliers') ? { items: [supplier, other] } : url.includes('plants') ? { items: [plant] } : { items: [material] }))));
     const confirmMock = vi.fn(() => false);
     vi.stubGlobal('confirm', confirmMock);
     const user = userEvent.setup();
-    render(<SupplierOrderForm initialOrder={{ id: 'po-1', status: 'DRAFT', supplierId: 'supplier-1', currency: 'IDR', orderDate: '2026-07-21', expectedDeliveryDate: '2026-07-22', lines: [{ rawMaterialId: 'material-1', rawMaterialCode: 'RM-01', rawMaterialName: 'Steel Coil', baseUnitCode: 'KG', qtyPerKanbanSnapshot: '1', totalKanban: '1', unitPriceSnapshot: '1' }] }} />);
+    render(<SupplierOrderForm initialOrder={{ id: 'po-1', status: 'DRAFT', supplierId: 'supplier-1', plantId: plant.id, plantName: plant.name, currency: 'IDR', orderDate: '2026-07-21', expectedDeliveryDate: '2026-07-22', lines: [{ rawMaterialId: 'material-1', rawMaterialCode: 'RM-01', rawMaterialName: 'Steel Coil', baseUnitCode: 'KG', categoryCode: 'METAL', categoryName: 'Metal', packingCode: 'COIL', packingName: 'Coil', qtyPerKanbanSnapshot: '1', totalKanban: '1', unitPriceSnapshot: '1' }] }} />);
     const supplierBox = screen.getByRole('combobox', { name: 'Supplier' });
     await waitFor(() => expect(supplierBox).toHaveValue('SUP-01 — PT Prima'));
     await user.clear(supplierBox);
@@ -371,7 +410,7 @@ describe('supplier order UI', () => {
     const fetchMock = vi.fn().mockResolvedValue(response({ message: 'Cannot save this order', fields: { expectedDeliveryDate: 'Expected date is invalid' } }, false));
     vi.stubGlobal('fetch', fetchMock);
     const user = userEvent.setup();
-    render(<SupplierOrderForm initialOrder={{ id: 'po-1', status: 'DRAFT', supplierId: 'supplier-1', currency: 'IDR', orderDate: '2026-07-21', expectedDeliveryDate: '2026-07-22', lines: [] }} />);
+    render(<SupplierOrderForm initialOrder={{ id: 'po-1', status: 'DRAFT', supplierId: 'supplier-1', plantId: plant.id, plantName: plant.name, currency: 'IDR', orderDate: '2026-07-21', expectedDeliveryDate: '2026-07-22', lines: [] }} />);
     await user.click(screen.getByRole('button', { name: 'Save as Draft' }));
     expect(await screen.findByText('Cannot save this order')).toBeInTheDocument();
     expect(screen.getByText('Expected date is invalid')).toBeInTheDocument();
@@ -390,7 +429,7 @@ describe('supplier order UI', () => {
   });
 
   it('clears stale material selection while restoring committed supplier after an unmatched query blur', async () => {
-    const fetchMock = vi.fn().mockResolvedValueOnce(response({ items: [supplier], total: 1 })).mockResolvedValueOnce(response({ items: [material], total: 1 }));
+    const fetchMock = vi.fn().mockResolvedValueOnce(response({ items: [supplier], total: 1 })).mockResolvedValueOnce(response({ items: [plant], total: 1 })).mockResolvedValueOnce(response({ items: [material], total: 1 }));
     vi.stubGlobal('fetch', fetchMock);
     const user = userEvent.setup();
     render(<SupplierOrderForm />);
@@ -413,7 +452,7 @@ describe('supplier order UI', () => {
     const user = userEvent.setup();
     const fetchMock = vi.fn().mockResolvedValue(response({ message: 'invalid', fields: { 'lines[0].totalKanban': 'Server says positive integer' } }, false));
     vi.stubGlobal('fetch', fetchMock);
-    render(<SupplierOrderForm initialOrder={{ id: 'po-1', status: 'DRAFT', supplierId: 'supplier-1', currency: 'IDR', orderDate: '2026-07-21', expectedDeliveryDate: '2026-07-22', lines: [{ rawMaterialId: 'material-1', rawMaterialCode: 'RM-01', rawMaterialName: 'Steel Coil', baseUnitCode: 'KG', qtyPerKanbanSnapshot: '1', totalKanban: '0', unitPriceSnapshot: '1' }] }} />);
+    render(<SupplierOrderForm initialOrder={{ id: 'po-1', status: 'DRAFT', supplierId: 'supplier-1', plantId: plant.id, plantName: plant.name, currency: 'IDR', orderDate: '2026-07-21', expectedDeliveryDate: '2026-07-22', lines: [{ rawMaterialId: 'material-1', rawMaterialCode: 'RM-01', rawMaterialName: 'Steel Coil', baseUnitCode: 'KG', qtyPerKanbanSnapshot: '1', totalKanban: '0', unitPriceSnapshot: '1' }] }} />);
     await user.click(screen.getByRole('button', { name: 'Save as Draft' }));
     expect(await screen.findByText('Total Kanban must be a positive integer')).toBeInTheDocument();
     expect(fetchMock).not.toHaveBeenCalledWith('/api/purchase-orders/po-1', expect.objectContaining({ method: 'PUT' }));
@@ -425,7 +464,7 @@ describe('supplier order UI', () => {
       if (url.includes('/purchase-orders/po-1')) return Promise.resolve(response({ message: 'invalid', fields: { 'lines[0].totalKanban': 'Server says positive integer' } }, false));
       return Promise.resolve(response({ items: [] }));
     }));
-    render(<SupplierOrderForm initialOrder={{ id: 'po-1', status: 'DRAFT', supplierId: 'supplier-1', currency: 'IDR', orderDate: '2026-07-21', expectedDeliveryDate: '2026-07-22', lines: [{ rawMaterialId: 'material-1', rawMaterialCode: 'RM-01', rawMaterialName: 'Steel Coil', baseUnitCode: 'KG', qtyPerKanbanSnapshot: '1', totalKanban: '1', unitPriceSnapshot: '1' }] }} />);
+    render(<SupplierOrderForm initialOrder={{ id: 'po-1', status: 'DRAFT', supplierId: 'supplier-1', plantId: plant.id, plantName: plant.name, currency: 'IDR', orderDate: '2026-07-21', expectedDeliveryDate: '2026-07-22', lines: [{ rawMaterialId: 'material-1', rawMaterialCode: 'RM-01', rawMaterialName: 'Steel Coil', baseUnitCode: 'KG', qtyPerKanbanSnapshot: '1', totalKanban: '1', unitPriceSnapshot: '1' }] }} />);
     await user.click(screen.getByRole('button', { name: 'Save as Draft' }));
     expect(await screen.findByText('Server says positive integer')).toBeInTheDocument();
     expect(screen.getByRole('spinbutton', { name: 'Total Kanban for Steel Coil' })).toHaveAttribute('aria-describedby', 'kanban-error-0');
@@ -433,11 +472,12 @@ describe('supplier order UI', () => {
   });
 
   it('promotes approver errors and associates raw material errors with their row', async () => {
-    const order = { id: 'po-1', poNumber: 'PO-1', status: 'DRAFT', supplierId: 'supplier-1', supplierName: 'PT Prima', currency: 'IDR', orderDate: '2026-07-21', expectedDeliveryDate: '2026-07-22', lines: [{ rawMaterialId: 'material-1', rawMaterialCode: 'RM-01', rawMaterialName: 'Steel Coil', baseUnitCode: 'KG', qtyPerKanbanSnapshot: '1', totalKanban: '1', unitPriceSnapshot: '2' }] };
+    const order = { id: 'po-1', poNumber: 'PO-1', status: 'DRAFT', supplierId: 'supplier-1', supplierName: 'PT Prima', plantId: plant.id, plantName: plant.name, currency: 'IDR', orderDate: '2026-07-21', expectedDeliveryDate: '2026-07-22', lines: [{ rawMaterialId: 'material-1', rawMaterialCode: 'RM-01', rawMaterialName: 'Steel Coil', baseUnitCode: 'KG', qtyPerKanbanSnapshot: '1', totalKanban: '1', unitPriceSnapshot: '2' }] };
     vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string, init?: RequestInit) => {
       if (url.includes('/submit')) return Promise.resolve(response({ message: 'Purchase order conflicts with its current state', fields: { approver: 'Configure an active PO Approver before submission', 'lines[0].rawMaterialId': 'Raw Material is no longer active for this supplier' } }, false));
       if (init?.method === 'PUT') return Promise.resolve(response(order));
       if (url.includes('/suppliers')) return Promise.resolve(response({ items: [supplier] }));
+      if (url.includes('/plants')) return Promise.resolve(response({ items: [plant] }));
       return Promise.resolve(response({ items: [material] }));
     }));
     const user = userEvent.setup();
@@ -462,7 +502,7 @@ describe('supplier order UI', () => {
     expect(screen.getByText(/RM-SNAPSHOT/)).toBeInTheDocument();
     expect(screen.getByRole('columnheader', { name: 'Unit Price' })).toBeInTheDocument();
     expect(screen.getByText('IDR 7')).toBeInTheDocument();
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
     expect(fetchMock).toHaveBeenCalledWith('/api/purchase-orders/po-director', { credentials: 'include' });
     expect(fetchMock).toHaveBeenCalledWith('/api/purchase-order-approvals?limit=200&offset=0', { credentials: 'include' });
     expect(screen.queryByText(/could not be loaded/i)).not.toBeInTheDocument();
@@ -559,7 +599,7 @@ describe('supplier order UI', () => {
 
   it('surfaces failed supplier and material lookups with the detail form intact', async () => {
     vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => Promise.resolve(response(url.includes('suppliers') ? {} : {}, false))));
-    render(<SupplierOrderForm initialOrder={{ id: 'po-1', status: 'DRAFT', supplierId: 'supplier-1', currency: 'IDR', orderDate: '2026-07-21', expectedDeliveryDate: '2026-07-22', lines: [] }} />);
+    render(<SupplierOrderForm initialOrder={{ id: 'po-1', status: 'DRAFT', supplierId: 'supplier-1', plantId: plant.id, plantName: plant.name, currency: 'IDR', orderDate: '2026-07-21', expectedDeliveryDate: '2026-07-22', lines: [] }} />);
     expect(await screen.findByText('Suppliers could not be loaded.')).toBeInTheDocument();
     expect(await screen.findByText('Raw Materials could not be loaded.')).toBeInTheDocument();
   });

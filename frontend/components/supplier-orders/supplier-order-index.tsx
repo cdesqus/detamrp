@@ -9,7 +9,7 @@ import { pagedItems, TablePagination } from '../table-pagination';
 import { RowMenuPortal } from './row-menu-portal';
 import { useToast } from '../toast/toast-provider';
 
-type Order = { id: string; poNumber: string; supplierId: string; supplierName?: string; orderDate: string; expectedDeliveryDate: string; status: string; totalAmount?: string; currency: string; sagePurchaseOrderNumber?: string; createdBy?: { displayName?: string }; documents?: { deliveryNoteId: string; deliveryNoteNumber: string; kanbanCount: number; issuedAt: string } | null };
+type Order = { id: string; poNumber: string; supplierId: string; supplierName?: string; plantId?: string; plantCode?: string; plantName?: string; orderDate: string; expectedDeliveryDate: string; status: string; totalAmount?: string; currency: string; sagePurchaseOrderNumber?: string; createdBy?: { displayName?: string }; documents?: { deliveryNoteId: string; deliveryNoteNumber: string; kanbanCount: number; issuedAt: string } | null };
 type Props = { permissions?: string[] };
 type DocumentLinkProps = { href: string; label: string; children?: string };
 const maxKanbanLabelsPerPDF = 1_000;
@@ -139,11 +139,11 @@ export function SupplierOrderIndex({ permissions }: Props = {}) {
     showSuccess('Supplier email sent successfully.');
   }
 
-  const columnCount = canViewPrices ? 11 : 10;
+  const columnCount = canViewPrices ? 12 : 11;
   return <section className="module-index supplier-order-index">
     <div className="page-title-row"><div><h1>Supplier Orders</h1><p className="muted">Create, save, and submit purchase orders.</p></div><button className="primary-button" onClick={() => router.push('/supplier-orders/new')}>Create order</button></div>
     <div className="table-toolbar"><input aria-label="Search Supplier Orders" type="search" value={search} onChange={event => setSearch(event.target.value)} placeholder="Search PO" /><div className="toolbar-actions"><span>{total} records</span></div></div>
-    <div className="table-frame"><table><thead><tr><th className="transaction-number">No.</th><th>Actions</th><th>Documents</th><th>Status</th><th>PO Number</th><th>Supplier</th><th>Order Date</th><th>Expected Date</th>{canViewPrices && <th>Total</th>}<th>Sage No.</th><th>Created By</th></tr></thead><tbody>
+    <div className="table-frame"><table><thead><tr><th className="transaction-number">No.</th><th>Actions</th><th>Documents</th><th>Status</th><th>PO Number</th><th>Supplier</th><th>Plant</th><th>Order Date</th><th>Expected Date</th>{canViewPrices && <th>Total</th>}<th>Sage No.</th><th>Created By</th></tr></thead><tbody>
       {loading ? <tr><td colSpan={columnCount}><div className="table-empty" role="status">Loading...</div></td></tr> : error ? <tr><td colSpan={columnCount}><div className="table-empty" role="alert"><strong>Could not load supplier orders</strong><span>{error}</span><button className="table-action" onClick={load}>Retry</button></div></td></tr> : items.length === 0 ? <tr><td colSpan={columnCount}><div className="table-empty" role="status"><strong>No supplier orders yet</strong><span>Create order to start.</span></div></td></tr> : pagedItems(items, page, pageSize).map((order, index) => {
         const documentsAvailable = ['APPROVED', 'PARTIALLY_RECEIVED', 'FULLY_RECEIVED'].includes(order.status) && order.documents;
         const labelsAvailable = documentsAvailable ? documentsAvailable.kanbanCount <= maxKanbanLabelsPerPDF : false;
@@ -171,7 +171,7 @@ export function SupplierOrderIndex({ permissions }: Props = {}) {
               {labelsAvailable ? <DocumentLink href={`/api/purchase-orders/${order.id}/documents/kanban-labels.pdf`} label={`Kanban Labels PDF for ${order.poNumber}`} /> : <UnavailableMenuItem>Kanban Labels PDF</UnavailableMenuItem>}
             </div></RowMenuPortal>}
           </div></td>
-          <td><OrderStatusBadge status={order.status} /></td><td>{order.poNumber}</td><td>{order.supplierName ?? '—'}</td><td>{date(order.orderDate)}</td><td>{date(order.expectedDeliveryDate)}</td>{canViewPrices && <td>{formatMoney(order.totalAmount, order.currency)}</td>}<td>{order.sagePurchaseOrderNumber || '—'}</td><td>{order.createdBy?.displayName ?? '—'}</td>
+          <td><OrderStatusBadge status={order.status} /></td><td>{order.poNumber}</td><td>{order.supplierName ?? '—'}</td><td>{order.plantName ? `${order.plantCode ? `${order.plantCode} — ` : ''}${order.plantName}` : '—'}</td><td>{date(order.orderDate)}</td><td>{date(order.expectedDeliveryDate)}</td>{canViewPrices && <td>{formatMoney(order.totalAmount, order.currency)}</td>}<td>{order.sagePurchaseOrderNumber || '—'}</td><td>{order.createdBy?.displayName ?? '—'}</td>
         </tr>;
       })}
     </tbody></table><TablePagination page={page} pageSize={pageSize} total={items.length} onPageChange={setPage} onPageSizeChange={size => { setPageSize(size); setPage(1); }} /></div>
