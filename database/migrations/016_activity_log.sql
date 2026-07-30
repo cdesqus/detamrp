@@ -28,6 +28,9 @@ ALTER TABLE activity_logs FORCE ROW LEVEL SECURITY;
 CREATE POLICY activity_logs_isolation ON activity_logs
   FOR SELECT
   USING (tenant_id = current_setting('app.tenant_id', true)::uuid);
+CREATE POLICY activity_logs_trigger_insert ON activity_logs
+  FOR INSERT
+  WITH CHECK (tenant_id = current_setting('app.tenant_id', true)::uuid);
 
 CREATE OR REPLACE FUNCTION reject_activity_log_mutation()
 RETURNS trigger
@@ -132,6 +135,7 @@ BEGIN
     source_row->>'receiving_number',
     source_row->>'document_number',
     source_row->>'kanban_id',
+    source_row->>'permission_code',
     source_row->>'code',
     source_row->>'username',
     source_row->>'company_name',
@@ -199,13 +203,16 @@ BEGIN
     activity_module,
     activity_action,
     TG_TABLE_NAME,
-    NULLIF(source_row->>'id', '')::uuid,
+    NULLIF(COALESCE(source_row->>'id', source_row->>'role_id', source_row->>'user_id'), '')::uuid,
     activity_target_code,
     sanitize_activity_snapshot(old_row),
     sanitize_activity_snapshot(new_row)
   );
 
-  RETURN COALESCE(NEW, OLD);
+  IF TG_OP = 'DELETE' THEN
+    RETURN OLD;
+  END IF;
+  RETURN NEW;
 END;
 $$;
 
@@ -217,6 +224,8 @@ BEGIN
     'tenant_settings',
     'users',
     'roles',
+    'user_roles',
+    'role_permissions',
     'units',
     'categories',
     'packings',

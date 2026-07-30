@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"order-stock/backend/internal/activitylog"
 	"order-stock/backend/internal/api"
 	"order-stock/backend/internal/auth"
 	"order-stock/backend/internal/dashboard"
@@ -52,6 +53,7 @@ func main() {
 	inventoryStore := inventory.NewStore(db)
 	reportStore := report.NewStore(db)
 	dashboardStore := dashboard.NewStore(db)
+	activityLogStore := activitylog.NewStore(db)
 	secretBox, err := emailing.NewSecretBox(requiredEnv("EMAIL_ENCRYPTION_KEY"))
 	if err != nil {
 		log.Fatal(err)
@@ -69,7 +71,7 @@ func main() {
 		address = ":8091"
 	}
 	log.Printf("API listening on %s", address)
-	if err := http.ListenAndServe(address, api.NewServer(api.WithAuthenticator(authService), api.WithUnitService(unitService), api.WithCategoryService(categoryService), api.WithPackingService(packingService), api.WithPlantService(plantService), api.WithSupplierService(supplierService), api.WithRawMaterialService(rawMaterialService), api.WithSettingsService(settingsService), api.WithPurchaseOrderService(purchaseOrderService), api.WithReceivingStore(receivingStore), api.WithOutgoingStore(outgoingStore), api.WithInventoryStore(inventoryStore), api.WithReportStore(reportStore), api.WithEmailService(emailService), api.WithDashboardStore(dashboardStore))); err != nil {
+	if err := http.ListenAndServe(address, api.NewServer(api.WithAuthenticator(authService), api.WithUnitService(unitService), api.WithCategoryService(categoryService), api.WithPackingService(packingService), api.WithPlantService(plantService), api.WithSupplierService(supplierService), api.WithRawMaterialService(rawMaterialService), api.WithSettingsService(settingsService), api.WithPurchaseOrderService(purchaseOrderService), api.WithReceivingStore(receivingStore), api.WithOutgoingStore(outgoingStore), api.WithInventoryStore(inventoryStore), api.WithReportStore(reportStore), api.WithEmailService(emailService), api.WithDashboardStore(dashboardStore), api.WithActivityLogStore(activityLogStore))); err != nil {
 		log.Fatal(err)
 	}
 }
