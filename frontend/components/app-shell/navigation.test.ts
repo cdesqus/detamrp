@@ -13,6 +13,21 @@ describe('navigation permission policy', () => {
     expect(requiredPermissionForPath('/receiving/session-1')).toBe('receiving.view');
     expect(requiredPermissionForPath('/settings/roles')).toBe('role.manage');
     expect(requiredPermissionForPath('/settings/company')).toBe('configuration.manage');
+    expect(requiredPermissionForPath('/units')).toBe('master_data.view');
+    expect(requiredPermissionForPath('/categories')).toBe('master_data.view');
+    expect(requiredPermissionForPath('/packings')).toBe('master_data.view');
+    expect(requiredPermissionForPath('/plants')).toBe('master_data.view');
+  });
+
+  it('groups Unit Category and Packing below Measurements', () => {
+    const dataMaster = visibleNavigationGroups(['master_data.view']).find(group => group.label === 'Data Master');
+    expect(dataMaster?.items.map(item => item.label)).toEqual(['Measurements', 'Plants', 'Suppliers', 'Raw Materials']);
+    expect(dataMaster?.items[0].items?.map(item => [item.label, item.href])).toEqual([
+      ['Unit', '/units'],
+      ['Category', '/categories'],
+      ['Packing', '/packings']
+    ]);
+    expect(firstPermittedRoute(['master_data.view'])).toBe('/units');
   });
 
   it('keeps permitted items and removes empty groups', () => {

@@ -27,6 +27,11 @@ button, input, select, textarea { font: inherit; }
 .app-shell nav a { height: 34px; display: flex; align-items: center; padding: 0 9px; color: #52525b; border-radius: 6px; text-decoration: none; }
 .app-shell nav a:hover, .app-shell nav a[aria-current="page"] { color: #18181b; background: #e4e4e7; }
 .app-shell nav a.nav-child-link { width: calc(100% - 12px); margin-left: 12px; padding-left: 17px; border-left: 1px solid #d4d4d8; border-radius: 0 6px 6px 0; }
+.nav-subgroup { display: grid; }
+.nav-subgroup-toggle { width: calc(100% - 12px); height: 32px; display: flex; align-items: center; gap: 5px; margin-left: 12px; padding: 0 8px 0 17px; color: #52525b; background: transparent; border: 0; border-left: 1px solid #d4d4d8; cursor: pointer; }
+.nav-subgroup-toggle:hover { color: #18181b; background: #f4f4f5; }
+.nav-subgroup-toggle .nav-label { flex: 1; text-align: left; }
+.app-shell nav a.nav-grandchild-link { width: calc(100% - 28px); margin-left: 28px; padding-left: 16px; border-left: 1px solid #d4d4d8; border-radius: 0 6px 6px 0; font-size: 11px; }
 .nav-icon { width: 22px; flex: 0 0 22px; color: #71717a; font-size: 10px; font-weight: 700; text-align: center; }
 .nav-icon svg { display: block; margin: auto; }
 .nav-label { margin-left: 5px; white-space: nowrap; }
@@ -36,6 +41,7 @@ button, input, select, textarea { font: inherit; }
 .sidebar-collapsed nav { margin-top: 32px; }
 .sidebar-collapsed nav a { padding-inline: 7px; }
 .sidebar-collapsed nav a.nav-child-link { width: 100%; margin-left: 0; padding-inline: 7px; border-left: 0; border-radius: 6px; }
+.sidebar-collapsed .nav-subgroup-toggle, .sidebar-collapsed nav a.nav-grandchild-link { width: 100%; margin-left: 0; padding-inline: 7px; border-left: 0; border-radius: 6px; }
 .nav-group-toggle { width: 100%; height: 34px; display: flex; align-items: center; gap: 5px; padding: 0 9px; color: #52525b; background: transparent; border: 0; border-radius: 6px; cursor: pointer; }
 .nav-group-toggle:hover { color: #18181b; background: #e4e4e7; }
 .nav-group-toggle .nav-label { flex: 1; text-align: left; }

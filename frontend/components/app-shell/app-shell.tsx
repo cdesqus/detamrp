@@ -6,7 +6,7 @@ import { createContext, ReactNode, useCallback, useContext, useEffect, useRef, u
 import { Icon } from '../icons';
 import { NotificationCenter } from '../notifications/notification-center';
 import { NotificationItem } from '../notifications/notification-data';
-import { firstPermittedRoute, navigationGroups, requiredPermissionForPath, visibleNavigationGroups } from './navigation';
+import { firstPermittedRoute, isNavigationBranch, navigationGroups, navigationItemMatchesPath, requiredPermissionForPath, visibleNavigationGroups } from './navigation';
 
 export type CurrentUser = { username: string; displayName: string; permissions: string[] };
 type PendingApproval = { id: string; purchaseOrderId: string; version?: number; poNumber?: string; supplierId?: string; supplierName?: string };
@@ -33,7 +33,8 @@ export function AppShell({ title, children }: { title: string; children: ReactNo
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [logoutPending, setLogoutPending] = useState(false);
   const [logoutError, setLogoutError] = useState<string | null>(null);
-  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() => Object.fromEntries(navigationGroups.filter(group => group.collapsible && group.label).map(group => [group.label!, group.items.some(item => pathname === item.href || pathname.startsWith(`${item.href}/`))])));
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() => Object.fromEntries(navigationGroups.filter(group => group.collapsible && group.label).map(group => [group.label!, group.items.some(item => navigationItemMatchesPath(item, pathname))])));
+  const [openBranches, setOpenBranches] = useState<Record<string, boolean>>(() => Object.fromEntries(navigationGroups.flatMap(group => group.items).filter(isNavigationBranch).map(item => [item.label, navigationItemMatchesPath(item, pathname)])));
 
   useEffect(() => {
     setCollapsed(localStorage.getItem(storageKey) === 'true');
@@ -163,12 +164,23 @@ export function AppShell({ title, children }: { title: string; children: ReactNo
             <div className="nav-group" key={group.label ?? groupIndex}>
               {group.collapsible ? <button className="nav-group-toggle" aria-expanded={Boolean(openGroups[group.label!])} onClick={() => setOpenGroups(value => ({...value,[group.label!]:!value[group.label!]}))}><Icon name={group.icon ?? 'settings'} /><span className="nav-label">{group.label}</span><Icon name={openGroups[group.label!] ? 'chevron-left' : 'chevron-right'} /></button> : group.label ? <p>{group.label}</p> : null}
               {(!group.collapsible || openGroups[group.label!]) && group.items.map(item => {
-                const active = pathname === item.href || (item.href !== '/dashboard' && pathname.startsWith(`${item.href}/`));
-                return (
-                  <Link className={group.collapsible ? 'nav-child-link' : undefined} href={item.href} key={item.href} aria-current={active ? 'page' : undefined} title={collapsed ? item.label : undefined} onClick={() => setDrawerOpen(false)}>
-                    <span className="nav-icon"><Icon name={item.icon} /></span><span className="nav-label">{item.label}</span>
-                  </Link>
-                );
+                if (isNavigationBranch(item)) {
+                  return <div className="nav-subgroup" key={item.label}>
+                    <button className="nav-subgroup-toggle" aria-expanded={Boolean(openBranches[item.label])} onClick={() => setOpenBranches(value => ({ ...value, [item.label]: !value[item.label] }))}>
+                      <span className="nav-icon"><Icon name={item.icon} /></span><span className="nav-label">{item.label}</span><Icon name={openBranches[item.label] ? 'chevron-left' : 'chevron-right'} />
+                    </button>
+                    {openBranches[item.label] && item.items.map(child => {
+                      const active = navigationItemMatchesPath(child, pathname);
+                      return <Link className="nav-grandchild-link" href={child.href} key={child.href} aria-current={active ? 'page' : undefined} title={collapsed ? child.label : undefined} onClick={() => setDrawerOpen(false)}>
+                        <span className="nav-icon"><Icon name={child.icon} /></span><span className="nav-label">{child.label}</span>
+                      </Link>;
+                    })}
+                  </div>;
+                }
+                const active = navigationItemMatchesPath(item, pathname);
+                return <Link className={group.collapsible ? 'nav-child-link' : undefined} href={item.href} key={item.href} aria-current={active ? 'page' : undefined} title={collapsed ? item.label : undefined} onClick={() => setDrawerOpen(false)}>
+                  <span className="nav-icon"><Icon name={item.icon} /></span><span className="nav-label">{item.label}</span>
+                </Link>;
               })}
             </div>
           ))}

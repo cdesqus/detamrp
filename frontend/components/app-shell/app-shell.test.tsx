@@ -94,12 +94,16 @@ describe('AppShell', () => {
   });
 
   it('renders live navigation and marks the current route', async () => {
-    const user = userEvent.setup();
-    render(<AppShell title="Dashboard"><div>content</div></AppShell>);
+    currentPath = '/units';
+    render(<AppShell title="Units"><div>content</div></AppShell>);
 
     expect(await screen.findByText('Administrator')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Dashboard' })).toHaveAttribute('aria-current', 'page');
-    await user.click(screen.getByRole('button', { name: 'Data Master' }));
+    expect(screen.getByRole('button', { name: 'Measurements' })).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByRole('link', { name: 'Unit' })).toHaveAttribute('href', '/units');
+    expect(screen.getByRole('link', { name: 'Unit' })).toHaveAttribute('aria-current', 'page');
+    expect(screen.getByRole('link', { name: 'Category' })).toHaveAttribute('href', '/categories');
+    expect(screen.getByRole('link', { name: 'Packing' })).toHaveAttribute('href', '/packings');
+    expect(screen.getByRole('link', { name: 'Plants' })).toHaveAttribute('href', '/plants');
     expect(screen.getByRole('link', { name: 'Raw Materials' })).toHaveAttribute('href', '/raw-materials');
     expect(screen.getByRole('link', { name: 'Raw Materials' })).toHaveClass('nav-child-link');
   });

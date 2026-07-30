@@ -1,12 +1,19 @@
 import { IconName } from '../icons';
 
-export type NavigationItem = { label: string; href: string; icon: IconName; requiredPermission: string };
+export type NavigationLeaf = { label: string; href: string; icon: IconName; requiredPermission: string };
+export type NavigationBranch = { label: string; icon: IconName; requiredPermission: string; items: NavigationLeaf[] };
+export type NavigationItem = NavigationLeaf | NavigationBranch;
 export type NavigationGroup = { label?: string; icon?: IconName; collapsible?: boolean; items: NavigationItem[] };
 
 export const navigationGroups: NavigationGroup[] = [
   { items: [{ label: 'Dashboard', href: '/dashboard', icon: 'dashboard', requiredPermission: 'dashboard.view' }] },
   { label: 'Data Master', icon: 'units', collapsible: true, items: [
-    { label: 'Measurements', href: '/measurements', icon: 'units', requiredPermission: 'master_data.view' },
+    { label: 'Measurements', icon: 'units', requiredPermission: 'master_data.view', items: [
+      { label: 'Unit', href: '/units', icon: 'units', requiredPermission: 'master_data.view' },
+      { label: 'Category', href: '/categories', icon: 'package', requiredPermission: 'master_data.view' },
+      { label: 'Packing', href: '/packings', icon: 'package', requiredPermission: 'master_data.view' }
+    ] },
+    { label: 'Plants', href: '/plants', icon: 'package', requiredPermission: 'master_data.view' },
     { label: 'Suppliers', href: '/suppliers', icon: 'supplier', requiredPermission: 'master_data.view' },
     { label: 'Raw Materials', href: '/raw-materials', icon: 'package', requiredPermission: 'master_data.view' }
   ] },
@@ -31,7 +38,10 @@ export const navigationGroups: NavigationGroup[] = [
 const routeRules: Array<{ path: string; permission: string; exact?: boolean }> = [
   { path: '/supplier-orders/new', permission: 'po.create', exact: true },
   { path: '/dashboard', permission: 'dashboard.view' },
-  { path: '/measurements', permission: 'master_data.view' },
+  { path: '/units', permission: 'master_data.view' },
+  { path: '/categories', permission: 'master_data.view' },
+  { path: '/packings', permission: 'master_data.view' },
+  { path: '/plants', permission: 'master_data.view' },
   { path: '/suppliers', permission: 'master_data.view' },
   { path: '/raw-materials', permission: 'master_data.view' },
   { path: '/supplier-orders', permission: 'po.view' },
@@ -51,8 +61,26 @@ const routeRules: Array<{ path: string; permission: string; exact?: boolean }> =
 export function visibleNavigationGroups(permissions: string[]): NavigationGroup[] {
   const granted = new Set(permissions);
   return navigationGroups
-    .map(group => ({ ...group, items: group.items.filter(item => granted.has(item.requiredPermission)) }))
+    .map(group => ({ ...group, items: group.items.reduce<NavigationItem[]>((visible, item) => {
+      if (!granted.has(item.requiredPermission)) return visible;
+      if (!isNavigationBranch(item)) {
+        visible.push(item);
+        return visible;
+      }
+      const items = item.items.filter(child => granted.has(child.requiredPermission));
+      if (items.length) visible.push({ ...item, items });
+      return visible;
+    }, []) }))
     .filter(group => group.items.length > 0);
+}
+
+export function isNavigationBranch(item: NavigationItem): item is NavigationBranch {
+  return 'items' in item;
+}
+
+export function navigationItemMatchesPath(item: NavigationItem, pathname: string): boolean {
+  if (isNavigationBranch(item)) return item.items.some(child => navigationItemMatchesPath(child, pathname));
+  return pathname === item.href || (item.href !== '/dashboard' && pathname.startsWith(`${item.href}/`));
 }
 
 export function requiredPermissionForPath(pathname: string): string | null {
@@ -63,5 +91,7 @@ export function requiredPermissionForPath(pathname: string): string | null {
 }
 
 export function firstPermittedRoute(permissions: string[]): string | null {
-  return visibleNavigationGroups(permissions)[0]?.items[0]?.href ?? null;
+  const first = visibleNavigationGroups(permissions)[0]?.items[0];
+  if (!first) return null;
+  return isNavigationBranch(first) ? first.items[0]?.href ?? null : first.href;
 }
