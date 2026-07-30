@@ -84,7 +84,7 @@ type KanbanLabel struct {
 const maxKanbanLabelsPerPDF = 1_000
 
 const pdfFontFamily = "OrderStockSans"
-const deliveryNoteNumberFontSize = 15.0
+const deliveryNoteNumberFontSize = 17.0
 
 func newA4PDF(title string) *fpdf.Fpdf {
 	pdf := fpdf.New("P", "mm", "A4", "")
@@ -324,14 +324,16 @@ func RenderDeliveryNotePDF(document DeliveryNoteDocument) ([]byte, error) {
 	}
 	writeDeliveryNoteHeader(pdf, document, qrPNG)
 	writePDFSectionTitle(pdf, "MATERIAL DETAILS")
-	widths := []float64{10, 29, 55, 16, 27, 22, 27}
-	headings := []string{"No.", "Material Code", "Description", "Unit", "Qty / Kanban", "Kanbans", "Total Qty"}
+	widths := []float64{8, 21, 38, 24, 22, 11, 22, 16, 24}
+	headings := []string{"No.", "Material", "Description", "Category", "Packing", "Unit", "Qty/Card", "Cards", "Total Qty"}
 	rows := make([][]string, 0, len(document.Lines))
 	for index, line := range document.Lines {
 		rows = append(rows, []string{
 			strconv.Itoa(index + 1),
 			line.RawMaterialCode,
 			line.RawMaterialName,
+			pdfReferenceName(line.CategoryCode, line.CategoryName),
+			pdfReferenceName(line.PackingCode, line.PackingName),
 			line.BaseUnitCode,
 			formatPDFDecimal(line.QtyPerKanban, 6),
 			formatPDFDecimal(line.TotalKanban, 0),
@@ -344,9 +346,7 @@ func RenderDeliveryNotePDF(document DeliveryNoteDocument) ([]byte, error) {
 }
 
 func writeDeliveryNoteHeader(pdf *fpdf.Fpdf, document DeliveryNoteDocument, qrPNG []byte) {
-	pdf.SetDrawColor(24, 24, 27)
-	pdf.SetTextColor(24, 24, 27)
-	pdf.SetLineWidth(0.35)
+	setDocumentInk(pdf)
 	pdf.SetXY(12, 9)
 	pdf.SetFont(pdfFontFamily, "B", 9)
 	companyLines := fitPDFTextLines(pdf, pdfCompanyName(document.CompanyName), 52, 2)
@@ -364,15 +364,14 @@ func writeDeliveryNoteHeader(pdf *fpdf.Fpdf, document DeliveryNoteDocument, qrPN
 
 	pdf.SetY(38)
 	pdf.SetFont(pdfFontFamily, "B", 8)
-	pdf.CellFormat(92, 6, "DELIVERY INFORMATION", "", 0, "L", false, 0, "")
+	pdf.CellFormat(128, 6, "DELIVERY INFORMATION", "", 0, "L", false, 0, "")
 	pdf.SetX(151)
 	pdf.CellFormat(47, 6, "SCAN FOR RECEIVING", "", 1, "C", false, 0, "")
-	pdf.SetY(45)
-	writeDeliveryNoteMeta(pdf, "Supplier", document.SupplierName)
-	writeDeliveryNoteMeta(pdf, "PO Number", document.PONumber)
-	writeDeliveryNoteMeta(pdf, "Order Date", formatPDFDate(document.OrderDate))
-	writeDeliveryNoteMeta(pdf, "Expected Delivery", formatPDFDate(document.ExpectedDeliveryDate))
-	writeDeliveryNoteMeta(pdf, "Issued Date", formatPDFDate(document.IssuedAt))
+	pdf.Line(12, 44, 140, 44)
+	writeDeliveryNoteParty(pdf, 12, 48, 60, "SUPPLIER", document.SupplierName, "")
+	writeDeliveryNoteParty(pdf, 78, 48, 62, "DESTINATION PLANT",
+		pdfReferenceName(document.PlantCode, document.PlantName), document.PlantAddress)
+	writeDeliveryNoteDates(pdf, document)
 
 	imageName := "delivery-note-qr"
 	pdf.RegisterImageOptionsReader(imageName, fpdf.ImageOptions{ImageType: "PNG", ReadDpi: false}, bytes.NewReader(qrPNG))
@@ -380,17 +379,40 @@ func writeDeliveryNoteHeader(pdf *fpdf.Fpdf, document DeliveryNoteDocument, qrPN
 	pdf.SetXY(151, 80)
 	pdf.SetFont(pdfFontFamily, "B", 7)
 	pdf.CellFormat(47, 4, document.DeliveryNoteNumber, "", 0, "C", false, 0, "")
-	pdf.SetY(88)
+	pdf.SetY(96)
 }
 
-func writeDeliveryNoteMeta(pdf *fpdf.Fpdf, label, value string) {
-	y := pdf.GetY()
-	pdf.SetX(12)
+func writeDeliveryNoteParty(pdf *fpdf.Fpdf, x, y, width float64, label, primary, secondary string) {
+	pdf.SetXY(x, y)
+	pdf.SetFont(pdfFontFamily, "", 6.5)
+	pdf.CellFormat(width, 4, label, "", 0, "L", false, 0, "")
 	pdf.SetFont(pdfFontFamily, "B", 8)
-	pdf.CellFormat(34, 6, label, "", 0, "L", false, 0, "")
-	pdf.SetFont(pdfFontFamily, "", 8)
-	pdf.CellFormat(94, 6, value, "", 1, "L", false, 0, "")
-	pdf.SetY(y + 7)
+	writePDFTextLines(pdf, x, y+5, width-2, 4, fitPDFTextLines(pdf, primary, width-2, 2), "L")
+	if strings.TrimSpace(secondary) != "" {
+		pdf.SetFont(pdfFontFamily, "", 6.5)
+		writePDFTextLines(pdf, x, y+13, width-2, 3.5, fitPDFTextLines(pdf, secondary, width-2, 1), "L")
+	}
+}
+
+func writeDeliveryNoteDates(pdf *fpdf.Fpdf, document DeliveryNoteDocument) {
+	const y, width = 74.0, 30.0
+	values := [][2]string{
+		{"PO Number", document.PONumber},
+		{"Order Date", formatPDFDate(document.OrderDate)},
+		{"Expected Delivery", formatPDFDate(document.ExpectedDeliveryDate)},
+		{"Issued Date", formatPDFDate(document.IssuedAt)},
+	}
+	for index, value := range values {
+		x := 12 + float64(index)*32
+		cellWidth := width
+		pdf.SetXY(x, y)
+		pdf.SetFont(pdfFontFamily, "", 6.5)
+		pdf.CellFormat(cellWidth, 4, value[0], "", 0, "L", false, 0, "")
+		pdf.SetXY(x, y+5)
+		pdf.SetFont(pdfFontFamily, "B", 7.5)
+		pdf.CellFormat(cellWidth, 5, value[1], "", 0, "L", false, 0, "")
+		pdf.Line(x, y+11, x+cellWidth-2, y+11)
+	}
 }
 
 func deliveryNoteUnitTotals(lines []DeliveryNoteLine) []string {
@@ -446,15 +468,21 @@ func writeDeliveryNoteFooter(pdf *fpdf.Fpdf, lines []DeliveryNoteLine) {
 
 func writeDeliveryNoteTable(pdf *fpdf.Fpdf, widths []float64, headings []string, rows [][]string) {
 	writeHeader := func() {
-		pdf.SetFont(pdfFontFamily, "B", 7)
+		left, _, _, _ := pdf.GetMargins()
+		y := pdf.GetY()
+		pdf.SetLineWidth(0.35)
+		pdf.Line(left, y, left+186, y)
+		pdf.SetFont(pdfFontFamily, "B", 6.2)
 		for index, heading := range headings {
-			pdf.CellFormat(widths[index], 7, heading, "1", 0, "C", false, 0, "")
+			pdf.CellFormat(widths[index], 8, heading, "", 0, "L", false, 0, "")
 		}
-		pdf.Ln(-1)
+		pdf.Ln(8)
+		pdf.Line(left, pdf.GetY(), left+186, pdf.GetY())
+		pdf.SetLineWidth(0.2)
 	}
 	writeHeader()
 	for _, values := range rows {
-		pdf.SetFont(pdfFontFamily, "", 7)
+		pdf.SetFont(pdfFontFamily, "", 6.7)
 		linesByCell := make([][]string, len(values))
 		rowHeight := 7.0
 		for index, value := range values {
@@ -473,15 +501,15 @@ func writeDeliveryNoteTable(pdf *fpdf.Fpdf, widths []float64, headings []string,
 		}
 		x, y := pdf.GetX(), pdf.GetY()
 		for index, lines := range linesByCell {
-			pdf.Rect(x, y, widths[index], rowHeight, "D")
 			align := "L"
-			if index == 0 || index >= 3 {
-				align = "C"
+			if index == 0 || index >= len(values)-4 {
+				align = "R"
 			}
 			writePDFTextLines(pdf, x+1, y+1, widths[index]-2, 4, lines, align)
 			x += widths[index]
 		}
 		left, _, _, _ := pdf.GetMargins()
+		pdf.Line(left, y+rowHeight, left+186, y+rowHeight)
 		pdf.SetXY(left, y+rowHeight)
 	}
 }
