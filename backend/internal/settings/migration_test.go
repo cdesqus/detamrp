@@ -32,3 +32,16 @@ func TestDashboardPermissionMigrationRestoresExistingDashboardAccess(t *testing.
 		}
 	}
 }
+
+func TestCompanyBrandingMigrationStoresMediaAndExposesNarrowPublicFunctions(t *testing.T) {
+	content, err := os.ReadFile(filepath.Join("..", "..", "..", "database", "migrations", "014_company_branding.sql"))
+	if err != nil {
+		t.Fatalf("read migration: %v", err)
+	}
+	sql := strings.ToLower(string(content))
+	for _, fragment := range []string{"company_logo bytea", "login_background bytea", "security definer", "public_branding()", "public_branding_media", "revoke all"} {
+		if !strings.Contains(sql, fragment) {
+			t.Fatalf("branding migration missing %q", fragment)
+		}
+	}
+}

@@ -158,7 +158,7 @@ export function AppShell({ title, children }: { title: string; children: ReactNo
     <CurrentUserContext.Provider value={user}><div className={`app-shell${collapsed ? ' sidebar-collapsed' : ''}${drawerOpen ? ' drawer-open' : ''}`}>
       <button className="drawer-scrim" aria-label="Close navigation" onClick={() => setDrawerOpen(false)} />
       <aside aria-label="Main navigation">
-        <div className="sidebar-brand"><span>OS</span><b>Order Stock</b><button className="sidebar-collapse" aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} aria-expanded={!collapsed} onClick={toggleSidebar}><Icon name={collapsed ? 'chevron-right' : 'chevron-left'} /></button></div>
+        <div className="sidebar-brand"><span>DM</span><b>DETA MRP</b><button className="sidebar-collapse" aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} aria-expanded={!collapsed} onClick={toggleSidebar}><Icon name={collapsed ? 'chevron-right' : 'chevron-left'} /></button></div>
         <nav>
           {visibleGroups.map((group, groupIndex) => (
             <div className="nav-group" key={group.label ?? groupIndex}>

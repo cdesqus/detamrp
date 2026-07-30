@@ -191,5 +191,5 @@ func publicReject(c *gin.Context, s *Service, po *purchaseorder.Service) {
 	publicHTML(c, "Purchase Order Rejected", "The rejection has been recorded successfully.")
 }
 func publicHTML(c *gin.Context, title, message string) {
-	c.Data(200, "text/html; charset=utf-8", []byte(`<!doctype html><html><body style="margin:0;background:#f4f4f5;font-family:Arial"><div style="max-width:520px;margin:80px auto;background:white;border:1px solid #e4e4e7;border-radius:12px;padding:32px"><b>ORDER STOCK</b><h1>`+html.EscapeString(title)+`</h1><p>`+html.EscapeString(message)+`</p></div></body></html>`))
+	c.Data(200, "text/html; charset=utf-8", []byte(`<!doctype html><html><body style="margin:0;background:#f4f4f5;font-family:Arial"><div style="max-width:520px;margin:80px auto;background:white;border:1px solid #e4e4e7;border-radius:12px;padding:32px"><b>DETA MRP</b><h1>`+html.EscapeString(title)+`</h1><p>`+html.EscapeString(message)+`</p></div></body></html>`))
 }

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"io"
 	"net/http"
 	"order-stock/backend/internal/auth"
 	"order-stock/backend/internal/rbac"
@@ -18,6 +19,23 @@ type Authenticator interface {
 const actorKey = "settings_actor"
 
 func RegisterRoutes(router *gin.Engine, s *Service, a Authenticator) {
+	router.GET("/public/branding", func(c *gin.Context) {
+		item, e := s.GetPublicBranding(c)
+		if fail(c, e) {
+			return
+		}
+		c.Header("Cache-Control", "public, max-age=300")
+		c.JSON(200, item)
+	})
+	router.GET("/public/branding/:kind", func(c *gin.Context) {
+		item, e := s.GetPublicBrandingMedia(c, c.Param("kind"))
+		if fail(c, e) {
+			return
+		}
+		c.Header("Cache-Control", "public, max-age=0, must-revalidate")
+		c.Header("X-Content-Type-Options", "nosniff")
+		c.Data(200, item.ContentType, item.Content)
+	})
 	g := router.Group("/settings", authenticate(a))
 	g.GET("/users", rbac.RequirePermissions("user.manage"), func(c *gin.Context) {
 		q, ok := query(c)
@@ -146,6 +164,37 @@ func RegisterRoutes(router *gin.Engine, s *Service, a Authenticator) {
 			return
 		}
 		item, e := s.UpdateCompanyConfig(c, actor(c), in)
+		if fail(c, e) {
+			return
+		}
+		c.JSON(200, item)
+	})
+	g.PUT("/company/:kind", rbac.RequirePermissions("configuration.manage"), func(c *gin.Context) {
+		kind := c.Param("kind")
+		max := int64(logoMaxBytes)
+		if kind == "login-background" {
+			max = loginBackgroundMaxBytes
+		}
+		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, max+(1<<20))
+		file, header, e := c.Request.FormFile("file")
+		if e != nil {
+			c.JSON(400, gin.H{"error": "invalid_request", "message": "Select an image file"})
+			return
+		}
+		defer file.Close()
+		content, e := io.ReadAll(io.LimitReader(file, max+1))
+		if e != nil {
+			c.JSON(400, gin.H{"error": "invalid_request", "message": "Image could not be read"})
+			return
+		}
+		item, e := s.UpdateCompanyMedia(c, actor(c), kind, BrandingInput{Content: content, ContentType: header.Header.Get("Content-Type")})
+		if fail(c, e) {
+			return
+		}
+		c.JSON(200, item)
+	})
+	g.DELETE("/company/:kind", rbac.RequirePermissions("configuration.manage"), func(c *gin.Context) {
+		item, e := s.DeleteCompanyMedia(c, actor(c), c.Param("kind"))
 		if fail(c, e) {
 			return
 		}

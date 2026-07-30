@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"image"
 	"image/color"
+	"image/png"
 	"reflect"
 	"slices"
 	"strings"
@@ -94,6 +95,23 @@ func TestRenderPOPDFUsesModernBusinessSections(t *testing.T) {
 		if !pdfContainsText(result, heading) {
 			t.Errorf("missing modern section %q", heading)
 		}
+	}
+}
+
+func TestRenderPOPDFUsesDetaMRPFallbackAndEmbedsCompanyLogo(t *testing.T) {
+	var logo bytes.Buffer
+	if err := png.Encode(&logo, image.NewRGBA(image.Rect(0, 0, 8, 4))); err != nil {
+		t.Fatal(err)
+	}
+	result, err := RenderPOPDF(Order{PONumber: "PO-BRAND", Status: StatusApproved, CompanyLogo: logo.Bytes()}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !pdfContainsText(result, "DETA MRP") {
+		t.Fatal("DETA MRP fallback is missing")
+	}
+	if !bytes.Contains(result, []byte("/Subtype /Image")) {
+		t.Fatal("company logo was not embedded")
 	}
 }
 

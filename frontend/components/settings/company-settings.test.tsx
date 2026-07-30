@@ -23,3 +23,21 @@ it('loads and saves the company name', async () => {
   })));
   expect(await screen.findByRole('status')).toHaveTextContent('Company settings saved.');
 });
+
+it('uploads and resets company branding media', async () => {
+  const fetchMock = vi.fn()
+    .mockResolvedValueOnce({ ok: true, json: async () => ({ companyName: 'Our Company', logoUrl: null, loginBackgroundUrl: null }) })
+    .mockResolvedValueOnce({ ok: true, json: async () => ({ companyName: 'Our Company', logoUrl: '/api/public/branding/logo', loginBackgroundUrl: null }) })
+    .mockResolvedValueOnce({ ok: true, json: async () => ({ companyName: 'Our Company', logoUrl: null, loginBackgroundUrl: null }) });
+  vi.stubGlobal('fetch', fetchMock);
+  const user = userEvent.setup();
+  render(<CompanySettings />);
+
+  const logo = await screen.findByLabelText('Company Logo');
+  await user.upload(logo, new File(['image'], 'logo.png', { type: 'image/png' }));
+  await user.click(screen.getByRole('button', { name: 'Upload logo' }));
+  expect(fetchMock).toHaveBeenCalledWith('/api/settings/company/logo', expect.objectContaining({ method: 'PUT' }));
+
+  await user.click(await screen.findByRole('button', { name: 'Reset logo' }));
+  expect(fetchMock).toHaveBeenCalledWith('/api/settings/company/logo', expect.objectContaining({ method: 'DELETE' }));
+});

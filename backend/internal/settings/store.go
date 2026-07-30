@@ -351,14 +351,74 @@ func (s *SQLStore) UpdateApprovalConfig(ctx context.Context, a Actor, in Approva
 }
 func (s *SQLStore) GetCompanyConfig(ctx context.Context, a Actor) (item CompanyConfig, err error) {
 	err = database.WithTenant(ctx, s.db, database.TenantContext{TenantID: a.TenantID, UserID: a.UserID}, func(tx database.TenantTx) error {
-		return tx.QueryRow(ctx, `SELECT company_name FROM tenant_settings WHERE tenant_id=$1`, a.TenantID).Scan(&item.CompanyName)
+		var logo, background bool
+		if err := tx.QueryRow(ctx, `SELECT company_name,company_logo IS NOT NULL,login_background IS NOT NULL FROM tenant_settings WHERE tenant_id=$1`, a.TenantID).Scan(&item.CompanyName, &logo, &background); err != nil {
+			return err
+		}
+		if logo {
+			item.LogoURL = mediaURL("logo")
+		}
+		if background {
+			item.LoginBackgroundURL = mediaURL("login-background")
+		}
+		return nil
 	})
+	return
+}
+func (s *SQLStore) UpdateCompanyMedia(ctx context.Context, a Actor, kind string, in BrandingInput) (item CompanyConfig, err error) {
+	err = database.WithTenant(ctx, s.db, database.TenantContext{TenantID: a.TenantID, UserID: a.UserID}, func(tx database.TenantTx) error {
+		if kind == "logo" {
+			_, err = tx.Exec(ctx, `UPDATE tenant_settings SET company_logo=$2,company_logo_mime=$3,updated_by_user_id=$4,updated_at=now() WHERE tenant_id=$1`, a.TenantID, in.Content, in.ContentType, a.UserID)
+		} else {
+			_, err = tx.Exec(ctx, `UPDATE tenant_settings SET login_background=$2,login_background_mime=$3,updated_by_user_id=$4,updated_at=now() WHERE tenant_id=$1`, a.TenantID, in.Content, in.ContentType, a.UserID)
+		}
+		return err
+	})
+	if err == nil {
+		item, err = s.GetCompanyConfig(ctx, a)
+	}
+	return
+}
+func (s *SQLStore) DeleteCompanyMedia(ctx context.Context, a Actor, kind string) (item CompanyConfig, err error) {
+	err = database.WithTenant(ctx, s.db, database.TenantContext{TenantID: a.TenantID, UserID: a.UserID}, func(tx database.TenantTx) error {
+		if kind == "logo" {
+			_, err = tx.Exec(ctx, `UPDATE tenant_settings SET company_logo=NULL,company_logo_mime=NULL,updated_by_user_id=$2,updated_at=now() WHERE tenant_id=$1`, a.TenantID, a.UserID)
+		} else {
+			_, err = tx.Exec(ctx, `UPDATE tenant_settings SET login_background=NULL,login_background_mime=NULL,updated_by_user_id=$2,updated_at=now() WHERE tenant_id=$1`, a.TenantID, a.UserID)
+		}
+		return err
+	})
+	if err == nil {
+		item, err = s.GetCompanyConfig(ctx, a)
+	}
+	return
+}
+func (s *SQLStore) GetPublicBranding(ctx context.Context) (item CompanyConfig, err error) {
+	var logo, background bool
+	err = s.db.QueryRow(ctx, `SELECT company_name,has_logo,has_login_background FROM public_branding()`).Scan(&item.CompanyName, &logo, &background)
+	if logo {
+		item.LogoURL = mediaURL("logo")
+	}
+	if background {
+		item.LoginBackgroundURL = mediaURL("login-background")
+	}
+	return
+}
+func (s *SQLStore) GetPublicBrandingMedia(ctx context.Context, kind string) (item BrandingMedia, err error) {
+	err = s.db.QueryRow(ctx, `SELECT content,content_type FROM public_branding_media($1)`, kind).Scan(&item.Content, &item.ContentType)
+	if err == nil && len(item.Content) == 0 {
+		err = NotFoundError{"branding media"}
+	}
 	return
 }
 func (s *SQLStore) UpdateCompanyConfig(ctx context.Context, a Actor, in CompanyConfigInput) (item CompanyConfig, err error) {
 	err = database.WithTenant(ctx, s.db, database.TenantContext{TenantID: a.TenantID, UserID: a.UserID}, func(tx database.TenantTx) error {
-		return tx.QueryRow(ctx, `UPDATE tenant_settings SET company_name=$2,updated_by_user_id=$3,updated_at=now() WHERE tenant_id=$1 RETURNING company_name`, a.TenantID, in.CompanyName, a.UserID).Scan(&item.CompanyName)
+		_, err := tx.Exec(ctx, `UPDATE tenant_settings SET company_name=$2,updated_by_user_id=$3,updated_at=now() WHERE tenant_id=$1`, a.TenantID, in.CompanyName, a.UserID)
+		return err
 	})
+	if err == nil {
+		item, err = s.GetCompanyConfig(ctx, a)
+	}
 	return
 }
 func writeError(err error) error {
