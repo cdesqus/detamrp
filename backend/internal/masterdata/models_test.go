@@ -22,7 +22,7 @@ func TestSupplierRequiresValidEmail(t *testing.T) {
 }
 
 func TestRawMaterialRequiresSupplierUnitAndPositiveKanbanQuantity(t *testing.T) {
-	material := RawMaterial{Code: "MAT-001", Name: "Bolt M8", SupplierID: uuid.New(), BaseUnitID: uuid.New(), QtyPerKanban: decimal.Zero}
+	material := RawMaterial{Code: "MAT-001", Name: "Bolt M8", SupplierID: uuid.New(), BaseUnitID: uuid.New(), CategoryID: uuid.New(), PackingID: uuid.New(), QtyPerKanban: decimal.Zero}
 	if err := material.Validate(); err == nil {
 		t.Fatal("zero Kanban quantity accepted")
 	}

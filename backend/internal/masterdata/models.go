@@ -75,6 +75,12 @@ type RawMaterial struct {
 	SupplierName      string          `json:"supplierName"`
 	BaseUnitID        uuid.UUID       `json:"baseUnitId"`
 	BaseUnitCode      string          `json:"baseUnitCode"`
+	CategoryID        uuid.UUID       `json:"categoryId"`
+	CategoryCode      string          `json:"categoryCode"`
+	CategoryName      string          `json:"categoryName"`
+	PackingID         uuid.UUID       `json:"packingId"`
+	PackingCode       string          `json:"packingCode"`
+	PackingName       string          `json:"packingName"`
 	QtyPerKanban      decimal.Decimal `json:"qtyPerKanban"`
 	MinimumStock      decimal.Decimal `json:"minimumStock"`
 	StandardUnitPrice decimal.Decimal `json:"standardUnitPrice"`
@@ -88,8 +94,8 @@ func (r RawMaterial) Validate() error {
 	if strings.TrimSpace(r.Code) == "" || strings.TrimSpace(r.Name) == "" {
 		return errors.New("material code and name are required")
 	}
-	if r.SupplierID == uuid.Nil || r.BaseUnitID == uuid.Nil {
-		return errors.New("supplier and base unit are required")
+	if r.SupplierID == uuid.Nil || r.BaseUnitID == uuid.Nil || r.CategoryID == uuid.Nil || r.PackingID == uuid.Nil {
+		return errors.New("supplier, base unit, category, and packing are required")
 	}
 	if !r.QtyPerKanban.IsPositive() {
 		return errors.New("quantity per Kanban must be positive")

@@ -101,6 +101,8 @@ type RawMaterialInput struct {
 	Name              string          `json:"name"`
 	SupplierID        uuid.UUID       `json:"supplierId"`
 	BaseUnitID        uuid.UUID       `json:"baseUnitId"`
+	CategoryID        uuid.UUID       `json:"categoryId"`
+	PackingID         uuid.UUID       `json:"packingId"`
 	QtyPerKanban      decimal.Decimal `json:"qtyPerKanban"`
 	MinimumStock      decimal.Decimal `json:"minimumStock"`
 	StandardUnitPrice decimal.Decimal `json:"standardUnitPrice"`
@@ -128,6 +130,12 @@ func (i *RawMaterialInput) NormalizeAndValidate() FieldErrors {
 	}
 	if i.BaseUnitID == uuid.Nil {
 		errs["baseUnitId"] = "Base Unit is required"
+	}
+	if i.CategoryID == uuid.Nil {
+		errs["categoryId"] = "Category is required"
+	}
+	if i.PackingID == uuid.Nil {
+		errs["packingId"] = "Packing is required"
 	}
 	if !i.QtyPerKanban.IsPositive() {
 		errs["qtyPerKanban"] = "Qty per Kanban must be greater than zero"

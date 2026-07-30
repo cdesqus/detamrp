@@ -28,6 +28,18 @@ func TestRawMaterialInputRejectsInvalidQuantities(t *testing.T) {
 	}
 }
 
+func TestRawMaterialInputRequiresCategoryAndPacking(t *testing.T) {
+	input := RawMaterialInput{
+		Code: "RM", SageItemCode: "S-RM", Name: "Material",
+		SupplierID: uuid.New(), BaseUnitID: uuid.New(),
+		QtyPerKanban: decimal.NewFromInt(1),
+	}
+	errs := input.NormalizeAndValidate()
+	if errs["categoryId"] == "" || errs["packingId"] == "" {
+		t.Fatalf("missing master reference errors: %#v", errs)
+	}
+}
+
 func TestSupplierInputValidatesEmailAndCurrency(t *testing.T) {
 	input := SupplierInput{Code: " sup ", SageSupplierCode: " x3 ", Name: "Supplier", Email: "bad", Currency: "ABC"}
 	errs := input.NormalizeAndValidate()

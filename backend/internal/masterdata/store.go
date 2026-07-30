@@ -196,11 +196,25 @@ func supplierWriteError(err error) error {
 	return err
 }
 
-const rawMaterialSelect = `SELECT r.id,r.code,r.sage_item_code,r.name,r.supplier_id,s.name,r.base_unit_id,m.code,r.qty_per_kanban,r.minimum_stock,r.standard_unit_price,r.currency,r.description,r.active,r.created_by_user_id,cu.display_name,r.created_at,r.updated_by_user_id,uu.display_name,r.updated_at FROM raw_materials r JOIN suppliers s ON s.tenant_id=r.tenant_id AND s.id=r.supplier_id JOIN units m ON m.tenant_id=r.tenant_id AND m.id=r.base_unit_id JOIN users cu ON cu.tenant_id=r.tenant_id AND cu.id=r.created_by_user_id JOIN users uu ON uu.tenant_id=r.tenant_id AND uu.id=r.updated_by_user_id`
+const rawMaterialSelect = `SELECT r.id,r.code,r.sage_item_code,r.name,r.supplier_id,s.name,r.base_unit_id,m.code,
+ COALESCE(r.category_id,'00000000-0000-0000-0000-000000000000'),COALESCE(c.code,''),COALESCE(c.name,''),
+ COALESCE(r.packing_id,'00000000-0000-0000-0000-000000000000'),COALESCE(p.code,''),COALESCE(p.name,''),
+ r.qty_per_kanban,r.minimum_stock,r.standard_unit_price,r.currency,r.description,r.active,
+ r.created_by_user_id,cu.display_name,r.created_at,r.updated_by_user_id,uu.display_name,r.updated_at
+ FROM raw_materials r
+ JOIN suppliers s ON s.tenant_id=r.tenant_id AND s.id=r.supplier_id
+ JOIN units m ON m.tenant_id=r.tenant_id AND m.id=r.base_unit_id
+ LEFT JOIN categories c ON c.tenant_id=r.tenant_id AND c.id=r.category_id
+ LEFT JOIN packings p ON p.tenant_id=r.tenant_id AND p.id=r.packing_id
+ JOIN users cu ON cu.tenant_id=r.tenant_id AND cu.id=r.created_by_user_id
+ JOIN users uu ON uu.tenant_id=r.tenant_id AND uu.id=r.updated_by_user_id`
 
 func scanRawMaterial(row pgx.Row) (RawMaterial, error) {
 	var r RawMaterial
-	err := row.Scan(&r.ID, &r.Code, &r.SageItemCode, &r.Name, &r.SupplierID, &r.SupplierName, &r.BaseUnitID, &r.BaseUnitCode, &r.QtyPerKanban, &r.MinimumStock, &r.StandardUnitPrice, &r.Currency, &r.Description, &r.Active, &r.CreatedBy, &r.CreatedByName, &r.CreatedAt, &r.UpdatedBy, &r.UpdatedByName, &r.UpdatedAt)
+	err := row.Scan(&r.ID, &r.Code, &r.SageItemCode, &r.Name, &r.SupplierID, &r.SupplierName, &r.BaseUnitID, &r.BaseUnitCode,
+		&r.CategoryID, &r.CategoryCode, &r.CategoryName, &r.PackingID, &r.PackingCode, &r.PackingName,
+		&r.QtyPerKanban, &r.MinimumStock, &r.StandardUnitPrice, &r.Currency, &r.Description, &r.Active,
+		&r.CreatedBy, &r.CreatedByName, &r.CreatedAt, &r.UpdatedBy, &r.UpdatedByName, &r.UpdatedAt)
 	return r, err
 }
 func (s *SQLStore) ListRawMaterials(ctx context.Context, a Actor, q ListQuery) (items []RawMaterial, total int, err error) {
@@ -242,11 +256,16 @@ func (s *SQLStore) GetRawMaterial(ctx context.Context, a Actor, id uuid.UUID) (i
 }
 func (s *SQLStore) CreateRawMaterial(ctx context.Context, a Actor, in RawMaterialInput) (item RawMaterial, err error) {
 	err = database.WithTenant(ctx, s.db, database.TenantContext{TenantID: a.TenantID, UserID: a.UserID}, func(tx database.TenantTx) error {
-		var id uuid.UUID
-		e := tx.QueryRow(ctx, `INSERT INTO raw_materials(tenant_id,code,sage_item_code,name,supplier_id,base_unit_id,qty_per_kanban,minimum_stock,standard_unit_price,currency,description,active,created_by_user_id,updated_by_user_id) SELECT $1,$2,$3,$4,$5,$6,$7,$8,$9,s.currency,$10,$11,$12,$12 FROM suppliers s WHERE s.tenant_id=$1 AND s.id=$5 AND s.active=true RETURNING id`, a.TenantID, in.Code, in.SageItemCode, in.Name, in.SupplierID, in.BaseUnitID, in.QtyPerKanban, in.MinimumStock, in.StandardUnitPrice, in.Description, activeValue(in.Active), a.UserID).Scan(&id)
-		if errors.Is(e, pgx.ErrNoRows) {
-			return ConflictError{Fields: FieldErrors{"supplierId": "Select an active supplier"}}
+		currency, referenceErr := activeRawMaterialReferences(ctx, tx, a.TenantID, in)
+		if referenceErr != nil {
+			return referenceErr
 		}
+		var id uuid.UUID
+		e := tx.QueryRow(ctx, `INSERT INTO raw_materials(tenant_id,code,sage_item_code,name,supplier_id,base_unit_id,category_id,packing_id,
+ qty_per_kanban,minimum_stock,standard_unit_price,currency,description,active,created_by_user_id,updated_by_user_id)
+ VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$15) RETURNING id`,
+			a.TenantID, in.Code, in.SageItemCode, in.Name, in.SupplierID, in.BaseUnitID, in.CategoryID, in.PackingID,
+			in.QtyPerKanban, in.MinimumStock, in.StandardUnitPrice, currency, in.Description, activeValue(in.Active), a.UserID).Scan(&id)
 		if e != nil {
 			return rawMaterialWriteError(e)
 		}
@@ -257,7 +276,15 @@ func (s *SQLStore) CreateRawMaterial(ctx context.Context, a Actor, in RawMateria
 }
 func (s *SQLStore) UpdateRawMaterial(ctx context.Context, a Actor, id uuid.UUID, in RawMaterialInput) (item RawMaterial, err error) {
 	err = database.WithTenant(ctx, s.db, database.TenantContext{TenantID: a.TenantID, UserID: a.UserID}, func(tx database.TenantTx) error {
-		tag, e := tx.Exec(ctx, `UPDATE raw_materials r SET code=$3,sage_item_code=$4,name=$5,supplier_id=$6,base_unit_id=$7,qty_per_kanban=$8,minimum_stock=$9,standard_unit_price=$10,currency=s.currency,description=$11,active=$12,updated_by_user_id=$13,updated_at=now() FROM suppliers s WHERE r.tenant_id=$1 AND r.id=$2 AND s.tenant_id=$1 AND s.id=$6 AND s.active=true`, a.TenantID, id, in.Code, in.SageItemCode, in.Name, in.SupplierID, in.BaseUnitID, in.QtyPerKanban, in.MinimumStock, in.StandardUnitPrice, in.Description, activeValue(in.Active), a.UserID)
+		currency, referenceErr := activeRawMaterialReferences(ctx, tx, a.TenantID, in)
+		if referenceErr != nil {
+			return referenceErr
+		}
+		tag, e := tx.Exec(ctx, `UPDATE raw_materials SET code=$3,sage_item_code=$4,name=$5,supplier_id=$6,base_unit_id=$7,
+ category_id=$8,packing_id=$9,qty_per_kanban=$10,minimum_stock=$11,standard_unit_price=$12,currency=$13,description=$14,
+ active=$15,updated_by_user_id=$16,updated_at=now() WHERE tenant_id=$1 AND id=$2`,
+			a.TenantID, id, in.Code, in.SageItemCode, in.Name, in.SupplierID, in.BaseUnitID, in.CategoryID, in.PackingID,
+			in.QtyPerKanban, in.MinimumStock, in.StandardUnitPrice, currency, in.Description, activeValue(in.Active), a.UserID)
 		if e != nil {
 			return rawMaterialWriteError(e)
 		}
@@ -268,6 +295,33 @@ func (s *SQLStore) UpdateRawMaterial(ctx context.Context, a Actor, id uuid.UUID,
 		return e
 	})
 	return
+}
+
+func activeRawMaterialReferences(ctx context.Context, tx database.TenantTx, tenantID uuid.UUID, input RawMaterialInput) (string, error) {
+	var currency string
+	var unitActive, categoryActive, packingActive bool
+	err := tx.QueryRow(ctx, `SELECT
+ COALESCE((SELECT s.currency FROM suppliers s WHERE s.tenant_id=$1 AND s.id=$2 AND s.active=true),''),
+ EXISTS(SELECT 1 FROM units u WHERE u.tenant_id=$1 AND u.id=$3 AND u.active=true),
+ EXISTS(SELECT 1 FROM categories c WHERE c.tenant_id=$1 AND c.id=$4 AND c.active=true),
+ EXISTS(SELECT 1 FROM packings p WHERE p.tenant_id=$1 AND p.id=$5 AND p.active=true)`,
+		tenantID, input.SupplierID, input.BaseUnitID, input.CategoryID, input.PackingID).
+		Scan(&currency, &unitActive, &categoryActive, &packingActive)
+	if err != nil {
+		return "", err
+	}
+	switch {
+	case currency == "":
+		return "", ConflictError{Fields: FieldErrors{"supplierId": "Select an active supplier"}}
+	case !unitActive:
+		return "", ConflictError{Fields: FieldErrors{"baseUnitId": "Select an active base unit"}}
+	case !categoryActive:
+		return "", ConflictError{Fields: FieldErrors{"categoryId": "Select an active category"}}
+	case !packingActive:
+		return "", ConflictError{Fields: FieldErrors{"packingId": "Select an active packing"}}
+	default:
+		return currency, nil
+	}
 }
 func rawMaterialWriteError(err error) error {
 	var p *pgconn.PgError
