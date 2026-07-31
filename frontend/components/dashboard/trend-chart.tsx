@@ -2,7 +2,7 @@
 
 import { KeyboardEvent, useState } from 'react';
 import { DashboardSnapshot } from './dashboard-data';
-import { buildTrendGeometry } from './trend-chart-geometry';
+import { buildTrendGeometry, tooltipPlacement } from './trend-chart-geometry';
 
 const width = 720;
 const height = 220;
@@ -16,6 +16,7 @@ export function TrendChart({ data }: { data: DashboardSnapshot['trend'] }) {
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
   const geometry = buildTrendGeometry(data, width, height);
   const active = activeIndex === null ? null : geometry.points[activeIndex];
+  const activePlacement = activeIndex === null ? 'center' : tooltipPlacement(activeIndex, data.length);
   const hitWidth = geometry.points.length <= 1
     ? geometry.plot.right - geometry.plot.left
     : (geometry.plot.right - geometry.plot.left) / (geometry.points.length - 1);
@@ -83,14 +84,15 @@ export function TrendChart({ data }: { data: DashboardSnapshot['trend'] }) {
       {active ? <div
         className="trend-tooltip"
         role="status"
+        data-placement={activePlacement}
         style={{
           left: `${active.x / width * 100}%`,
-          top: `${Math.max(8, Math.min(active.orderedY, active.receivedY) / height * 100 - 3)}%`,
+          top: `${Math.max(48, Math.min(active.orderedY, active.receivedY) / height * 100 - 3)}%`,
         }}
       >
         <strong>{active.date}</strong>
-        <span><i className="legend-ordered" />Ordered <b>{active.ordered}</b></span>
-        <span><i className="legend-received" />Received <b>{active.received}</b></span>
+        <span className="trend-tooltip-row"><i className="legend-ordered" /><span>Ordered</span>{' '}<b>{active.ordered}</b></span>
+        <span className="trend-tooltip-row"><i className="legend-received" /><span>Received</span>{' '}<b>{active.received}</b></span>
       </div> : null}
     </div>
     <div className="chart-legend" aria-hidden="true"><span><i className="legend-ordered" />Ordered</span><span><i className="legend-received" />Received</span></div>

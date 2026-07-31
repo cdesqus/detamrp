@@ -157,18 +157,29 @@ func attachDocumentSummary(order *Order, summaries map[uuid.UUID]DocumentSummary
 }
 
 func (s *SQLStore) ListOrders(ctx context.Context, actor Actor, query ListQuery) (items []Order, total int, err error) {
+	var createdFrom, createdTo any
+	if !query.CreatedFrom.IsZero() {
+		createdFrom = query.CreatedFrom
+	}
+	if !query.CreatedToExclusive.IsZero() {
+		createdTo = query.CreatedToExclusive
+	}
 	err = database.WithTenant(ctx, s.db, tenantContext(actor), func(tx database.TenantTx) error {
 		if err := tx.QueryRow(ctx, `SELECT count(*) FROM purchase_orders p WHERE p.tenant_id=$1
  AND ($2::uuid='00000000-0000-0000-0000-000000000000' OR p.supplier_id=$2)
  AND ($3='' OR p.status=$3)
- AND ($4='' OR p.po_number ILIKE '%'||$4||'%' OR p.notes ILIKE '%'||$4||'%')`, actor.TenantID, query.SupplierID, query.Status, query.Search).Scan(&total); err != nil {
+ AND ($4='' OR p.po_number ILIKE '%'||$4||'%' OR p.notes ILIKE '%'||$4||'%')
+ AND ($5::timestamptz IS NULL OR p.created_at >= $5)
+ AND ($6::timestamptz IS NULL OR p.created_at < $6)`, actor.TenantID, query.SupplierID, query.Status, query.Search, createdFrom, createdTo).Scan(&total); err != nil {
 			return err
 		}
 		rows, err := tx.Query(ctx, orderSelect+` WHERE p.tenant_id=$1
  AND ($2::uuid='00000000-0000-0000-0000-000000000000' OR p.supplier_id=$2)
  AND ($3='' OR p.status=$3)
  AND ($4='' OR p.po_number ILIKE '%'||$4||'%' OR p.notes ILIKE '%'||$4||'%')
- ORDER BY p.order_date DESC,p.po_number DESC LIMIT $5 OFFSET $6`, actor.TenantID, query.SupplierID, query.Status, query.Search, query.Limit, query.Offset)
+ AND ($5::timestamptz IS NULL OR p.created_at >= $5)
+ AND ($6::timestamptz IS NULL OR p.created_at < $6)
+ ORDER BY p.created_at DESC,p.id DESC LIMIT $7 OFFSET $8`, actor.TenantID, query.SupplierID, query.Status, query.Search, createdFrom, createdTo, query.Limit, query.Offset)
 		if err != nil {
 			return err
 		}

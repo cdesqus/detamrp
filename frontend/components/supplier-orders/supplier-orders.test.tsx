@@ -65,7 +65,7 @@ describe('supplier order UI', () => {
     expect(documentTrigger.querySelector('svg.dropdown-chevron')).toBeInTheDocument();
     expect(actionTrigger).not.toHaveTextContent('⌄');
     expect(documentTrigger).not.toHaveTextContent('⌄');
-    expect(fetch).not.toHaveBeenCalledWith('/api/master-data/suppliers?limit=200', { credentials: 'include' });
+    expect(fetch).toHaveBeenCalledWith('/api/master-data/suppliers?limit=200', { credentials: 'include' });
     await user.click(screen.getByRole('button', { name: 'Create order' }));
     expect(push).toHaveBeenCalledWith('/supplier-orders/new');
   });
@@ -279,12 +279,13 @@ describe('supplier order UI', () => {
       const firstOrders = deferred<Response>();
       const secondOrders = deferred<Response>();
       let request = 0;
-      const fetchMock = vi.fn().mockImplementation(() => [firstOrders, secondOrders][request++]?.promise);
+      const fetchMock = vi.fn().mockImplementation((url: string) => url.startsWith('/api/master-data/suppliers')
+        ? Promise.resolve(response({ items: [] }))
+        : [firstOrders, secondOrders][request++]?.promise);
       vi.stubGlobal('fetch', fetchMock);
       render(<SupplierOrderIndex permissions={['po.view']} />);
-      await act(async () => { await vi.advanceTimersByTimeAsync(200); });
       fireEvent.change(screen.getByRole('searchbox', { name: 'Search Supplier Orders' }), { target: { value: 'new' } });
-      await act(async () => { await vi.advanceTimersByTimeAsync(200); });
+      fireEvent.click(screen.getByRole('button', { name: 'Apply filters' }));
       secondOrders.resolve(response({ items: [{ id: 'new', poNumber: 'PO-NEW', supplierId: 'supplier-1', orderDate: '2026-07-21', expectedDeliveryDate: '2026-07-22', status: 'DRAFT', totalAmount: '1', currency: 'IDR' }], total: 1 }));
       await act(async () => {});
       expect(screen.getByText('PO-NEW')).toBeInTheDocument();

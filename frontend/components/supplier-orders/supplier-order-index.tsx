@@ -9,6 +9,7 @@ import { pagedItems, TablePagination } from '../table-pagination';
 import { RowMenuPortal } from './row-menu-portal';
 import { useToast } from '../toast/toast-provider';
 import { Icon } from '../icons';
+import { emptyTransactionFilters, TransactionFilters, TransactionListFilters } from '../transaction-list-filters';
 
 type Order = { id: string; poNumber: string; supplierId: string; supplierName?: string; plantId?: string; plantCode?: string; plantName?: string; orderDate: string; expectedDeliveryDate: string; status: string; totalAmount?: string; currency: string; sagePurchaseOrderNumber?: string; createdBy?: { displayName?: string }; documents?: { deliveryNoteId: string; deliveryNoteNumber: string; kanbanCount: number; issuedAt: string } | null };
 type Props = { permissions?: string[] };
@@ -32,7 +33,9 @@ export function SupplierOrderIndex({ permissions }: Props = {}) {
   const canSubmit = permissionList.includes('po.submit');
   const [items, setItems] = useState<Order[]>([]);
   const [total, setTotal] = useState(0);
-  const [search, setSearch] = useState('');
+  const [filters, setFilters] = useState<TransactionFilters>(emptyTransactionFilters);
+  const [appliedFilters, setAppliedFilters] = useState<TransactionFilters>(emptyTransactionFilters);
+  const [suppliers, setSuppliers] = useState<{ id: string; code?: string; name: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [menuOrderId, setMenuOrderId] = useState('');
@@ -51,15 +54,26 @@ export function SupplierOrderIndex({ permissions }: Props = {}) {
     const request = ++requestSequence.current;
     setLoading(true); setError('');
     try {
-      const response = await fetch(`/api/purchase-orders?${new URLSearchParams({ search })}`, { credentials: 'include' });
+      const params = new URLSearchParams();
+      if (appliedFilters.search.trim()) params.set('search', appliedFilters.search.trim());
+      if (appliedFilters.supplierId) params.set('supplierId', appliedFilters.supplierId);
+      if (appliedFilters.createdFrom) params.set('createdFrom', appliedFilters.createdFrom);
+      if (appliedFilters.createdTo) params.set('createdTo', appliedFilters.createdTo);
+      const response = await fetch(`/api/purchase-orders?${params}`, { credentials: 'include' });
       if (!response.ok) throw new Error('Supplier orders could not be loaded');
       const data = await response.json() as { items: Order[]; total: number };
       if (request !== requestSequence.current) return;
       setItems(data.items ?? []); setTotal(data.total ?? 0); setPage(1);
     } catch (cause) { if (request === requestSequence.current) setError(cause instanceof Error ? cause.message : 'Supplier orders could not be loaded'); }
     finally { if (request === requestSequence.current) setLoading(false); }
-  }, [search]);
-  useEffect(() => { const timer = setTimeout(load, 200); return () => clearTimeout(timer); }, [load]);
+  }, [appliedFilters]);
+  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    fetch('/api/master-data/suppliers?limit=200', { credentials: 'include' })
+      .then(response => response.ok ? response.json() : Promise.reject())
+      .then((data: { items?: { id: string; code?: string; name: string }[] }) => setSuppliers(data.items ?? []))
+      .catch(() => setSuppliers([]));
+  }, []);
   const closeCancellation = useCallback(() => {
     if (cancelling) return;
     const trigger = cancellingOrder ? actionTriggers.current[cancellingOrder.id] : null;
@@ -143,7 +157,7 @@ export function SupplierOrderIndex({ permissions }: Props = {}) {
   const columnCount = canViewPrices ? 12 : 11;
   return <section className="module-index supplier-order-index">
     <div className="page-title-row"><div><h1>Supplier Orders</h1><p className="muted">Create, save, and submit purchase orders.</p></div><button className="primary-button" onClick={() => router.push('/supplier-orders/new')}>Create order</button></div>
-    <div className="table-toolbar"><input aria-label="Search Supplier Orders" type="search" value={search} onChange={event => setSearch(event.target.value)} placeholder="Search PO" /><div className="toolbar-actions"><span>{total} records</span></div></div>
+    <TransactionListFilters value={filters} suppliers={suppliers} recordCount={total} loading={loading} showSearch onChange={setFilters} onApply={() => setAppliedFilters(filters)} onReset={() => { setFilters(emptyTransactionFilters); setAppliedFilters(emptyTransactionFilters); }} />
     <div className="table-frame"><table><thead><tr><th className="transaction-number table-column-number">No.</th><th className="table-column-actions">Actions</th><th className="table-column-actions">Documents</th><th>Status</th><th>PO Number</th><th>Supplier</th><th>Plant</th><th>Order Date</th><th>Expected Date</th>{canViewPrices && <th>Total</th>}<th>Sage No.</th><th>Created By</th></tr></thead><tbody>
       {loading ? <tr><td colSpan={columnCount}><div className="table-empty" role="status">Loading...</div></td></tr> : error ? <tr><td colSpan={columnCount}><div className="table-empty" role="alert"><strong>Could not load supplier orders</strong><span>{error}</span><button className="table-action" onClick={load}>Retry</button></div></td></tr> : items.length === 0 ? <tr><td colSpan={columnCount}><div className="table-empty" role="status"><strong>No supplier orders yet</strong><span>Create order to start.</span></div></td></tr> : pagedItems(items, page, pageSize).map((order, index) => {
         const documentsAvailable = ['APPROVED', 'PARTIALLY_RECEIVED', 'FULLY_RECEIVED'].includes(order.status) && order.documents;

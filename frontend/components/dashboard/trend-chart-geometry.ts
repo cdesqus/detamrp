@@ -6,6 +6,14 @@ type PositionedTrendPoint = TrendPoint & {
   receivedY: number;
 };
 
+export function tooltipPlacement(index: number, count: number): 'start' | 'center' | 'end' {
+  if (count <= 1) return 'center';
+  const position = index / (count - 1);
+  if (position <= 0.2) return 'start';
+  if (position >= 0.8) return 'end';
+  return 'center';
+}
+
 function niceStep(value: number) {
   const exponent = Math.floor(Math.log10(Math.max(value, 1)));
   const magnitude = 10 ** exponent;

@@ -57,6 +57,7 @@ type Session struct {
 }
 type Receiving struct {
 	ID                 uuid.UUID `json:"id"`
+	SupplierID         uuid.UUID `json:"supplierId"`
 	ReceivingNumber    string    `json:"receivingNumber"`
 	DeliveryNoteNumber string    `json:"deliveryNoteNumber"`
 	PONumber           string    `json:"poNumber"`
@@ -70,6 +71,13 @@ type Receiving struct {
 	ReceivedNow        int       `json:"receivedNow"`
 	Outstanding        int       `json:"outstanding"`
 	Scans              []Scan    `json:"scans"`
+	CreatedAt          time.Time `json:"createdAt"`
+}
+
+type ListQuery struct {
+	SupplierID         uuid.UUID
+	CreatedFrom        time.Time
+	CreatedToExclusive time.Time
 }
 
 func normalizeKanban(value string) (string, error) {

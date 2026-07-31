@@ -9,13 +9,17 @@ it('loads and saves the company name', async () => {
     .mockResolvedValueOnce({ ok: true, json: async () => ({ companyName: 'PT Buyer Indonesia' }) });
   vi.stubGlobal('fetch', fetchMock);
   const user = userEvent.setup();
-  render(<CompanySettings />);
+  const { container } = render(<CompanySettings />);
 
   const input = await screen.findByRole('textbox', { name: 'Company Name' });
   expect(input).toHaveValue('Our Company');
   expect(screen.getByRole('group', { name: 'Company information' })).toContainElement(input);
   expect(screen.getByRole('group', { name: 'Company Logo' })).toBeInTheDocument();
   expect(screen.getByRole('group', { name: 'Login Background' })).toBeInTheDocument();
+  expect(screen.getByRole('form', { name: 'Company settings' })).toHaveClass('company-settings-shell');
+  expect(screen.getByRole('region', { name: 'Brand assets' })).toHaveClass('company-assets-section');
+  expect(screen.getByRole('group', { name: 'Company Logo' })).toHaveClass('company-asset-card');
+  expect(container.querySelector('footer.company-settings-footer')).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Save settings' })).toHaveClass('company-settings-save');
   await user.clear(input);
   await user.type(input, 'PT Buyer Indonesia');

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildTrendGeometry } from './trend-chart-geometry';
+import { buildTrendGeometry, tooltipPlacement } from './trend-chart-geometry';
 
 describe('buildTrendGeometry', () => {
   it('keeps one-day line and area paths finite and inside the plot', () => {
@@ -34,5 +34,11 @@ describe('buildTrendGeometry', () => {
 
     expect(result.maxValue).toBe(15);
     expect(result.yTicks).toEqual([0, 5, 10, 15]);
+  });
+
+  it('anchors edge tooltips inside the chart canvas', () => {
+    expect(tooltipPlacement(0, 30)).toBe('start');
+    expect(tooltipPlacement(14, 30)).toBe('center');
+    expect(tooltipPlacement(29, 30)).toBe('end');
   });
 });

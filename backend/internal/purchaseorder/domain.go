@@ -236,11 +236,13 @@ func (i *DecisionInput) NormalizeAndValidate(rejected bool) FieldErrors {
 }
 
 type ListQuery struct {
-	SupplierID uuid.UUID
-	Status     Status
-	Search     string
-	Limit      int
-	Offset     int
+	SupplierID         uuid.UUID
+	Status             Status
+	Search             string
+	CreatedFrom        time.Time
+	CreatedToExclusive time.Time
+	Limit              int
+	Offset             int
 }
 
 func (q *ListQuery) Normalize() {

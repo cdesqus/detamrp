@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 import { StatusDonut } from './status-donut';
@@ -28,6 +28,26 @@ describe('dashboard charts', () => {
     expect(screen.getByRole('status')).toHaveTextContent('Received 1');
     expect(container.querySelectorAll('path.trend-series-line')).toHaveLength(2);
     expect(container.querySelectorAll('path.trend-series-area')).toHaveLength(2);
+  });
+
+  it('keeps exact values paired with their series and anchors edge tooltips', async () => {
+    const user = userEvent.setup();
+    render(<TrendChart data={[
+      { date: '2026-07-28', ordered: 0, received: 20 },
+      { date: '2026-07-31', ordered: 21, received: 0 },
+    ]} />);
+
+    await user.tab();
+    let tooltip = screen.getByRole('status');
+    expect(tooltip).toHaveAttribute('data-placement', 'start');
+    expect(within(tooltip).getByText('Ordered').closest('.trend-tooltip-row')).toHaveTextContent('Ordered 0');
+    expect(within(tooltip).getByText('Received').closest('.trend-tooltip-row')).toHaveTextContent('Received 20');
+
+    await user.tab();
+    tooltip = screen.getByRole('status');
+    expect(tooltip).toHaveAttribute('data-placement', 'end');
+    expect(within(tooltip).getByText('Ordered').closest('.trend-tooltip-row')).toHaveTextContent('Ordered 21');
+    expect(within(tooltip).getByText('Received').closest('.trend-tooltip-row')).toHaveTextContent('Received 0');
   });
 
   it('renders status and supplier values as accessible summaries', () => {

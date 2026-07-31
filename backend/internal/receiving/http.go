@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -189,7 +190,11 @@ func RegisterRoutes(router *gin.Engine, store *Store, authn Authenticator) {
 	})
 	receivings := router.Group("/receivings", mw, rbac.RequirePermissions("receiving.view"))
 	receivings.GET("", func(c *gin.Context) {
-		x, e := store.List(c, actor(c))
+		query, ok := receivingListQuery(c)
+		if !ok {
+			return
+		}
+		x, e := store.List(c, actor(c), query)
 		if write(c, e) {
 			return
 		}
@@ -226,4 +231,40 @@ func RegisterRoutes(router *gin.Engine, store *Store, authn Authenticator) {
 		c.Header("Content-Disposition", `inline; filename="`+x.ReceivingNumber+`.pdf"`)
 		c.Data(http.StatusOK, "application/pdf", b)
 	})
+}
+
+func receivingListQuery(c *gin.Context) (ListQuery, bool) {
+	var query ListQuery
+	if raw := c.Query("supplierId"); raw != "" {
+		id, err := uuid.Parse(raw)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_filter", "fields": gin.H{"supplierId": "Invalid supplier"}})
+			return query, false
+		}
+		query.SupplierID = id
+	}
+	jakarta, _ := time.LoadLocation("Asia/Jakarta")
+	if jakarta == nil {
+		jakarta = time.FixedZone("Asia/Jakarta", 7*60*60)
+	}
+	for key, destination := range map[string]*time.Time{"createdFrom": &query.CreatedFrom, "createdTo": &query.CreatedToExclusive} {
+		raw := c.Query(key)
+		if raw == "" {
+			continue
+		}
+		value, err := time.ParseInLocation("2006-01-02", raw, jakarta)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_filter", "fields": gin.H{key: "Use YYYY-MM-DD"}})
+			return query, false
+		}
+		if key == "createdTo" {
+			value = value.AddDate(0, 0, 1)
+		}
+		*destination = value
+	}
+	if !query.CreatedFrom.IsZero() && !query.CreatedToExclusive.IsZero() && !query.CreatedFrom.Before(query.CreatedToExclusive) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_filter", "fields": gin.H{"createdTo": "Must be on or after createdFrom"}})
+		return query, false
+	}
+	return query, true
 }

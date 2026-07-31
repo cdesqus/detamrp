@@ -288,6 +288,30 @@ func listQuery(c *gin.Context) (ListQuery, bool) {
 			return query, false
 		}
 	}
+	jakarta, _ := time.LoadLocation("Asia/Jakarta")
+	if jakarta == nil {
+		jakarta = time.FixedZone("Asia/Jakarta", 7*60*60)
+	}
+	if raw := c.Query("createdFrom"); raw != "" {
+		value, err := time.ParseInLocation("2006-01-02", raw, jakarta)
+		if err != nil {
+			invalidFilter(c, "createdFrom", "Use YYYY-MM-DD")
+			return query, false
+		}
+		query.CreatedFrom = value
+	}
+	if raw := c.Query("createdTo"); raw != "" {
+		value, err := time.ParseInLocation("2006-01-02", raw, jakarta)
+		if err != nil {
+			invalidFilter(c, "createdTo", "Use YYYY-MM-DD")
+			return query, false
+		}
+		query.CreatedToExclusive = value.AddDate(0, 0, 1)
+	}
+	if !query.CreatedFrom.IsZero() && !query.CreatedToExclusive.IsZero() && !query.CreatedFrom.Before(query.CreatedToExclusive) {
+		invalidFilter(c, "createdTo", "Must be on or after createdFrom")
+		return query, false
+	}
 	if raw := c.Query("limit"); raw != "" {
 		value, err := strconv.Atoi(raw)
 		if err != nil {

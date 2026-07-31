@@ -317,16 +317,23 @@ func (s *Store) GetReceiving(ctx context.Context, a Actor, id uuid.UUID) (Receiv
 	})
 	return o, err
 }
-func (s *Store) List(ctx context.Context, a Actor) (items []Receiving, err error) {
+func (s *Store) List(ctx context.Context, a Actor, query ListQuery) (items []Receiving, err error) {
+	var createdFrom, createdTo any
+	if !query.CreatedFrom.IsZero() {
+		createdFrom = query.CreatedFrom
+	}
+	if !query.CreatedToExclusive.IsZero() {
+		createdTo = query.CreatedToExclusive
+	}
 	err = database.WithTenant(ctx, s.db, tenant(a), func(tx database.TenantTx) error {
-		rows, e := tx.Query(ctx, `SELECT r.id,r.receiving_number,dn.delivery_note_number,p.po_number,s.name,r.status,r.sage_receipt_number,r.receiving_date,r.planned_kanban,r.previously_received_kanban,r.received_now_kanban,r.outstanding_kanban,u.display_name FROM receivings r JOIN delivery_notes dn ON dn.tenant_id=r.tenant_id AND dn.id=r.delivery_note_id JOIN purchase_orders p ON p.tenant_id=r.tenant_id AND p.id=r.purchase_order_id JOIN suppliers s ON s.tenant_id=p.tenant_id AND s.id=p.supplier_id JOIN users u ON u.tenant_id=r.tenant_id AND u.id=r.completed_by_user_id WHERE r.tenant_id=$1 ORDER BY r.completed_at DESC`, a.TenantID)
+		rows, e := tx.Query(ctx, `SELECT r.id,p.supplier_id,r.receiving_number,dn.delivery_note_number,p.po_number,s.name,r.status,r.sage_receipt_number,r.receiving_date,r.planned_kanban,r.previously_received_kanban,r.received_now_kanban,r.outstanding_kanban,u.display_name,r.created_at FROM receivings r JOIN delivery_notes dn ON dn.tenant_id=r.tenant_id AND dn.id=r.delivery_note_id JOIN purchase_orders p ON p.tenant_id=r.tenant_id AND p.id=r.purchase_order_id JOIN suppliers s ON s.tenant_id=p.tenant_id AND s.id=p.supplier_id JOIN users u ON u.tenant_id=r.tenant_id AND u.id=r.completed_by_user_id WHERE r.tenant_id=$1 AND ($2::uuid='00000000-0000-0000-0000-000000000000' OR p.supplier_id=$2) AND ($3::timestamptz IS NULL OR r.created_at >= $3) AND ($4::timestamptz IS NULL OR r.created_at < $4) ORDER BY r.created_at DESC,r.id DESC`, a.TenantID, query.SupplierID, createdFrom, createdTo)
 		if e != nil {
 			return e
 		}
 		defer rows.Close()
 		for rows.Next() {
 			var o Receiving
-			if e = rows.Scan(&o.ID, &o.ReceivingNumber, &o.DeliveryNoteNumber, &o.PONumber, &o.SupplierName, &o.Status, &o.SageReceiptNumber, &o.ReceivingDate, &o.Planned, &o.PreviouslyReceived, &o.ReceivedNow, &o.Outstanding, &o.CreatedBy); e != nil {
+			if e = rows.Scan(&o.ID, &o.SupplierID, &o.ReceivingNumber, &o.DeliveryNoteNumber, &o.PONumber, &o.SupplierName, &o.Status, &o.SageReceiptNumber, &o.ReceivingDate, &o.Planned, &o.PreviouslyReceived, &o.ReceivedNow, &o.Outstanding, &o.CreatedBy, &o.CreatedAt); e != nil {
 				return e
 			}
 			items = append(items, o)
