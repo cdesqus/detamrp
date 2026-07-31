@@ -141,6 +141,17 @@ func TestLoadDocumentSummariesUsesOneQueryForAllOrders(t *testing.T) {
 	}
 }
 
+func TestAttachDocumentSummaryKeepsDocumentsAfterReceivingStarts(t *testing.T) {
+	summary := DocumentSummary{DeliveryNoteID: uuid.New(), DeliveryNoteNumber: "DN-1", KanbanCount: 5}
+	for _, status := range []Status{StatusApproved, StatusPartiallyReceived, StatusFullyReceived} {
+		order := Order{ID: uuid.New(), Status: status}
+		attachDocumentSummary(&order, map[uuid.UUID]DocumentSummary{order.ID: summary})
+		if order.Documents == nil || order.Documents.DeliveryNoteID != summary.DeliveryNoteID {
+			t.Errorf("status %s lost document summary", status)
+		}
+	}
+}
+
 func TestAttachDocumentSummaryRequiresApprovedStatus(t *testing.T) {
 	approvedID := uuid.New()
 	draftID := uuid.New()

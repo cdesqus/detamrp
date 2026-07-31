@@ -148,7 +148,7 @@ func loadDocumentSummaries(ctx context.Context, tx documentSummaryQuerier, tenan
 
 func attachDocumentSummary(order *Order, summaries map[uuid.UUID]DocumentSummary) {
 	order.Documents = nil
-	if order.Status != StatusApproved {
+	if order.Status != StatusApproved && order.Status != StatusPartiallyReceived && order.Status != StatusFullyReceived {
 		return
 	}
 	if summary, found := summaries[order.ID]; found {
