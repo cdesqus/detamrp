@@ -19,8 +19,8 @@ export function TransactionListFilters({ value, suppliers, recordCount, loading,
     </div>
     <div className="transaction-filter-actions">
       <span className="transaction-filter-count">{loading ? 'Refreshing…' : `${recordCount} records`}</span>
-      <button type="button" className="table-action" onClick={onReset}>Reset</button>
-      <button type="button" className="primary-button transaction-filter-apply" disabled={invalidRange} onClick={onApply}>Apply filters</button>
+      <button type="button" className="transaction-filter-button transaction-filter-reset" onClick={onReset}>Reset</button>
+      <button type="button" className="primary-button transaction-filter-button transaction-filter-apply" disabled={invalidRange} onClick={onApply}>Apply filters</button>
     </div>
     {invalidRange && <p className="transaction-filter-error" role="alert">Created to must be on or after Created from.</p>}
   </div>;

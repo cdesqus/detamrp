@@ -26,7 +26,7 @@ export function NotificationCenter({ items, total, open, onOpenChange }: { items
       {isOpen ? <div className="notification-popover" aria-live="polite">
         <div className="notification-heading"><strong>Notifications</strong><span>{unread} unread</span></div>
         <div className="notification-list">
-          {visibleItems.length === 0 ? <div className="notification-empty"><Icon name="bell" size={20} /><strong>Belum ada notifikasi</strong><span>Update approval dan operasional akan tampil di sini.</span></div> : visibleItems.map(item => <Link href={item.href} key={item.id}><strong>{item.title}</strong><span>{item.description}</span></Link>)}
+          {visibleItems.length === 0 ? <div className="notification-empty"><Icon name="bell" size={20} /><strong>No notifications yet</strong><span>Approval and operational updates will appear here.</span></div> : visibleItems.map(item => <Link href={item.href} key={item.id}><strong>{item.title}</strong><span>{item.description}</span></Link>)}
         </div>
         <Link className="notification-footer" href="/approvals">View all notifications{remaining > 0 ? ` (${remaining} more)` : ''}</Link>
       </div> : null}

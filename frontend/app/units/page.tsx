@@ -6,7 +6,7 @@ import { MasterDataCrud } from '../../components/master-data-crud';
 export default function Page() {
   return <AppShell title="Units"><MasterDataCrud
     title="Units"
-    description="Unit dasar untuk accounting dan stok fisik. Kanban bukan unit dasar."
+    description="Base units used for accounting and physical stock. Kanban is not a base unit."
     endpoint="/master-data/units"
     singular="unit"
     searchPlaceholder="Search unit code or name"

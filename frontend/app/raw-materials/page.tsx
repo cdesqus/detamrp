@@ -7,7 +7,7 @@ import { loadRawMaterialOptions } from './raw-material-options';
 export default function Page() {
   return <AppShell title="Raw Materials"><MasterDataCrud
     title="Raw Materials"
-    description="Definisi material, supplier, unit, category, packing, harga standar, dan isi per Kanban."
+    description="Material definitions, suppliers, units, categories, packaging, standard prices, and quantity per Kanban."
     endpoint="/master-data/raw-materials"
     singular="raw material"
     searchPlaceholder="Search item code, Sage code, or material"

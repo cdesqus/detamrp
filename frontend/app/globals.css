@@ -364,8 +364,11 @@ button:disabled { cursor: not-allowed; opacity: .48; }
 .transaction-filter-fields input, .transaction-filter-fields select { width: 100%; height: 34px; padding: 0 9px; color: #27272a; background: #fff; border: 1px solid #d4d4d8; border-radius: 6px; font: inherit; font-size: 11px; }
 .transaction-filter-fields input:focus, .transaction-filter-fields select:focus { border-color: #71717a; outline: none; box-shadow: 0 0 0 3px rgb(24 24 27 / 7%); }
 .transaction-filter-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; padding-bottom: 1px; }
-.transaction-filter-actions button { white-space: nowrap; }
-.transaction-filter-apply { min-height: 34px; }
+.transaction-filter-button { min-width: 92px; height: 36px; padding: 0 14px; white-space: nowrap; border-radius: 6px; font-size: 11px; font-weight: 650; line-height: 1; }
+.transaction-filter-reset { color: #3f3f46; background: #fff; border: 1px solid #d4d4d8; cursor: pointer; transition: background-color 140ms ease, border-color 140ms ease, box-shadow 140ms ease; }
+.transaction-filter-reset:hover { background: #fafafa; border-color: #a1a1aa; }
+.transaction-filter-reset:focus-visible { outline: none; box-shadow: 0 0 0 3px rgb(24 24 27 / 8%); }
+.transaction-filter-apply { min-width: 112px; }
 .transaction-filter-count { margin-right: 4px; color: #71717a; font-size: 10px; white-space: nowrap; }
 .transaction-filter-error { grid-column: 1 / -1; margin: -2px 0 0; color: #b91c1c; font-size: 10px; }
 @media (max-width: 1000px) { .transaction-filter-panel { grid-template-columns: 1fr; } .transaction-filter-actions { justify-content: flex-start; } }

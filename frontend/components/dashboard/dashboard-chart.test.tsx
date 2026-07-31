@@ -7,7 +7,7 @@ describe('DashboardChart', () => {
   it('shows an honest empty state when there are no transactions', () => {
     render(<DashboardChart title="PO & Receiving Trend" empty><svg aria-label="PO trend chart" /></DashboardChart>);
     expect(screen.getByRole('heading', { name: 'PO & Receiving Trend' })).toBeInTheDocument();
-    expect(screen.getByText('Belum ada data transaksi')).toBeInTheDocument();
+    expect(screen.getByText('No transaction data yet')).toBeInTheDocument();
     expect(screen.queryByLabelText('PO trend chart')).not.toBeInTheDocument();
   });
 

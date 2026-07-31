@@ -27,7 +27,7 @@ describe('NotificationCenter', () => {
 
     expect(screen.queryByTestId('notification-badge')).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Notifications' }));
-    expect(screen.getByText('Belum ada notifikasi')).toBeInTheDocument();
+    expect(screen.getByText('No notifications yet')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'View all notifications' })).toHaveAttribute('href', '/approvals');
   });
 

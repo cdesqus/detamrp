@@ -16,7 +16,7 @@ describe('MasterDataCrud drawer', () => {
     render(<MasterDataCrud title="Suppliers" description="Supplier master" endpoint="/master-data/suppliers" singular="supplier" searchPlaceholder="Search" initial={{ code: '', active: true }} columns={[{ key: 'code', label: 'Code' }]} fields={[{ key: 'code', label: 'Supplier ID', required: true }]} />);
 
     expect(await screen.findByRole('columnheader', { name: 'Action' })).toHaveClass('table-column-actions');
-    expect((await screen.findByText('Belum ada data')).closest('td')).toHaveClass('table-row-empty');
+    expect((await screen.findByText('No data yet')).closest('td')).toHaveClass('table-row-empty');
     await user.click(screen.getByRole('button', { name: 'New supplier' }));
 
     const dialog = screen.getByRole('dialog', { name: 'New supplier' });

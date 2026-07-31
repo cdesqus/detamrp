@@ -20,6 +20,7 @@ it('opens a role editor with permissions grouped by navigation module', async ()
   expect(screen.getByRole('dialog', { name: 'New role' })).toBeInTheDocument();
   expect(screen.getByText('Dashboard')).toBeInTheDocument();
   expect(screen.getByText('Data Master')).toBeInTheDocument();
+  expect(screen.getByText('Configure roles and module-level access permissions.')).toBeInTheDocument();
   expect(screen.getByText('Procurement')).toBeInTheDocument();
   expect(screen.getByLabelText('View dashboard')).toBeInTheDocument();
 });

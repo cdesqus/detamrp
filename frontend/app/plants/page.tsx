@@ -6,7 +6,7 @@ import { MasterDataCrud } from '../../components/master-data-crud';
 export default function Page() {
   return <AppShell title="Plants"><MasterDataCrud
     title="Plants"
-    description="Tujuan pengiriman yang dapat dipilih untuk satu Purchase Order."
+    description="Delivery destinations available for selection on Purchase Orders."
     endpoint="/master-data/plants"
     singular="plant"
     searchPlaceholder="Search plant code or name"

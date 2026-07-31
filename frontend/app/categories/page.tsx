@@ -6,7 +6,7 @@ import { MasterDataCrud } from '../../components/master-data-crud';
 export default function Page() {
   return <AppShell title="Categories"><MasterDataCrud
     title="Categories"
-    description="Kelompok material untuk klasifikasi pembelian dan dokumen."
+    description="Material groups used for purchasing classification and operational documents."
     endpoint="/master-data/categories"
     singular="category"
     searchPlaceholder="Search category code or name"

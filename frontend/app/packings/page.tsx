@@ -6,7 +6,7 @@ import { MasterDataCrud } from '../../components/master-data-crud';
 export default function Page() {
   return <AppShell title="Packings"><MasterDataCrud
     title="Packings"
-    description="Jenis kemasan material yang ditampilkan pada transaksi dan dokumen."
+    description="Material packaging types displayed across transactions and documents."
     endpoint="/master-data/packings"
     singular="packing"
     searchPlaceholder="Search packing code or name"

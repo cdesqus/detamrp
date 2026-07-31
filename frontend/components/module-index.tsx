@@ -24,7 +24,7 @@ export function ModuleIndex({ title, description, actionLabel, columns, searchPl
       <div className="table-frame">
         <table>
           <thead><tr>{columns.map(column => <th key={column}>{column}</th>)}</tr></thead>
-          <tbody><tr><td className="table-row-empty" colSpan={columns.length}><div className="table-empty"><strong>Belum ada data</strong><span>{emptyMessage}</span></div></td></tr></tbody>
+          <tbody><tr><td className="table-row-empty" colSpan={columns.length}><div className="table-empty"><strong>No data yet</strong><span>{emptyMessage}</span></div></td></tr></tbody>
         </table>
       </div>
     </section>
