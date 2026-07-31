@@ -97,6 +97,7 @@ describe('InventoryIndex', () => {
 
     expect(await screen.findByRole('dialog', { name: 'In-stock Kanban — RM-003' })).toBeInTheDocument();
     expect(screen.getByText('KB-001')).toBeInTheDocument();
+    expect(screen.getByText('KB-001').closest('table')?.parentElement).toHaveClass('table-detail');
     expect(screen.getByText('6,25 KG')).toBeInTheDocument();
     expect(fetchMock).toHaveBeenLastCalledWith('/api/inventory/stock/rm-stock/kanbans', { credentials: 'include' });
   });

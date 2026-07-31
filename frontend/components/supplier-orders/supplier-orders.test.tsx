@@ -59,7 +59,12 @@ describe('supplier order UI', () => {
     expect(await screen.findByText('PO-202607-00001')).toBeInTheDocument();
     expect(screen.getByText('SUP-01 â€” PT Prima')).toBeInTheDocument();
     expect(screen.getByText('IDR 12')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Actions for PO-202607-00001' })).toBeInTheDocument();
+    const actionTrigger = screen.getByRole('button', { name: 'Actions for PO-202607-00001' });
+    const documentTrigger = screen.getByRole('button', { name: 'Documents for PO-202607-00001' });
+    expect(actionTrigger.querySelector('svg.dropdown-chevron')).toBeInTheDocument();
+    expect(documentTrigger.querySelector('svg.dropdown-chevron')).toBeInTheDocument();
+    expect(actionTrigger).not.toHaveTextContent('⌄');
+    expect(documentTrigger).not.toHaveTextContent('⌄');
     expect(fetch).not.toHaveBeenCalledWith('/api/master-data/suppliers?limit=200', { credentials: 'include' });
     await user.click(screen.getByRole('button', { name: 'Create order' }));
     expect(push).toHaveBeenCalledWith('/supplier-orders/new');
@@ -90,9 +95,9 @@ describe('supplier order UI', () => {
     const approvedEmptyRow = screen.getByText('PO-APPROVED-EMPTY').closest('tr')!;
     const oversizedRow = screen.getByText('PO-APPROVED-OVERSIZED').closest('tr')!;
     const pendingRow = screen.getByText('PO-PENDING').closest('tr')!;
-    expect(screen.getByRole('columnheader', { name: 'No.' })).toBeInTheDocument();
-    expect(screen.getByRole('columnheader', { name: 'Actions' })).toBeInTheDocument();
-    expect(screen.getByRole('columnheader', { name: 'Documents' })).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: 'No.' })).toHaveClass('table-column-number');
+    expect(screen.getByRole('columnheader', { name: 'Actions' })).toHaveClass('table-column-actions');
+    expect(screen.getByRole('columnheader', { name: 'Documents' })).toHaveClass('table-column-actions');
 
     await user.click(within(approvedRow).getByRole('button', { name: 'Documents for PO-APPROVED' }));
     const poLink = screen.getByRole('link', { name: 'Purchase Order PDF for PO-APPROVED' });

@@ -213,7 +213,7 @@ export function AppShell({ title, children }: { title: string; children: ReactNo
                 }
                 setNotificationOpen(false);
                 setUserMenuOpen(true);
-              }}><span className="user-menu-trigger-name">{user.displayName}</span><span aria-hidden="true">⌄</span></button>
+              }}><span className="user-menu-trigger-name">{user.displayName}</span><Icon name="chevron-down" size={14} className="dropdown-chevron" /></button>
               {userMenuOpen ? <div className="user-menu-popover" role="dialog" aria-label="User menu">
                 <div className="user-menu-identity"><strong>{user.displayName}</strong><span>@{user.username}</span></div>
                 <button ref={logoutButtonRef} className="user-menu-logout" onClick={() => void logout()} disabled={logoutPending}>{logoutPending ? 'Logging out...' : 'Logout'}</button>

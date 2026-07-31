@@ -111,7 +111,7 @@ export function OutgoingSession({ id }: { id: string }) {
           </span>
         </div>
       </div>
-      <div className="table-frame">
+      <div className="table-frame table-detail">
         <table>
           <thead>
             <tr>

@@ -49,6 +49,7 @@ it('loads, filters, paginates, and opens structured change details', async () =>
   await user.click(screen.getByRole('button', { name: 'View details for PO-202607-00004' }));
   expect(screen.getByRole('dialog', { name: 'Activity details' })).toBeInTheDocument();
   expect(screen.getByText('PENDING_APPROVAL')).toBeInTheDocument();
+  expect(screen.getByText('PENDING_APPROVAL').closest('table')?.parentElement).toHaveClass('table-detail');
   expect(screen.getAllByText('APPROVED').length).toBeGreaterThan(0);
 });
 

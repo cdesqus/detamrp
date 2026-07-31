@@ -13,7 +13,10 @@ beforeEach(()=>{push.mockReset();global.fetch=vi.fn(async(input,init)=>{
 }) as typeof fetch});
 
 it('creates a focused receiving session by exact DN without suggestions',async()=>{
- render(<ReceivingIndex/>); fireEvent.click(await screen.findByRole('button',{name:'Create receiving'}));
+ render(<ReceivingIndex/>);
+ expect(await screen.findByRole('columnheader',{name:'No.'})).toHaveClass('table-column-number');
+ expect(screen.getByRole('columnheader',{name:'Document'})).toHaveClass('table-column-actions');
+ fireEvent.click(screen.getByRole('button',{name:'Create receiving'}));
  const dn=await screen.findByLabelText('Scan or Type DN Number');
  expect(dn).not.toHaveAttribute('list');
  fireEvent.change(dn,{target:{value:' dn-1 '}});
@@ -39,5 +42,6 @@ it('renders an empty receiving scan session when scans is null',async()=>{
  global.fetch=vi.fn(async()=>new Response(JSON.stringify({id:'session-1',receivingNumber:'RCV-1',deliveryNoteNumber:'DN-1',poNumber:'PO-1',supplierName:'PT A',status:'ACTIVE',planned:2,previouslyReceived:0,outstanding:2,scans:null}),{status:200})) as typeof fetch;
  render(<ReceivingSession id="session-1"/>);
  expect(await screen.findByText('Ready to scan.')).toBeInTheDocument();
+ expect(screen.getByText('Ready to scan.').closest('td')).toHaveClass('table-row-empty');
  expect(screen.getByLabelText('Scan or Type Kanban ID')).toBeEnabled();
 });

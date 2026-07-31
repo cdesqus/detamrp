@@ -13,6 +13,10 @@ it('loads and saves the company name', async () => {
 
   const input = await screen.findByRole('textbox', { name: 'Company Name' });
   expect(input).toHaveValue('Our Company');
+  expect(screen.getByRole('group', { name: 'Company information' })).toContainElement(input);
+  expect(screen.getByRole('group', { name: 'Company Logo' })).toBeInTheDocument();
+  expect(screen.getByRole('group', { name: 'Login Background' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Save settings' })).toHaveClass('company-settings-save');
   await user.clear(input);
   await user.type(input, 'PT Buyer Indonesia');
   await user.click(screen.getByRole('button', { name: 'Save settings' }));

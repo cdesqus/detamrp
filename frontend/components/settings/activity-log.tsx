@@ -188,7 +188,7 @@ export function ActivityLog() {
             <div><dt>Target Type</dt><dd>{label(selected.targetType)}</dd></div>
             <div><dt>Target ID</dt><dd>{selected.targetId ?? '—'}</dd></div>
           </dl>
-          <div className="activity-change-table">
+          <div className="activity-change-table table-detail">
             <table>
               <thead><tr><th>Field</th><th>Before</th><th>After</th></tr></thead>
               <tbody>{detailChanges.length === 0

@@ -8,6 +8,7 @@ import { formatMoney } from '../../lib/number-format';
 import { pagedItems, TablePagination } from '../table-pagination';
 import { RowMenuPortal } from './row-menu-portal';
 import { useToast } from '../toast/toast-provider';
+import { Icon } from '../icons';
 
 type Order = { id: string; poNumber: string; supplierId: string; supplierName?: string; plantId?: string; plantCode?: string; plantName?: string; orderDate: string; expectedDeliveryDate: string; status: string; totalAmount?: string; currency: string; sagePurchaseOrderNumber?: string; createdBy?: { displayName?: string }; documents?: { deliveryNoteId: string; deliveryNoteNumber: string; kanbanCount: number; issuedAt: string } | null };
 type Props = { permissions?: string[] };
@@ -143,7 +144,7 @@ export function SupplierOrderIndex({ permissions }: Props = {}) {
   return <section className="module-index supplier-order-index">
     <div className="page-title-row"><div><h1>Supplier Orders</h1><p className="muted">Create, save, and submit purchase orders.</p></div><button className="primary-button" onClick={() => router.push('/supplier-orders/new')}>Create order</button></div>
     <div className="table-toolbar"><input aria-label="Search Supplier Orders" type="search" value={search} onChange={event => setSearch(event.target.value)} placeholder="Search PO" /><div className="toolbar-actions"><span>{total} records</span></div></div>
-    <div className="table-frame"><table><thead><tr><th className="transaction-number">No.</th><th>Actions</th><th>Documents</th><th>Status</th><th>PO Number</th><th>Supplier</th><th>Plant</th><th>Order Date</th><th>Expected Date</th>{canViewPrices && <th>Total</th>}<th>Sage No.</th><th>Created By</th></tr></thead><tbody>
+    <div className="table-frame"><table><thead><tr><th className="transaction-number table-column-number">No.</th><th className="table-column-actions">Actions</th><th className="table-column-actions">Documents</th><th>Status</th><th>PO Number</th><th>Supplier</th><th>Plant</th><th>Order Date</th><th>Expected Date</th>{canViewPrices && <th>Total</th>}<th>Sage No.</th><th>Created By</th></tr></thead><tbody>
       {loading ? <tr><td colSpan={columnCount}><div className="table-empty" role="status">Loading...</div></td></tr> : error ? <tr><td colSpan={columnCount}><div className="table-empty" role="alert"><strong>Could not load supplier orders</strong><span>{error}</span><button className="table-action" onClick={load}>Retry</button></div></td></tr> : items.length === 0 ? <tr><td colSpan={columnCount}><div className="table-empty" role="status"><strong>No supplier orders yet</strong><span>Create order to start.</span></div></td></tr> : pagedItems(items, page, pageSize).map((order, index) => {
         const documentsAvailable = ['APPROVED', 'PARTIALLY_RECEIVED', 'FULLY_RECEIVED'].includes(order.status) && order.documents;
         const labelsAvailable = documentsAvailable ? documentsAvailable.kanbanCount <= maxKanbanLabelsPerPDF : false;
@@ -153,7 +154,7 @@ export function SupplierOrderIndex({ permissions }: Props = {}) {
         return <tr key={order.id}>
           <td className="transaction-number">{(page - 1) * pageSize + index + 1}</td>
           <td><div className="supplier-order-row-menu">
-            <button ref={element => { actionTriggers.current[order.id] = element; }} className="compact-menu-trigger" aria-label={`Actions for ${order.poNumber}`} aria-expanded={menuOrderId === order.id} onClick={() => { setDocsOrderId(''); setMenuOrderId(value => value === order.id ? '' : order.id); }}>Action <span>⌄</span></button>
+            <button ref={element => { actionTriggers.current[order.id] = element; }} className="compact-menu-trigger" aria-label={`Actions for ${order.poNumber}`} aria-expanded={menuOrderId === order.id} onClick={() => { setDocsOrderId(''); setMenuOrderId(value => value === order.id ? '' : order.id); }}><span>Action</span><Icon name="chevron-down" size={14} className="dropdown-chevron" /></button>
             {menuOrderId === order.id && actionTrigger && <RowMenuPortal trigger={actionTrigger} ariaLabel={`Actions for ${order.poNumber}`} onClose={restoreFocus => { setMenuOrderId(''); if (restoreFocus) actionTriggers.current[order.id]?.focus(); }}><div id={`draft-actions-${order.id}`} data-testid={`draft-actions-${order.id}`} className="row-menu-list">
               <button onClick={() => router.push(`/supplier-orders/${order.id}`)}>Open Detail</button>
               {canEditDraft && draft ? <button onClick={() => router.push(`/supplier-orders/${order.id}`)}>Edit Order</button> : <UnavailableMenuItem>Edit Order</UnavailableMenuItem>}
@@ -164,7 +165,7 @@ export function SupplierOrderIndex({ permissions }: Props = {}) {
             </div></RowMenuPortal>}
           </div></td>
           <td><div className="supplier-order-row-menu">
-            <button ref={element => { docsTriggers.current[order.id] = element; }} className="compact-menu-trigger" aria-label={`Documents for ${order.poNumber}`} aria-expanded={docsOrderId === order.id} onClick={() => { setMenuOrderId(''); setDocsOrderId(value => value === order.id ? '' : order.id); }}>Docs <span>⌄</span></button>
+            <button ref={element => { docsTriggers.current[order.id] = element; }} className="compact-menu-trigger" aria-label={`Documents for ${order.poNumber}`} aria-expanded={docsOrderId === order.id} onClick={() => { setMenuOrderId(''); setDocsOrderId(value => value === order.id ? '' : order.id); }}><span>Docs</span><Icon name="chevron-down" size={14} className="dropdown-chevron" /></button>
             {docsOrderId === order.id && docsTrigger && <RowMenuPortal trigger={docsTrigger} ariaLabel={`Documents for ${order.poNumber}`} onClose={restoreFocus => { setDocsOrderId(''); if (restoreFocus) docsTriggers.current[order.id]?.focus(); }}><div className="row-menu-list">
               <DocumentLink href={`/api/purchase-orders/${order.id}/documents/po.pdf`} label={`Purchase Order PDF for ${order.poNumber}`} />
               {documentsAvailable ? <DocumentLink href={`/api/purchase-orders/${order.id}/documents/delivery-note.pdf`} label={`Delivery Note PDF for ${order.poNumber}`} /> : <UnavailableMenuItem>Delivery Note PDF</UnavailableMenuItem>}

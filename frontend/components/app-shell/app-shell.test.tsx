@@ -124,9 +124,13 @@ describe('AppShell', () => {
     render(<AppShell title="Dashboard"><div>content</div></AppShell>);
 
     await screen.findByText('Administrator');
-    await user.click(screen.getByRole('button', { name: 'Open user menu' }));
+    const trigger = screen.getByRole('button', { name: 'Open user menu' });
+    expect(trigger.querySelector('svg.dropdown-chevron')).toBeInTheDocument();
+    expect(trigger).not.toHaveTextContent('⌄');
+    await user.click(trigger);
 
     expect(screen.getByRole('dialog', { name: 'User menu' })).toBeInTheDocument();
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
     expect(screen.getByText('@admin')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Logout' })).toHaveFocus();
   });

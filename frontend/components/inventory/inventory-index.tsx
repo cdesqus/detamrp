@@ -193,7 +193,7 @@ export function InventoryIndex() {
             <div><strong>In-stock Kanban — {detailTitle}</strong><span>Kanban lots currently available for outgoing.</span></div>
             <button aria-label="Close Kanban detail" onClick={closeDetail}>×</button>
           </div>
-          <div className="inventory-detail-body">
+          <div className="inventory-detail-body table-detail">
             {detailLoading ? <div className="table-empty">Loading in-stock Kanban...</div> :
               detailError ? <p className="form-error" role="alert">{detailError}</p> :
                 <table>

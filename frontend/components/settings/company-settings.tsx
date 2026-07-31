@@ -64,12 +64,22 @@ export function CompanySettings() {
   return <section className="settings-page">
     <div className="page-title-row"><div><h1>Company Settings</h1><p className="muted">Identity used in DETA MRP, login, Purchase Orders, Delivery Notes, and Kanban Cards.</p></div></div>
     <form className="settings-card company-branding-card" onSubmit={save}>
-      <div className="crud-fields"><label>Company Name<input aria-label="Company Name" value={config.companyName} maxLength={160} required onChange={event => setConfig(value => ({ ...value, companyName: event.target.value }))} /></label></div>
-      <BrandingField title="Company Logo" hint="PNG, JPEG, or WebP — max 2 MB" kind="logo" url={config.logoUrl} file={files.logo} busy={busy} onFile={file => choose('logo', file)} onUpload={upload} onReset={reset} />
-      <BrandingField title="Login Background" hint="PNG, JPEG, or WebP — max 5 MB" kind="login-background" url={config.loginBackgroundUrl} file={files['login-background']} busy={busy} onFile={file => choose('login-background', file)} onUpload={upload} onReset={reset} />
-      {error && <p className="form-error" role="alert">{error}</p>}
-      {message && <p role="status">{message}</p>}
-      <div className="settings-actions"><button className="primary-button" disabled={busy}>{busy ? 'Saving...' : 'Save settings'}</button></div>
+      <fieldset className="company-settings-section company-identity-section">
+        <legend>Company information</legend>
+        <p>Set the legal or trading name shown across operational documents.</p>
+        <label>Company Name<input aria-label="Company Name" value={config.companyName} maxLength={160} required onChange={event => setConfig(value => ({ ...value, companyName: event.target.value }))} /></label>
+      </fieldset>
+      <section className="company-settings-section brand-assets-section" aria-labelledby="brand-assets-title">
+        <div className="company-settings-section-heading"><div><h2 id="brand-assets-title">Brand assets</h2><p>Keep visual identity consistent across the application and generated documents.</p></div></div>
+        <div className="branding-grid">
+          <BrandingField title="Company Logo" hint="PNG, JPEG, or WebP — max 2 MB" kind="logo" url={config.logoUrl} file={files.logo} busy={busy} onFile={file => choose('logo', file)} onUpload={upload} onReset={reset} />
+          <BrandingField title="Login Background" hint="PNG, JPEG, or WebP — max 5 MB" kind="login-background" url={config.loginBackgroundUrl} file={files['login-background']} busy={busy} onFile={file => choose('login-background', file)} onUpload={upload} onReset={reset} />
+        </div>
+      </section>
+      <div className="company-settings-actions">
+        <div className="company-settings-feedback">{error && <p className="form-error" role="alert">{error}</p>}{message && <p role="status">{message}</p>}</div>
+        <button className="primary-button company-settings-save" disabled={busy}>{busy ? 'Saving...' : 'Save settings'}</button>
+      </div>
     </form>
   </section>;
 }
@@ -86,11 +96,12 @@ function BrandingField({ title, hint, kind, url, file, busy, onFile, onUpload, o
   }, [file]);
   const preview = localPreview ?? (url ? `/api${url}` : null);
   const action = kind === 'logo' ? 'logo' : 'background';
-  return <div className="branding-field">
+  return <fieldset className="branding-field">
+    <legend>{title}</legend>
     <div className={`branding-preview ${kind}`}>{preview ? <img src={preview} alt={`${title} preview`} /> : <span>DETA MRP</span>}</div>
-    <div className="branding-controls"><strong>{title}</strong><small>{hint}</small>
+    <div className="branding-controls"><small>{hint}</small>
       <input aria-label={title} type="file" accept="image/png,image/jpeg,image/webp" onChange={event => onFile(event.target.files?.[0])} />
-      <div><button type="button" disabled={busy || !file} onClick={() => onUpload(kind)}>Upload {action}</button>{url && <button type="button" disabled={busy} onClick={() => onReset(kind)}>Reset {action}</button>}</div>
+      <div className="branding-control-actions"><button type="button" className="branding-upload-button" disabled={busy || !file} onClick={() => onUpload(kind)}>Upload {action}</button>{url && <button type="button" disabled={busy} onClick={() => onReset(kind)}>Reset {action}</button>}</div>
     </div>
-  </div>;
+  </fieldset>;
 }
