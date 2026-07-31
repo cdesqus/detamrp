@@ -36,6 +36,10 @@ func TestReceivingErrorCodeUsesStableBusinessCodes(t *testing.T) {
 		{ErrDeliveryNoteInvalid, "DN_INVALID"},
 		{ErrDeliveryNoteFullyReceived, "DN_FULLY_RECEIVED"},
 		{ErrDeliveryNoteInProgress, "DN_IN_PROGRESS"},
+		{ErrKanbanAlreadyScanned, "KANBAN_ALREADY_SCANNED"},
+		{ErrKanbanAlreadyReceived, "KANBAN_ALREADY_RECEIVED"},
+		{ErrKanbanWrongDeliveryNote, "KANBAN_WRONG_DN"},
+		{ErrKanbanNotFound, "KANBAN_NOT_FOUND"},
 	}
 	for _, tc := range tests {
 		if got := receivingErrorCode(tc.err); got != tc.code {

@@ -164,17 +164,33 @@ func (s *Store) Scan(ctx context.Context, a Actor, sessionID uuid.UUID, value st
 		if status != SessionActive {
 			return ErrConflict
 		}
-		var lot uuid.UUID
-		e := tx.QueryRow(ctx, `SELECT kl.id FROM kanban_lots kl JOIN delivery_note_lines dnl ON dnl.tenant_id=kl.tenant_id AND dnl.id=kl.delivery_note_line_id WHERE kl.tenant_id=$1 AND kl.kanban_id=$2 AND dnl.delivery_note_id=$3 AND kl.status='ISSUED' FOR UPDATE OF kl`, a.TenantID, kanban, dn).Scan(&lot)
+		var lot, lotDeliveryNote uuid.UUID
+		var lotStatus string
+		var alreadyScanned bool
+		e := tx.QueryRow(ctx, `SELECT kl.id,kl.status,dnl.delivery_note_id,
+ EXISTS(SELECT 1 FROM receiving_session_scans rss WHERE rss.tenant_id=kl.tenant_id AND rss.session_id=$3 AND rss.kanban_lot_id=kl.id)
+ FROM kanban_lots kl
+ JOIN delivery_note_lines dnl ON dnl.tenant_id=kl.tenant_id AND dnl.id=kl.delivery_note_line_id
+ WHERE kl.tenant_id=$1 AND kl.kanban_id=$2
+ FOR UPDATE OF kl`, a.TenantID, kanban, sessionID).Scan(&lot, &lotStatus, &lotDeliveryNote, &alreadyScanned)
 		if errors.Is(e, pgx.ErrNoRows) {
-			return ErrValidation
+			return ErrKanbanNotFound
 		}
 		if e != nil {
 			return e
 		}
+		if lotDeliveryNote != dn {
+			return ErrKanbanWrongDeliveryNote
+		}
+		if lotStatus != "ISSUED" {
+			return ErrKanbanAlreadyReceived
+		}
+		if alreadyScanned {
+			return ErrKanbanAlreadyScanned
+		}
 		_, e = tx.Exec(ctx, `INSERT INTO receiving_session_scans(tenant_id,session_id,kanban_lot_id,scanned_by_user_id) VALUES($1,$2,$3,$4)`, a.TenantID, sessionID, lot, a.UserID)
 		if e != nil {
-			return ErrConflict
+			return ErrKanbanAlreadyScanned
 		}
 		_, e = tx.Exec(ctx, `UPDATE receiving_sessions SET updated_at=now(),updated_by_user_id=$3,expires_at=now()+interval '30 minutes' WHERE tenant_id=$1 AND id=$2`, a.TenantID, sessionID, a.UserID)
 		return e

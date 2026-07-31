@@ -629,7 +629,7 @@ func TestLoadKanbanLabelDocumentUsesStableTenantFilteredOrdering(t *testing.T) {
 		t.Fatalf("load labels: %v", err)
 	}
 	if len(document.Labels) != 3 || document.CompanyName != "Buyer PT" || document.PlantCode != "PLT-01" ||
-		document.Labels[0].CategoryCode != "CAT" || document.Labels[0].PackingCode != "BOX" || !document.OrderDate.Equal(orderDate) {
+		document.Labels[0].CategoryCode != "CAT" || document.Labels[0].PackingCode != "BOX" || document.Labels[0].Status != "IN_STOCK" || !document.OrderDate.Equal(orderDate) {
 		t.Fatalf("labels = %#v", document.Labels)
 	}
 	got := [][2]int{
@@ -649,6 +649,24 @@ func TestLoadKanbanLabelDocumentUsesStableTenantFilteredOrdering(t *testing.T) {
 		t.Fatalf("labels query is not bounded to max+1: %s args=%#v", labelsCall.sql, labelsCall.args)
 	}
 	assertTenantQueries(t, query.calls, tenantID, orderID)
+}
+
+func TestKanbanCaptionLinesPutIDBeforeCardPosition(t *testing.T) {
+	label := KanbanLabel{KanbanID: "KB-202607-000073", CardNumber: 1, CardTotal: 5}
+	if got := kanbanCaptionLines(label); !reflect.DeepEqual(got, []string{"KB-202607-000073", "Card 1/5"}) {
+		t.Fatalf("caption lines = %#v", got)
+	}
+}
+
+func TestReceivedKanbanLabelPDFContainsReceivedStamp(t *testing.T) {
+	document, err := RenderKanbanLabelsPDF(KanbanLabelDocument{Labels: []KanbanLabel{{
+		KanbanID: "KB-1", RawMaterialCode: "RM-1", RawMaterialName: "Material", BaseUnitCode: "PC",
+		CardNumber: 1, CardTotal: 1, Status: "IN_STOCK",
+	}}})
+	if err != nil {
+		t.Fatalf("render labels: %v", err)
+	}
+	assertEmbeddedUnicodeText(t, "received label", document, "RECEIVED")
 }
 
 func TestLoadDeliveryNoteDocumentDistinguishesOtherTenantFromUnavailableDocument(t *testing.T) {
@@ -745,6 +763,7 @@ func setKanbanLabel(dest []any, id, code, name, quantity, unit string, cardNumbe
 	*dest[5].(*string), *dest[6].(*string) = "CAT", "Category"
 	*dest[7].(*string), *dest[8].(*string) = "BOX", "Box"
 	*dest[9].(*int), *dest[10].(*int) = cardNumber, cardTotal
+	*dest[11].(*string) = "IN_STOCK"
 }
 
 func setDocumentHeader(dest []any, orderDate, expectedDate time.Time, status Status) {

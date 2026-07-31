@@ -85,6 +85,7 @@ type KanbanLabel struct {
 	PackingName     string
 	CardNumber      int
 	CardTotal       int
+	Status          string
 }
 
 const maxKanbanLabelsPerPDF = 1_000
@@ -723,12 +724,20 @@ func writeKanbanCard(pdf *fpdf.Fpdf, document KanbanLabelDocument, label KanbanL
 	imageName := "kanban-qr-" + strconv.Itoa(index)
 	pdf.RegisterImageOptionsReader(imageName, fpdf.ImageOptions{ImageType: "PNG", ReadDpi: false}, bytes.NewReader(qrPNG))
 	pdf.ImageOptions(imageName, qrX, qrY, qrSize, qrSize, false, fpdf.ImageOptions{ImageType: "PNG", ReadDpi: false}, 0, "")
-	pdf.SetXY(qrX, qrY+qrSize+1)
-	pdf.SetFont(pdfFontFamily, "B", 8)
-	pdf.CellFormat(qrSize, 5, formatCardCaption(label), "", 0, "C", false, 0, "")
-	pdf.SetXY(qrX-1, qrY+qrSize+7)
+	captionLines := kanbanCaptionLines(label)
+	pdf.SetXY(qrX-1, qrY+qrSize+1)
 	pdf.SetFont(pdfFontFamily, "", 5.5)
-	pdf.CellFormat(qrSize+2, 4, label.KanbanID, "", 0, "C", false, 0, "")
+	pdf.CellFormat(qrSize+2, 4, captionLines[0], "", 0, "C", false, 0, "")
+	pdf.SetXY(qrX, qrY+qrSize+6)
+	pdf.SetFont(pdfFontFamily, "B", 8)
+	pdf.CellFormat(qrSize, 5, captionLines[1], "", 0, "C", false, 0, "")
+	if label.Status != "" && label.Status != "ISSUED" {
+		pdf.SetTextColor(190, 24, 24)
+		pdf.SetXY(qrX, qrY+qrSize+12)
+		pdf.SetFont(pdfFontFamily, "B", 7)
+		pdf.CellFormat(qrSize, 5, "RECEIVED", "1", 0, "C", false, 0, "")
+		setDocumentInk(pdf)
+	}
 
 	detailX := x + 42
 	detailWidth := width - 46
@@ -782,6 +791,10 @@ func formatCardPosition(label KanbanLabel) string {
 
 func formatCardCaption(label KanbanLabel) string {
 	return "Card " + formatCardPosition(label)
+}
+
+func kanbanCaptionLines(label KanbanLabel) []string {
+	return []string{label.KanbanID, formatCardCaption(label)}
 }
 
 func drawKanbanCell(pdf *fpdf.Fpdf, x, y, width, height float64) {
@@ -1022,7 +1035,7 @@ func loadKanbanLabelDocument(ctx context.Context, query documentQuerier, actor A
 	}
 	rows, err := query.Query(ctx, `SELECT kl.kanban_id,pol.raw_material_code_snapshot,pol.raw_material_name_snapshot,
  kl.quantity,pol.base_unit_code_snapshot,pol.category_code_snapshot,pol.category_name_snapshot,
- pol.packing_code_snapshot,pol.packing_name_snapshot,kl.lot_number,pol.total_kanban::integer
+ pol.packing_code_snapshot,pol.packing_name_snapshot,kl.lot_number,pol.total_kanban::integer,kl.status
  FROM delivery_note_lines dnl
  JOIN purchase_order_lines pol ON pol.tenant_id=dnl.tenant_id AND pol.purchase_order_id=dnl.purchase_order_id AND pol.id=dnl.purchase_order_line_id
  JOIN kanban_lots kl ON kl.tenant_id=dnl.tenant_id AND kl.delivery_note_line_id=dnl.id AND kl.purchase_order_line_id=pol.id
@@ -1037,7 +1050,7 @@ func loadKanbanLabelDocument(ctx context.Context, query documentQuerier, actor A
 		var label KanbanLabel
 		if err := rows.Scan(&label.KanbanID, &label.RawMaterialCode, &label.RawMaterialName, &label.Quantity, &label.BaseUnitCode,
 			&label.CategoryCode, &label.CategoryName, &label.PackingCode, &label.PackingName,
-			&label.CardNumber, &label.CardTotal); err != nil {
+			&label.CardNumber, &label.CardTotal, &label.Status); err != nil {
 			return KanbanLabelDocument{}, err
 		}
 		document.Labels = append(document.Labels, label)

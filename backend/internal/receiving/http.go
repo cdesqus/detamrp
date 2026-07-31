@@ -57,6 +57,12 @@ func RegisterRoutes(router *gin.Engine, store *Store, authn Authenticator) {
 			code = 404
 		} else if errors.Is(e, ErrConflict) {
 			code = 409
+		} else if errors.Is(e, ErrKanbanAlreadyScanned) || errors.Is(e, ErrKanbanAlreadyReceived) {
+			code = 409
+		} else if errors.Is(e, ErrKanbanWrongDeliveryNote) {
+			code = 422
+		} else if errors.Is(e, ErrKanbanNotFound) {
+			code = 404
 		} else if errors.Is(e, ErrValidation) {
 			code = 422
 		}

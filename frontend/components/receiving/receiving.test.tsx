@@ -45,3 +45,30 @@ it('renders an empty receiving scan session when scans is null',async()=>{
  expect(screen.getByText('Ready to scan.').closest('td')).toHaveClass('table-row-empty');
  expect(screen.getByLabelText('Scan or Type Kanban ID')).toBeEnabled();
 });
+
+it.each([
+ ['KANBAN_ALREADY_SCANNED','Kanban has already been scanned in this session.'],
+ ['KANBAN_ALREADY_RECEIVED','Kanban has already been received.'],
+ ['KANBAN_WRONG_DN','Kanban does not belong to this Delivery Note.'],
+ ['KANBAN_NOT_FOUND','Kanban ID was not found.'],
+])('shows explicit scanner feedback for %s and preserves the scanned value',async(code,message)=>{
+ const session={id:'session-1',receivingNumber:'RCV-1',deliveryNoteNumber:'DN-1',poNumber:'PO-1',supplierName:'PT A',status:'ACTIVE',planned:2,previouslyReceived:0,outstanding:2,scans:[]};
+ global.fetch=vi.fn(async(input,init)=>init?.method==='POST'
+  ?new Response(JSON.stringify({code}),{status:409,headers:{'Content-Type':'application/json'}})
+  :new Response(JSON.stringify(session),{status:200,headers:{'Content-Type':'application/json'}})) as typeof fetch;
+ render(<ReceivingSession id="session-1"/>);
+ const input=await screen.findByLabelText('Scan or Type Kanban ID');
+ fireEvent.change(input,{target:{value:'KB-1'}});fireEvent.submit(input.closest('form')!);
+ expect(await screen.findByRole('alert')).toHaveTextContent(message);
+ expect(input).toHaveValue('KB-1');
+});
+
+it('confirms a successful scan and clears the scanned value',async()=>{
+ const session={id:'session-1',receivingNumber:'RCV-1',deliveryNoteNumber:'DN-1',poNumber:'PO-1',supplierName:'PT A',status:'ACTIVE',planned:2,previouslyReceived:0,outstanding:2,scans:[]};
+ global.fetch=vi.fn(async(input,init)=>new Response(JSON.stringify(init?.method==='POST'?{...session,scans:[{kanbanLotId:'lot-1',kanbanId:'KB-1',materialCode:'RM-1',materialName:'Material',unit:'PC',quantity:'1'}]}:session),{status:200,headers:{'Content-Type':'application/json'}})) as typeof fetch;
+ render(<ReceivingSession id="session-1"/>);
+ const input=await screen.findByLabelText('Scan or Type Kanban ID');
+ fireEvent.change(input,{target:{value:'KB-1'}});fireEvent.submit(input.closest('form')!);
+ expect(await screen.findByRole('status')).toHaveTextContent('Kanban scanned successfully.');
+ expect(input).toHaveValue('');
+});

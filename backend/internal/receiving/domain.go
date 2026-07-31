@@ -15,6 +15,10 @@ var ErrValidation = errors.New("validation failed")
 var ErrDeliveryNoteInvalid = errors.New("Delivery Note is invalid.")
 var ErrDeliveryNoteFullyReceived = errors.New("Delivery Note has already been fully received.")
 var ErrDeliveryNoteInProgress = errors.New("Delivery Note is currently being received in another session.")
+var ErrKanbanAlreadyScanned = errors.New("Kanban has already been scanned in this session.")
+var ErrKanbanAlreadyReceived = errors.New("Kanban has already been received.")
+var ErrKanbanWrongDeliveryNote = errors.New("Kanban does not belong to this Delivery Note.")
+var ErrKanbanNotFound = errors.New("Kanban ID was not found.")
 
 const SessionActive = "ACTIVE"
 const SessionPaused = "PAUSED"
@@ -104,6 +108,14 @@ func receivingErrorCode(err error) string {
 		return "DN_FULLY_RECEIVED"
 	case errors.Is(err, ErrDeliveryNoteInProgress):
 		return "DN_IN_PROGRESS"
+	case errors.Is(err, ErrKanbanAlreadyScanned):
+		return "KANBAN_ALREADY_SCANNED"
+	case errors.Is(err, ErrKanbanAlreadyReceived):
+		return "KANBAN_ALREADY_RECEIVED"
+	case errors.Is(err, ErrKanbanWrongDeliveryNote):
+		return "KANBAN_WRONG_DN"
+	case errors.Is(err, ErrKanbanNotFound):
+		return "KANBAN_NOT_FOUND"
 	default:
 		return ""
 	}
