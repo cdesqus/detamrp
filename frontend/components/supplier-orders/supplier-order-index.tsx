@@ -160,8 +160,9 @@ export function SupplierOrderIndex({ permissions }: Props = {}) {
     <TransactionListFilters value={filters} suppliers={suppliers} recordCount={total} loading={loading} showSearch onChange={setFilters} onApply={() => setAppliedFilters(filters)} onReset={() => { setFilters(emptyTransactionFilters); setAppliedFilters(emptyTransactionFilters); }} />
     <div className="table-frame"><table><thead><tr><th className="transaction-number table-column-number">No.</th><th className="table-column-actions">Actions</th><th className="table-column-actions">Documents</th><th>Status</th><th>PO Number</th><th>Supplier</th><th>Plant</th><th>Order Date</th><th>Expected Date</th>{canViewPrices && <th>Total</th>}<th>Sage No.</th><th>Created By</th></tr></thead><tbody>
       {loading ? <tr><td colSpan={columnCount}><div className="table-empty" role="status">Loading...</div></td></tr> : error ? <tr><td colSpan={columnCount}><div className="table-empty" role="alert"><strong>Could not load supplier orders</strong><span>{error}</span><button className="table-action" onClick={load}>Retry</button></div></td></tr> : items.length === 0 ? <tr><td colSpan={columnCount}><div className="table-empty" role="status"><strong>No supplier orders yet</strong><span>Create order to start.</span></div></td></tr> : pagedItems(items, page, pageSize).map((order, index) => {
-        const documentsAvailable = ['APPROVED', 'PARTIALLY_RECEIVED', 'FULLY_RECEIVED'].includes(order.status) && order.documents;
-        const labelsAvailable = documentsAvailable ? documentsAvailable.kanbanCount <= maxKanbanLabelsPerPDF : false;
+        const downloadableDocumentsAvailable = ['APPROVED', 'PARTIALLY_RECEIVED', 'FULLY_RECEIVED'].includes(order.status);
+        const sendDocumentsAvailable = downloadableDocumentsAvailable && Boolean(order.documents);
+        const labelsAvailable = downloadableDocumentsAvailable && (!order.documents || order.documents.kanbanCount <= maxKanbanLabelsPerPDF);
         const draft = order.status === 'DRAFT';
         const actionTrigger = actionTriggers.current[order.id];
         const docsTrigger = docsTriggers.current[order.id];
@@ -173,7 +174,7 @@ export function SupplierOrderIndex({ permissions }: Props = {}) {
               <button onClick={() => router.push(`/supplier-orders/${order.id}`)}>Open Detail</button>
               {canEditDraft && draft ? <button onClick={() => router.push(`/supplier-orders/${order.id}`)}>Edit Order</button> : <UnavailableMenuItem>Edit Order</UnavailableMenuItem>}
               {canSubmit && (draft || order.status === 'PENDING_APPROVAL') ? <button onClick={() => void sendApproval(order)}>{draft ? 'Send to Approval' : 'Resend Approval Email'}</button> : <UnavailableMenuItem>Send to Approval</UnavailableMenuItem>}
-              {documentsAvailable ? <button onClick={() => void sendSupplier(order)}>Send to Supplier</button> : <UnavailableMenuItem>Send to Supplier</UnavailableMenuItem>}
+              {sendDocumentsAvailable ? <button onClick={() => void sendSupplier(order)}>Send to Supplier</button> : <UnavailableMenuItem>Send to Supplier</UnavailableMenuItem>}
               <div className="row-menu-divider" />
               {canEditDraft && draft ? <button className="row-menu-danger" onClick={() => openCancellation(order)}>Cancel Draft</button> : <UnavailableMenuItem>Cancel Draft</UnavailableMenuItem>}
             </div></RowMenuPortal>}
@@ -182,7 +183,7 @@ export function SupplierOrderIndex({ permissions }: Props = {}) {
             <button ref={element => { docsTriggers.current[order.id] = element; }} className="compact-menu-trigger" aria-label={`Documents for ${order.poNumber}`} aria-expanded={docsOrderId === order.id} onClick={() => { setMenuOrderId(''); setDocsOrderId(value => value === order.id ? '' : order.id); }}><span>Docs</span><Icon name="chevron-down" size={14} className="dropdown-chevron" /></button>
             {docsOrderId === order.id && docsTrigger && <RowMenuPortal trigger={docsTrigger} ariaLabel={`Documents for ${order.poNumber}`} onClose={restoreFocus => { setDocsOrderId(''); if (restoreFocus) docsTriggers.current[order.id]?.focus(); }}><div className="row-menu-list">
               <DocumentLink href={`/api/purchase-orders/${order.id}/documents/po.pdf`} label={`Purchase Order PDF for ${order.poNumber}`} />
-              {documentsAvailable ? <DocumentLink href={`/api/purchase-orders/${order.id}/documents/delivery-note.pdf`} label={`Delivery Note PDF for ${order.poNumber}`} /> : <UnavailableMenuItem>Delivery Note PDF</UnavailableMenuItem>}
+              {downloadableDocumentsAvailable ? <DocumentLink href={`/api/purchase-orders/${order.id}/documents/delivery-note.pdf`} label={`Delivery Note PDF for ${order.poNumber}`} /> : <UnavailableMenuItem>Delivery Note PDF</UnavailableMenuItem>}
               {labelsAvailable ? <DocumentLink href={`/api/purchase-orders/${order.id}/documents/kanban-labels.pdf`} label={`Kanban Labels PDF for ${order.poNumber}`} /> : <UnavailableMenuItem>Kanban Labels PDF</UnavailableMenuItem>}
             </div></RowMenuPortal>}
           </div></td>

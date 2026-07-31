@@ -115,13 +115,32 @@ describe('supplier order UI', () => {
 
     await user.click(within(approvedEmptyRow).getByRole('button', { name: 'Documents for PO-APPROVED-EMPTY' }));
     expect(screen.getByRole('link', { name: 'Purchase Order PDF for PO-APPROVED-EMPTY' })).toHaveAttribute('target', '_blank');
-    expect(screen.getByText('Delivery Note PDF')).toHaveAttribute('aria-disabled', 'true');
+    expect(screen.getByRole('link', { name: 'Delivery Note PDF for PO-APPROVED-EMPTY' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Kanban Labels PDF for PO-APPROVED-EMPTY' })).toBeInTheDocument();
     await user.click(within(oversizedRow).getByRole('button', { name: 'Documents for PO-APPROVED-OVERSIZED' }));
     expect(screen.getByRole('link', { name: 'Delivery Note PDF for PO-APPROVED-OVERSIZED' })).toBeInTheDocument();
     expect(screen.getByText('Kanban Labels PDF')).toHaveAttribute('aria-disabled', 'true');
     await user.click(within(pendingRow).getByRole('button', { name: 'Documents for PO-PENDING' }));
     expect(screen.getByRole('link', { name: 'Purchase Order PDF for PO-PENDING' })).toHaveAttribute('target', '_blank');
     expect(screen.getByText('Delivery Note PDF')).toHaveAttribute('aria-disabled', 'true');
+  });
+
+  it.each([
+    ['PARTIALLY_RECEIVED', 'PO-PARTIAL'],
+    ['FULLY_RECEIVED', 'PO-FULL'],
+  ])('keeps Delivery Note and Kanban Labels active for historical %s orders without a summary', async (status, poNumber) => {
+    const user = userEvent.setup();
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response({ items: [{
+      id: poNumber.toLowerCase(), poNumber, supplierId: 'supplier-1', supplierName: 'PT Prima',
+      orderDate: '2026-07-21', expectedDeliveryDate: '2026-07-25', status, currency: 'IDR', documents: null,
+    }], total: 1 })));
+
+    render(<SupplierOrderIndex permissions={['po.view']} />);
+    const row = (await screen.findByText(poNumber)).closest('tr')!;
+    await user.click(within(row).getByRole('button', { name: `Documents for ${poNumber}` }));
+
+    expect(screen.getByRole('link', { name: `Delivery Note PDF for ${poNumber}` })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: `Kanban Labels PDF for ${poNumber}` })).toBeInTheDocument();
   });
 
   it('cancels drafts from a compact row menu once and reloads the list', async () => {
