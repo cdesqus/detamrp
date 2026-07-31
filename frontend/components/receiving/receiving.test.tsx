@@ -18,6 +18,9 @@ it('creates a focused receiving session by exact DN without suggestions',async()
  expect(screen.getByRole('columnheader',{name:'Document'})).toHaveClass('table-column-actions');
  fireEvent.click(screen.getByRole('button',{name:'Create receiving'}));
  const dn=await screen.findByLabelText('Scan or Type DN Number');
+ expect(screen.getByRole('dialog',{name:'New receiving'})).toHaveClass('receiving-create-modal');
+ expect(dn.closest('label')).toHaveClass('receiving-scan-field');
+ expect(screen.getByText('Scan the Delivery Note barcode or enter the number, then press Enter.')).toBeInTheDocument();
  expect(dn).not.toHaveAttribute('list');
  fireEvent.change(dn,{target:{value:' dn-1 '}});
  fireEvent.submit(dn.closest('form')!);
