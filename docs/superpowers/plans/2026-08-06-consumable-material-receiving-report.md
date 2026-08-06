@@ -40,7 +40,17 @@
 - [ ] Run targeted purchase-order tests.
 - [ ] Commit `feat: separate supplier order material types`.
 
-## Task 3: Add Consumable Receiving Flow
+## Task 3: Add the direct-quantity receiving schema
+
+**Files:** `database/migrations/020_consumable_receiving.sql`, `backend/internal/receiving/domain.go`, `store.go`, migration/integration tests.
+
+- [ ] Add a receiving-session line table that supports either `kanban_lot_id` or direct `raw_material_id + received_quantity`, with a check constraint requiring exactly one mode.
+- [ ] Add nullable `kanban_lot_id` and material/quantity snapshots to receiving ledger/summary tables where required; preserve all existing Kanban constraints.
+- [ ] Add indexes and row-level security for the new tenant-scoped rows.
+- [ ] Write migration tests against a clean PostgreSQL database and verify both modes can coexist in the schema.
+- [ ] Commit `feat: add direct consumable receiving schema`.
+
+## Task 4: Add Consumable Receiving Flow
 
 **Files:** `backend/internal/receiving/domain.go`, `service.go`, `store.go`, `http.go`, receiving tests, `frontend/components/receiving/` files.
 
@@ -48,11 +58,11 @@
 - [ ] Load material type from the Raw Material snapshot when validating receiving lines.
 - [ ] Keep Delivery Note required for both flows; bypass Kanban validation only for Consumables.
 - [ ] Record both flows in the same inventory ledger, leaving Kanban ID null for Consumables.
-- [ ] Add conditional UI copy and inputs based on material type.
+- [ ] Add conditional UI copy and quantity inputs based on material type.
 - [ ] Run targeted receiving/inventory tests.
 - [ ] Commit `feat: receive consumables without kanban`.
 
-## Task 4: Inventory Material-Type Filters
+## Task 5: Inventory Material-Type Filters
 
 **Files:** `backend/internal/inventory/domain.go`, `store.go`, `http.go`, inventory tests, `frontend/components/inventory/inventory-index.tsx`, and tests.
 
@@ -62,7 +72,7 @@
 - [ ] Run targeted inventory tests and frontend tests.
 - [ ] Commit `feat: filter inventory by material type`.
 
-## Task 5: Inventory Movement Report API and PDF
+## Task 6: Inventory Movement Report API and PDF
 
 **Files:** `backend/internal/report/domain.go`, `store.go`, `http.go`, `pdf.go`, report tests, `frontend/components/report-index.tsx`, and tests.
 
@@ -73,7 +83,7 @@
 - [ ] Add PDF download link and test non-empty output/watermark-free finalized report.
 - [ ] Commit `feat: add inventory movement PDF report`.
 
-## Task 6: Inventory Movement Excel Export
+## Task 7: Inventory Movement Excel Export
 
 **Files:** `backend/internal/report/excel.go`, `excel_test.go`, `http.go`, and report frontend/tests.
 
@@ -83,9 +93,9 @@
 - [ ] Run report tests and frontend tests.
 - [ ] Commit `feat: add inventory movement excel export`.
 
-## Task 7: End-to-End Verification
+## Task 8: End-to-End Verification
 
-- [ ] Run migration 018 on a clean PostgreSQL database.
+- [ ] Run migrations 019 and 020 on a clean PostgreSQL database.
 - [ ] Run backend targeted suites serially with the configured Go cache and frontend typecheck/Vitest.
 - [ ] Verify Standard Material receiving rejects missing Kanban.
 - [ ] Verify Consumable receiving succeeds without Kanban and appears in inventory movement PDF/Excel.
