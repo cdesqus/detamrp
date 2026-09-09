@@ -42,6 +42,21 @@ type Delivery struct {
 	DeliveryDate string              `json:"deliveryDate"`
 	Lines        []DeliveryLineInput `json:"lines"`
 }
+type DeliveryDetail struct {
+	ID               uuid.UUID            `json:"id"`
+	Number           string               `json:"number"`
+	SalesOrderNumber string               `json:"salesOrderNumber"`
+	CustomerName     string               `json:"customerName"`
+	DeliveryDate     string               `json:"deliveryDate"`
+	Notes            string               `json:"notes"`
+	Lines            []DeliveryDetailLine `json:"lines"`
+}
+type DeliveryDetailLine struct {
+	ItemCode string          `json:"itemCode"`
+	ItemName string          `json:"itemName"`
+	Unit     string          `json:"unit"`
+	Quantity decimal.Decimal `json:"quantity"`
+}
 type DeliverySummary struct {
 	ID            uuid.UUID       `json:"id"`
 	Number        string          `json:"number"`

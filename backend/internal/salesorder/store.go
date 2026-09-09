@@ -178,6 +178,28 @@ func (s *Store) ListDeliveries(ctx context.Context, a Actor, orderID uuid.UUID) 
 	})
 	return
 }
+func (s *Store) GetDelivery(ctx context.Context, a Actor, id uuid.UUID) (out DeliveryDetail, err error) {
+	err = database.WithTenant(ctx, s.db, tenant(a), func(tx database.TenantTx) error {
+		e := tx.QueryRow(ctx, `SELECT d.id,d.delivery_number,s.sales_order_number,c.name,d.delivery_date::text,d.notes FROM customer_deliveries d JOIN sales_orders s ON s.tenant_id=d.tenant_id AND s.id=d.sales_order_id JOIN customers c ON c.tenant_id=s.tenant_id AND c.id=s.customer_id WHERE d.tenant_id=$1 AND d.id=$2`, a.TenantID, id).Scan(&out.ID, &out.Number, &out.SalesOrderNumber, &out.CustomerName, &out.DeliveryDate, &out.Notes)
+		if e != nil {
+			return e
+		}
+		rows, e := tx.Query(ctx, `SELECT l.item_code_snapshot,l.item_name_snapshot,l.base_unit_snapshot,dl.quantity FROM customer_delivery_lines dl JOIN sales_order_lines l ON l.tenant_id=dl.tenant_id AND l.id=dl.sales_order_line_id WHERE dl.tenant_id=$1 AND dl.customer_delivery_id=$2`, a.TenantID, id)
+		if e != nil {
+			return e
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var line DeliveryDetailLine
+			if e = rows.Scan(&line.ItemCode, &line.ItemName, &line.Unit, &line.Quantity); e != nil {
+				return e
+			}
+			out.Lines = append(out.Lines, line)
+		}
+		return rows.Err()
+	})
+	return
+}
 func (s *Store) Submit(ctx context.Context, a Actor, id uuid.UUID) (order Order, err error) {
 	err = database.WithTenant(ctx, s.db, tenant(a), func(tx database.TenantTx) error {
 		var status string

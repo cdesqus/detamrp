@@ -13,6 +13,7 @@ type Repository interface {
 	List(context.Context, Actor) ([]Order, error)
 	CreateDelivery(context.Context, Actor, uuid.UUID, DeliveryInput) (Delivery, error)
 	ListDeliveries(context.Context, Actor, uuid.UUID) ([]DeliverySummary, error)
+	GetDelivery(context.Context, Actor, uuid.UUID) (DeliveryDetail, error)
 }
 type Service struct{ repo Repository }
 
@@ -38,4 +39,7 @@ func (s *Service) CreateDelivery(ctx context.Context, a Actor, orderID uuid.UUID
 }
 func (s *Service) ListDeliveries(ctx context.Context, a Actor, orderID uuid.UUID) ([]DeliverySummary, error) {
 	return s.repo.ListDeliveries(ctx, a, orderID)
+}
+func (s *Service) GetDelivery(ctx context.Context, a Actor, id uuid.UUID) (DeliveryDetail, error) {
+	return s.repo.GetDelivery(ctx, a, id)
 }
