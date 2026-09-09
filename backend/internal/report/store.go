@@ -62,9 +62,9 @@ func (s *Store) ListMaterialRequirements(ctx context.Context, actor Actor) (item
 	})
 	return
 }
-func (s *Store) ListCustomerDeliveries(ctx context.Context, actor Actor) (items []CustomerDeliveryRow, err error) {
+func (s *Store) ListCustomerDeliveries(ctx context.Context, actor Actor, filter Filter) (items []CustomerDeliveryRow, err error) {
 	err = database.WithTenant(ctx, s.db, database.TenantContext{TenantID: actor.TenantID, UserID: actor.UserID}, func(tx database.TenantTx) error {
-		rows, e := tx.Query(ctx, `SELECT d.id,d.delivery_number,d.delivery_date,s.sales_order_number,c.name,l.item_code_snapshot,l.item_name_snapshot,dl.quantity,l.base_unit_snapshot FROM customer_deliveries d JOIN sales_orders s ON s.tenant_id=d.tenant_id AND s.id=d.sales_order_id JOIN customers c ON c.tenant_id=s.tenant_id AND c.id=s.customer_id JOIN customer_delivery_lines dl ON dl.tenant_id=d.tenant_id AND dl.customer_delivery_id=d.id JOIN sales_order_lines l ON l.tenant_id=dl.tenant_id AND l.id=dl.sales_order_line_id WHERE d.tenant_id=$1 ORDER BY d.delivery_date DESC,d.delivery_number`, actor.TenantID)
+		rows, e := tx.Query(ctx, `SELECT d.id,d.delivery_number,d.delivery_date,s.sales_order_number,c.name,l.item_code_snapshot,l.item_name_snapshot,dl.quantity,l.base_unit_snapshot FROM customer_deliveries d JOIN sales_orders s ON s.tenant_id=d.tenant_id AND s.id=d.sales_order_id JOIN customers c ON c.tenant_id=s.tenant_id AND c.id=s.customer_id JOIN customer_delivery_lines dl ON dl.tenant_id=d.tenant_id AND dl.customer_delivery_id=d.id JOIN sales_order_lines l ON l.tenant_id=dl.tenant_id AND l.id=dl.sales_order_line_id WHERE d.tenant_id=$1 AND ($2::date IS NULL OR d.delivery_date >= $2) AND ($3::date IS NULL OR d.delivery_date <= $3) AND ($4='' OR d.delivery_number ILIKE '%'||$4||'%' OR s.sales_order_number ILIKE '%'||$4||'%' OR c.name ILIKE '%'||$4||'%' OR l.item_code_snapshot ILIKE '%'||$4||'%') ORDER BY d.delivery_date DESC,d.delivery_number`, actor.TenantID, filter.FromDate, filter.ToDate, strings.TrimSpace(filter.Search))
 		if e != nil {
 			return e
 		}

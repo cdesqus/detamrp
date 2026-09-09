@@ -3,6 +3,7 @@ package report
 import (
 	"context"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"order-stock/backend/internal/auth"
@@ -76,7 +77,25 @@ func RegisterRoutes(router *gin.Engine, store *Store, authn Authenticator) {
 	})
 	group.GET("/customer-deliveries", rbac.RequirePermissions("customer_delivery.view"), func(c *gin.Context) {
 		actor, _ := c.Get("report_actor")
-		items, err := store.ListCustomerDeliveries(c, actor.(Actor))
+		filter := Filter{Search: c.Query("search")}
+		for _, field := range []struct {
+			key    string
+			target **time.Time
+		}{{"fromDate", &filter.FromDate}, {"toDate", &filter.ToDate}} {
+			if value := c.Query(field.key); value != "" {
+				date, e := time.Parse("2006-01-02", value)
+				if e != nil {
+					c.JSON(422, gin.H{"fields": gin.H{field.key: "Use YYYY-MM-DD"}})
+					return
+				}
+				*field.target = &date
+			}
+		}
+		if filter.FromDate != nil && filter.ToDate != nil && filter.FromDate.After(*filter.ToDate) {
+			c.JSON(422, gin.H{"fields": gin.H{"toDate": "To Date must be on or after From Date"}})
+			return
+		}
+		items, err := store.ListCustomerDeliveries(c, actor.(Actor), filter)
 		if err != nil {
 			c.JSON(500, gin.H{"error": "report could not be loaded"})
 			return
