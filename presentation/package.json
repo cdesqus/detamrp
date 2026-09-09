@@ -1,0 +1,13 @@
+{
+  "name": "deta-mrp-presentation",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "generate": "node src/generate.mjs",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "adm-zip": "0.5.16",
+    "pptxgenjs": "4.0.1"
+  }
+}

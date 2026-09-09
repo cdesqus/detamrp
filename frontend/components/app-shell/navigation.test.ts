@@ -18,6 +18,16 @@ describe('navigation permission policy', () => {
     expect(requiredPermissionForPath('/categories')).toBe('master_data.view');
     expect(requiredPermissionForPath('/packings')).toBe('master_data.view');
     expect(requiredPermissionForPath('/plants')).toBe('master_data.view');
+    expect(requiredPermissionForPath('/customers')).toBe('customer.view');
+    expect(requiredPermissionForPath('/finished-goods')).toBe('fg.view');
+  });
+
+  it('shows each sales master only with its own view permission', () => {
+    const customers = visibleNavigationGroups(['customer.view'])
+      .flatMap(group => group.items)
+      .flatMap(item => 'items' in item ? item.items : [item]);
+    expect(customers.map(item => item.href)).toContain('/customers');
+    expect(customers.map(item => item.href)).not.toContain('/finished-goods');
   });
 
   it('groups Unit Category and Packing below Measurements', () => {

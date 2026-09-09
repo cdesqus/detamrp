@@ -2,14 +2,84 @@ package report
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 
+	"github.com/shopspring/decimal"
+	"order-stock/backend/internal/bom"
 	"order-stock/backend/internal/database"
 )
 
 type Store struct{ db *database.Pool }
 
 func NewStore(db *database.Pool) *Store { return &Store{db: db} }
+
+func (s *Store) ListMaterialRequirements(ctx context.Context, actor Actor) (items []MaterialRequirementRow, err error) {
+	err = database.WithTenant(ctx, s.db, database.TenantContext{TenantID: actor.TenantID, UserID: actor.UserID}, func(tx database.TenantTx) error {
+		rows, e := tx.Query(ctx, `SELECT l.quantity,l.calculation_snapshot FROM sales_order_lines l JOIN sales_orders s ON s.tenant_id=l.tenant_id AND s.id=l.sales_order_id WHERE l.tenant_id=$1 AND s.status='SUBMITTED'`, actor.TenantID)
+		if e != nil {
+			return e
+		}
+		defer rows.Close()
+		grouped := map[string]*MaterialRequirementRow{}
+		for rows.Next() {
+			var quantity decimal.Decimal
+			var raw []byte
+			if e = rows.Scan(&quantity, &raw); e != nil {
+				return e
+			}
+			var snapshot bom.Snapshot
+			if e = json.Unmarshal(raw, &snapshot); e != nil {
+				return e
+			}
+			result, e := bom.Calculate(snapshot, quantity)
+			if e != nil {
+				return e
+			}
+			for _, material := range result.Materials {
+				row := grouped[material.ItemID]
+				if row == nil {
+					row = &MaterialRequirementRow{ItemCode: material.ItemCode, ItemName: material.Name, Unit: material.Unit, QtyPerKanban: material.QtyPerKanban}
+					grouped[material.ItemID] = row
+				}
+				row.Required = row.Required.Add(material.Quantity)
+			}
+		}
+		if e = rows.Err(); e != nil {
+			return e
+		}
+		for _, row := range grouped {
+			if row.QtyPerKanban.IsPositive() {
+				whole, remainder := row.Required.QuoRem(row.QtyPerKanban, 0)
+				row.PurchaseKanban = whole
+				if !remainder.IsZero() {
+					row.PurchaseKanban = row.PurchaseKanban.Add(decimal.NewFromInt(1))
+				}
+			}
+			items = append(items, *row)
+		}
+		return nil
+	})
+	return
+}
+func (s *Store) ListCustomerDeliveries(ctx context.Context, actor Actor, filter Filter) (items []CustomerDeliveryRow, err error) {
+	err = database.WithTenant(ctx, s.db, database.TenantContext{TenantID: actor.TenantID, UserID: actor.UserID}, func(tx database.TenantTx) error {
+		rows, e := tx.Query(ctx, `SELECT d.id,d.delivery_number,d.delivery_date,s.sales_order_number,c.name,l.item_code_snapshot,l.item_name_snapshot,dl.quantity,l.base_unit_snapshot FROM customer_deliveries d JOIN sales_orders s ON s.tenant_id=d.tenant_id AND s.id=d.sales_order_id JOIN customers c ON c.tenant_id=s.tenant_id AND c.id=s.customer_id JOIN customer_delivery_lines dl ON dl.tenant_id=d.tenant_id AND dl.customer_delivery_id=d.id JOIN sales_order_lines l ON l.tenant_id=dl.tenant_id AND l.id=dl.sales_order_line_id WHERE d.tenant_id=$1 AND ($2::date IS NULL OR d.delivery_date >= $2) AND ($3::date IS NULL OR d.delivery_date <= $3) AND ($4='' OR d.delivery_number ILIKE '%'||$4||'%' OR s.sales_order_number ILIKE '%'||$4||'%' OR c.name ILIKE '%'||$4||'%' OR l.item_code_snapshot ILIKE '%'||$4||'%') ORDER BY d.delivery_date DESC,d.delivery_number`, actor.TenantID, filter.FromDate, filter.ToDate, strings.TrimSpace(filter.Search))
+		if e != nil {
+			return e
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var item CustomerDeliveryRow
+			if e = rows.Scan(&item.ID, &item.Number, &item.DeliveryDate, &item.SalesOrderNumber, &item.Customer, &item.ItemCode, &item.ItemName, &item.Quantity, &item.Unit); e != nil {
+				return e
+			}
+			items = append(items, item)
+		}
+		return rows.Err()
+	})
+	return
+}
 
 func (s *Store) ListReceiving(ctx context.Context, actor Actor, filter Filter) (Result, error) {
 	result := Result{Items: []Row{}}
@@ -56,4 +126,22 @@ ORDER BY r.receiving_date DESC,r.receiving_number,pol.raw_material_code_snapshot
 	}
 	result.Totals = summarize(result.Items)
 	return result, nil
+}
+func (s *Store) ListSalesOrders(ctx context.Context, actor Actor, filter Filter) (items []SalesOrderRow, err error) {
+	err = database.WithTenant(ctx, s.db, database.TenantContext{TenantID: actor.TenantID, UserID: actor.UserID}, func(tx database.TenantTx) error {
+		rows, e := tx.Query(ctx, `SELECT s.sales_order_number,c.name,s.order_date,s.status,l.item_code_snapshot,l.item_name_snapshot,l.quantity,COALESCE((SELECT sum(d.quantity) FROM customer_delivery_lines d WHERE d.tenant_id=l.tenant_id AND d.sales_order_line_id=l.id),0),l.quantity-COALESCE((SELECT sum(d.quantity) FROM customer_delivery_lines d WHERE d.tenant_id=l.tenant_id AND d.sales_order_line_id=l.id),0),l.base_unit_snapshot FROM sales_orders s JOIN customers c ON c.tenant_id=s.tenant_id AND c.id=s.customer_id JOIN sales_order_lines l ON l.tenant_id=s.tenant_id AND l.sales_order_id=s.id WHERE s.tenant_id=$1 AND ($2::date IS NULL OR s.order_date >= $2) AND ($3::date IS NULL OR s.order_date <= $3) AND ($4='' OR s.sales_order_number ILIKE '%'||$4||'%' OR c.name ILIKE '%'||$4||'%' OR l.item_code_snapshot ILIKE '%'||$4||'%') ORDER BY s.order_date DESC,s.sales_order_number,l.sort_position`, actor.TenantID, filter.FromDate, filter.ToDate, strings.TrimSpace(filter.Search))
+		if e != nil {
+			return e
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var item SalesOrderRow
+			if e = rows.Scan(&item.Number, &item.Customer, &item.OrderDate, &item.Status, &item.ItemCode, &item.ItemName, &item.Ordered, &item.Delivered, &item.Remaining, &item.Unit); e != nil {
+				return e
+			}
+			items = append(items, item)
+		}
+		return rows.Err()
+	})
+	return
 }
