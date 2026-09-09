@@ -41,6 +41,12 @@ type Delivery struct {
 	DeliveryDate string              `json:"deliveryDate"`
 	Lines        []DeliveryLineInput `json:"lines"`
 }
+type DeliverySummary struct {
+	ID            uuid.UUID       `json:"id"`
+	Number        string          `json:"number"`
+	DeliveryDate  string          `json:"deliveryDate"`
+	TotalQuantity decimal.Decimal `json:"totalQuantity"`
+}
 
 func (i *DeliveryInput) NormalizeAndValidate() FieldErrors {
 	fields := FieldErrors{}

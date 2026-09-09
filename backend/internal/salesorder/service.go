@@ -12,6 +12,7 @@ type Repository interface {
 	Get(context.Context, Actor, uuid.UUID) (Order, error)
 	List(context.Context, Actor) ([]Order, error)
 	CreateDelivery(context.Context, Actor, uuid.UUID, DeliveryInput) (Delivery, error)
+	ListDeliveries(context.Context, Actor, uuid.UUID) ([]DeliverySummary, error)
 }
 type Service struct{ repo Repository }
 
@@ -34,4 +35,7 @@ func (s *Service) CreateDelivery(ctx context.Context, a Actor, orderID uuid.UUID
 		return Delivery{}, fmt.Errorf("validation failed: %v", fields)
 	}
 	return s.repo.CreateDelivery(ctx, a, orderID, input)
+}
+func (s *Service) ListDeliveries(ctx context.Context, a Actor, orderID uuid.UUID) ([]DeliverySummary, error) {
+	return s.repo.ListDeliveries(ctx, a, orderID)
 }

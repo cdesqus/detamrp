@@ -150,6 +150,24 @@ func (s *Store) CreateDelivery(ctx context.Context, a Actor, orderID uuid.UUID, 
 	})
 	return
 }
+func (s *Store) ListDeliveries(ctx context.Context, a Actor, orderID uuid.UUID) (items []DeliverySummary, err error) {
+	err = database.WithTenant(ctx, s.db, tenant(a), func(tx database.TenantTx) error {
+		rows, e := tx.Query(ctx, `SELECT d.id,d.delivery_number,d.delivery_date::text,COALESCE(sum(l.quantity),0) FROM customer_deliveries d LEFT JOIN customer_delivery_lines l ON l.tenant_id=d.tenant_id AND l.customer_delivery_id=d.id WHERE d.tenant_id=$1 AND d.sales_order_id=$2 GROUP BY d.id,d.delivery_number,d.delivery_date ORDER BY d.delivery_date DESC,d.created_at DESC`, a.TenantID, orderID)
+		if e != nil {
+			return e
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var item DeliverySummary
+			if e = rows.Scan(&item.ID, &item.Number, &item.DeliveryDate, &item.TotalQuantity); e != nil {
+				return e
+			}
+			items = append(items, item)
+		}
+		return rows.Err()
+	})
+	return
+}
 func (s *Store) Submit(ctx context.Context, a Actor, id uuid.UUID) (order Order, err error) {
 	err = database.WithTenant(ctx, s.db, tenant(a), func(tx database.TenantTx) error {
 		var status string
