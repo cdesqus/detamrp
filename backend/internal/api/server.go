@@ -7,6 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"order-stock/backend/internal/activitylog"
 	"order-stock/backend/internal/auth"
+	"order-stock/backend/internal/bom"
 	"order-stock/backend/internal/dashboard"
 	"order-stock/backend/internal/emailing"
 	"order-stock/backend/internal/inventory"
@@ -44,6 +45,7 @@ type serverConfig struct {
 	dashboardStore       *dashboard.Store
 	activityLogStore     *activitylog.Store
 	salesMasterService   *salesmaster.Service
+	bomService           *bom.Service
 }
 
 type ServerOption func(*serverConfig)
@@ -103,6 +105,9 @@ func WithActivityLogStore(store *activitylog.Store) ServerOption {
 }
 func WithSalesMasterService(service *salesmaster.Service) ServerOption {
 	return func(c *serverConfig) { c.salesMasterService = service }
+}
+func WithBOMService(service *bom.Service) ServerOption {
+	return func(c *serverConfig) { c.bomService = service }
 }
 
 func NewServer(options ...ServerOption) http.Handler {
@@ -164,6 +169,9 @@ func NewServer(options ...ServerOption) http.Handler {
 		}
 		if config.salesMasterService != nil {
 			salesmaster.RegisterRoutes(router, config.salesMasterService, config.authenticator)
+		}
+		if config.bomService != nil {
+			bom.RegisterRoutes(router, config.bomService, config.authenticator)
 		}
 	}
 	return router
