@@ -29,7 +29,7 @@ func RegisterRoutes(router *gin.Engine, store *Store, authn Authenticator) {
 		c.Set(rbac.ContextPermissionsKey, user.Permissions)
 		c.Next()
 	}
-	group := router.Group("/reports", middleware, rbac.RequirePermissions("receiving.view"))
+	group := router.Group("/reports", middleware)
 	handler := func(c *gin.Context, pdf bool) {
 		filter, fields := ParseFilter(c.Request.URL.Query())
 		if len(fields) > 0 {
@@ -54,9 +54,9 @@ func RegisterRoutes(router *gin.Engine, store *Store, authn Authenticator) {
 		c.Header("Content-Disposition", `inline; filename="receiving-report.pdf"`)
 		c.Data(http.StatusOK, "application/pdf", data)
 	}
-	group.GET("/receiving", func(c *gin.Context) { handler(c, false) })
-	group.GET("/receiving.pdf", func(c *gin.Context) { handler(c, true) })
-	group.GET("/sales-orders", func(c *gin.Context) {
+	group.GET("/receiving", rbac.RequirePermissions("receiving.view"), func(c *gin.Context) { handler(c, false) })
+	group.GET("/receiving.pdf", rbac.RequirePermissions("receiving.view"), func(c *gin.Context) { handler(c, true) })
+	group.GET("/sales-orders", rbac.RequirePermissions("sales_report.view"), func(c *gin.Context) {
 		actor, _ := c.Get("report_actor")
 		items, err := store.ListSalesOrders(c, actor.(Actor))
 		if err != nil {
@@ -65,7 +65,7 @@ func RegisterRoutes(router *gin.Engine, store *Store, authn Authenticator) {
 		}
 		c.JSON(200, gin.H{"items": items})
 	})
-	group.GET("/material-requirements", func(c *gin.Context) {
+	group.GET("/material-requirements", rbac.RequirePermissions("sales_report.view"), func(c *gin.Context) {
 		actor, _ := c.Get("report_actor")
 		items, err := store.ListMaterialRequirements(c, actor.(Actor))
 		if err != nil {
@@ -74,7 +74,7 @@ func RegisterRoutes(router *gin.Engine, store *Store, authn Authenticator) {
 		}
 		c.JSON(200, gin.H{"items": items})
 	})
-	group.GET("/customer-deliveries", func(c *gin.Context) {
+	group.GET("/customer-deliveries", rbac.RequirePermissions("sales_report.view"), func(c *gin.Context) {
 		actor, _ := c.Get("report_actor")
 		items, err := store.ListCustomerDeliveries(c, actor.(Actor))
 		if err != nil {

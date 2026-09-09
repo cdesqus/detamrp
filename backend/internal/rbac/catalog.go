@@ -15,6 +15,7 @@ var Catalog = map[string]string{
 	"user.manage": "Manage users", "role.manage": "Manage roles", "configuration.manage": "Manage configuration",
 	"master_data.view": "View master data", "master_data.manage": "Manage master data",
 	"customer.view": "View customers", "customer.manage": "Manage customers",
+	"sales_report.view": "View sales reports",
 	"fg.view": "View finished goods", "fg.manage": "Manage finished goods", "fg.price.manage": "Manage finished-good prices",
 }
 
