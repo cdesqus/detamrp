@@ -2,14 +2,66 @@ package report
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 
+	"github.com/shopspring/decimal"
+	"order-stock/backend/internal/bom"
 	"order-stock/backend/internal/database"
 )
 
 type Store struct{ db *database.Pool }
 
 func NewStore(db *database.Pool) *Store { return &Store{db: db} }
+
+func (s *Store) ListMaterialRequirements(ctx context.Context, actor Actor) (items []MaterialRequirementRow, err error) {
+	err = database.WithTenant(ctx, s.db, database.TenantContext{TenantID: actor.TenantID, UserID: actor.UserID}, func(tx database.TenantTx) error {
+		rows, e := tx.Query(ctx, `SELECT l.quantity,l.calculation_snapshot FROM sales_order_lines l JOIN sales_orders s ON s.tenant_id=l.tenant_id AND s.id=l.sales_order_id WHERE l.tenant_id=$1 AND s.status='SUBMITTED'`, actor.TenantID)
+		if e != nil {
+			return e
+		}
+		defer rows.Close()
+		grouped := map[string]*MaterialRequirementRow{}
+		for rows.Next() {
+			var quantity decimal.Decimal
+			var raw []byte
+			if e = rows.Scan(&quantity, &raw); e != nil {
+				return e
+			}
+			var snapshot bom.Snapshot
+			if e = json.Unmarshal(raw, &snapshot); e != nil {
+				return e
+			}
+			result, e := bom.Calculate(snapshot, quantity)
+			if e != nil {
+				return e
+			}
+			for _, material := range result.Materials {
+				row := grouped[material.ItemID]
+				if row == nil {
+					row = &MaterialRequirementRow{ItemCode: material.ItemCode, ItemName: material.Name, Unit: material.Unit, QtyPerKanban: material.QtyPerKanban}
+					grouped[material.ItemID] = row
+				}
+				row.Required = row.Required.Add(material.Quantity)
+			}
+		}
+		if e = rows.Err(); e != nil {
+			return e
+		}
+		for _, row := range grouped {
+			if row.QtyPerKanban.IsPositive() {
+				whole, remainder := row.Required.QuoRem(row.QtyPerKanban, 0)
+				row.PurchaseKanban = whole
+				if !remainder.IsZero() {
+					row.PurchaseKanban = row.PurchaseKanban.Add(decimal.NewFromInt(1))
+				}
+			}
+			items = append(items, *row)
+		}
+		return nil
+	})
+	return
+}
 
 func (s *Store) ListReceiving(ctx context.Context, actor Actor, filter Filter) (Result, error) {
 	result := Result{Items: []Row{}}

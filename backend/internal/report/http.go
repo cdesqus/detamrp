@@ -65,4 +65,13 @@ func RegisterRoutes(router *gin.Engine, store *Store, authn Authenticator) {
 		}
 		c.JSON(200, gin.H{"items": items})
 	})
+	group.GET("/material-requirements", func(c *gin.Context) {
+		actor, _ := c.Get("report_actor")
+		items, err := store.ListMaterialRequirements(c, actor.(Actor))
+		if err != nil {
+			c.JSON(500, gin.H{"error": "report could not be loaded"})
+			return
+		}
+		c.JSON(200, gin.H{"items": items})
+	})
 }
