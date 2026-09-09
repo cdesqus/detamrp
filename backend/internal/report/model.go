@@ -60,6 +60,16 @@ type MaterialRequirementRow struct {
 	QtyPerKanban   decimal.Decimal `json:"qtyPerKanban"`
 	PurchaseKanban decimal.Decimal `json:"purchaseKanban"`
 }
+type CustomerDeliveryRow struct {
+	Number           string          `json:"number"`
+	DeliveryDate     time.Time       `json:"deliveryDate"`
+	SalesOrderNumber string          `json:"salesOrderNumber"`
+	Customer         string          `json:"customer"`
+	ItemCode         string          `json:"itemCode"`
+	ItemName         string          `json:"itemName"`
+	Quantity         decimal.Decimal `json:"quantity"`
+	Unit             string          `json:"unit"`
+}
 
 func summarize(rows []Row) Totals {
 	var totals Totals
