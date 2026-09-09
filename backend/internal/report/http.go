@@ -74,7 +74,7 @@ func RegisterRoutes(router *gin.Engine, store *Store, authn Authenticator) {
 		}
 		c.JSON(200, gin.H{"items": items})
 	})
-	group.GET("/customer-deliveries", rbac.RequirePermissions("sales_report.view"), func(c *gin.Context) {
+	group.GET("/customer-deliveries", rbac.RequirePermissions("customer_delivery.view"), func(c *gin.Context) {
 		actor, _ := c.Get("report_actor")
 		items, err := store.ListCustomerDeliveries(c, actor.(Actor))
 		if err != nil {

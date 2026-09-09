@@ -27,7 +27,8 @@ export const navigationGroups: NavigationGroup[] = [
   { label: 'Logistics', icon: 'package', collapsible: true, items: [
     { label: 'Stock Inventory', href: '/inventory', icon: 'package', requiredPermission: 'inventory.view' },
     { label: 'Receiving', href: '/receiving', icon: 'receiving', requiredPermission: 'receiving.view' },
-    { label: 'Outgoing Material', href: '/outgoing-material', icon: 'outgoing', requiredPermission: 'inventory.view' }
+    { label: 'Outgoing Material', href: '/outgoing-material', icon: 'outgoing', requiredPermission: 'inventory.view' },
+    { label: 'Customer Deliveries', href: '/customer-deliveries', icon: 'outgoing', requiredPermission: 'customer_delivery.view' }
   ] },
   { items: [{ label: 'Reports', href: '/reports', icon: 'report', requiredPermission: 'sales_report.view' }] },
   { label: 'Settings', icon: 'settings', collapsible: true, items: [
@@ -60,6 +61,7 @@ const routeRules: Array<{ path: string; permission: string; exact?: boolean }> =
   { path: '/inventory', permission: 'inventory.view' },
   { path: '/receiving', permission: 'receiving.view' },
   { path: '/outgoing-material', permission: 'inventory.view' },
+  { path: '/customer-deliveries', permission: 'customer_delivery.view' },
   { path: '/reports', permission: 'sales_report.view' },
   { path: '/settings/users', permission: 'user.manage' },
   { path: '/settings/company', permission: 'configuration.manage' },
