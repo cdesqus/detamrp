@@ -56,5 +56,13 @@ func RegisterRoutes(router *gin.Engine, store *Store, authn Authenticator) {
 	}
 	group.GET("/receiving", func(c *gin.Context) { handler(c, false) })
 	group.GET("/receiving.pdf", func(c *gin.Context) { handler(c, true) })
-	group.GET("/sales-orders", func(c *gin.Context) { actor,_:=c.Get("report_actor");items,err:=store.ListSalesOrders(c,actor.(Actor));if err!=nil{c.JSON(500,gin.H{"error":"report could not be loaded"});return};c.JSON(200,gin.H{"items":items}) })
+	group.GET("/sales-orders", func(c *gin.Context) {
+		actor, _ := c.Get("report_actor")
+		items, err := store.ListSalesOrders(c, actor.(Actor))
+		if err != nil {
+			c.JSON(500, gin.H{"error": "report could not be loaded"})
+			return
+		}
+		c.JSON(200, gin.H{"items": items})
+	})
 }
