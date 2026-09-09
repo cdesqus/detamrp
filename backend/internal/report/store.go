@@ -64,14 +64,14 @@ func (s *Store) ListMaterialRequirements(ctx context.Context, actor Actor) (item
 }
 func (s *Store) ListCustomerDeliveries(ctx context.Context, actor Actor) (items []CustomerDeliveryRow, err error) {
 	err = database.WithTenant(ctx, s.db, database.TenantContext{TenantID: actor.TenantID, UserID: actor.UserID}, func(tx database.TenantTx) error {
-		rows, e := tx.Query(ctx, `SELECT d.delivery_number,d.delivery_date,s.sales_order_number,c.name,l.item_code_snapshot,l.item_name_snapshot,dl.quantity,l.base_unit_snapshot FROM customer_deliveries d JOIN sales_orders s ON s.tenant_id=d.tenant_id AND s.id=d.sales_order_id JOIN customers c ON c.tenant_id=s.tenant_id AND c.id=s.customer_id JOIN customer_delivery_lines dl ON dl.tenant_id=d.tenant_id AND dl.customer_delivery_id=d.id JOIN sales_order_lines l ON l.tenant_id=dl.tenant_id AND l.id=dl.sales_order_line_id WHERE d.tenant_id=$1 ORDER BY d.delivery_date DESC,d.delivery_number`, actor.TenantID)
+		rows, e := tx.Query(ctx, `SELECT d.id,d.delivery_number,d.delivery_date,s.sales_order_number,c.name,l.item_code_snapshot,l.item_name_snapshot,dl.quantity,l.base_unit_snapshot FROM customer_deliveries d JOIN sales_orders s ON s.tenant_id=d.tenant_id AND s.id=d.sales_order_id JOIN customers c ON c.tenant_id=s.tenant_id AND c.id=s.customer_id JOIN customer_delivery_lines dl ON dl.tenant_id=d.tenant_id AND dl.customer_delivery_id=d.id JOIN sales_order_lines l ON l.tenant_id=dl.tenant_id AND l.id=dl.sales_order_line_id WHERE d.tenant_id=$1 ORDER BY d.delivery_date DESC,d.delivery_number`, actor.TenantID)
 		if e != nil {
 			return e
 		}
 		defer rows.Close()
 		for rows.Next() {
 			var item CustomerDeliveryRow
-			if e = rows.Scan(&item.Number, &item.DeliveryDate, &item.SalesOrderNumber, &item.Customer, &item.ItemCode, &item.ItemName, &item.Quantity, &item.Unit); e != nil {
+			if e = rows.Scan(&item.ID, &item.Number, &item.DeliveryDate, &item.SalesOrderNumber, &item.Customer, &item.ItemCode, &item.ItemName, &item.Quantity, &item.Unit); e != nil {
 				return e
 			}
 			items = append(items, item)

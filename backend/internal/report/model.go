@@ -61,6 +61,7 @@ type MaterialRequirementRow struct {
 	PurchaseKanban decimal.Decimal `json:"purchaseKanban"`
 }
 type CustomerDeliveryRow struct {
+	ID               uuid.UUID       `json:"id"`
 	Number           string          `json:"number"`
 	DeliveryDate     time.Time       `json:"deliveryDate"`
 	SalesOrderNumber string          `json:"salesOrderNumber"`
