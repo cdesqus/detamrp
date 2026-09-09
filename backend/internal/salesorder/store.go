@@ -17,16 +17,18 @@ type Actor struct {
 	UserID   uuid.UUID
 }
 type Line struct {
-	ID             uuid.UUID       `json:"id"`
-	FinishedGoodID uuid.UUID       `json:"finishedGoodId"`
-	ItemCode       string          `json:"itemCode"`
-	Name           string          `json:"name"`
-	Unit           string          `json:"unit"`
-	Quantity       decimal.Decimal `json:"quantity"`
-	SalesPrice     decimal.Decimal `json:"salesPrice"`
-	Currency       string          `json:"currency"`
-	PriceVersion   int             `json:"priceVersion"`
-	Calculation    json.RawMessage `json:"calculation,omitempty"`
+	ID                uuid.UUID       `json:"id"`
+	FinishedGoodID    uuid.UUID       `json:"finishedGoodId"`
+	ItemCode          string          `json:"itemCode"`
+	Name              string          `json:"name"`
+	Unit              string          `json:"unit"`
+	Quantity          decimal.Decimal `json:"quantity"`
+	DeliveredQuantity decimal.Decimal `json:"deliveredQuantity"`
+	RemainingQuantity decimal.Decimal `json:"remainingQuantity"`
+	SalesPrice        decimal.Decimal `json:"salesPrice"`
+	Currency          string          `json:"currency"`
+	PriceVersion      int             `json:"priceVersion"`
+	Calculation       json.RawMessage `json:"calculation,omitempty"`
 }
 type Order struct {
 	ID           uuid.UUID  `json:"id"`
@@ -198,14 +200,14 @@ func (s *Store) load(ctx context.Context, tx database.TenantTx, tenantID, id uui
 	if e := tx.QueryRow(ctx, `SELECT s.id,s.sales_order_number,s.customer_id,c.name,s.status,s.order_date,s.delivery_date FROM sales_orders s JOIN customers c ON c.tenant_id=s.tenant_id AND c.id=s.customer_id WHERE s.tenant_id=$1 AND s.id=$2`, tenantID, id).Scan(&out.ID, &out.Number, &out.CustomerID, &out.CustomerName, &out.Status, &out.OrderDate, &out.DeliveryDate); e != nil {
 		return e
 	}
-	rows, e := tx.Query(ctx, `SELECT id,finished_good_id,item_code_snapshot,item_name_snapshot,base_unit_snapshot,quantity,sales_price_snapshot,currency_snapshot,price_version,COALESCE(calculation_snapshot,'null') FROM sales_order_lines WHERE tenant_id=$1 AND sales_order_id=$2 ORDER BY sort_position`, tenantID, id)
+	rows, e := tx.Query(ctx, `SELECT l.id,l.finished_good_id,l.item_code_snapshot,l.item_name_snapshot,l.base_unit_snapshot,l.quantity,COALESCE((SELECT sum(d.quantity) FROM customer_delivery_lines d WHERE d.tenant_id=l.tenant_id AND d.sales_order_line_id=l.id),0),l.quantity-COALESCE((SELECT sum(d.quantity) FROM customer_delivery_lines d WHERE d.tenant_id=l.tenant_id AND d.sales_order_line_id=l.id),0),l.sales_price_snapshot,l.currency_snapshot,l.price_version,COALESCE(l.calculation_snapshot,'null') FROM sales_order_lines l WHERE l.tenant_id=$1 AND l.sales_order_id=$2 ORDER BY l.sort_position`, tenantID, id)
 	if e != nil {
 		return e
 	}
 	defer rows.Close()
 	for rows.Next() {
 		var line Line
-		if e = rows.Scan(&line.ID, &line.FinishedGoodID, &line.ItemCode, &line.Name, &line.Unit, &line.Quantity, &line.SalesPrice, &line.Currency, &line.PriceVersion, &line.Calculation); e != nil {
+		if e = rows.Scan(&line.ID, &line.FinishedGoodID, &line.ItemCode, &line.Name, &line.Unit, &line.Quantity, &line.DeliveredQuantity, &line.RemainingQuantity, &line.SalesPrice, &line.Currency, &line.PriceVersion, &line.Calculation); e != nil {
 			return e
 		}
 		out.Lines = append(out.Lines, line)
