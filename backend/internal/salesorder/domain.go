@@ -5,6 +5,7 @@ import (
 	"github.com/shopspring/decimal"
 	"strconv"
 	"strings"
+	"time"
 )
 
 const (
@@ -76,6 +77,22 @@ func (i *Input) NormalizeAndValidate() FieldErrors {
 	fields := FieldErrors{}
 	if i.CustomerID == uuid.Nil {
 		fields["customerId"] = "Select a customer"
+	}
+	var orderDate time.Time
+	if i.OrderDate != "" {
+		var err error
+		orderDate, err = time.Parse("2006-01-02", i.OrderDate)
+		if err != nil {
+			fields["orderDate"] = "Order date must use YYYY-MM-DD"
+		}
+	}
+	if i.DeliveryDate != "" {
+		deliveryDate, err := time.Parse("2006-01-02", i.DeliveryDate)
+		if err != nil {
+			fields["deliveryDate"] = "Delivery date must use YYYY-MM-DD"
+		} else if !orderDate.IsZero() && deliveryDate.Before(orderDate) {
+			fields["deliveryDate"] = "Delivery date cannot be before order date"
+		}
 	}
 	if len(i.Lines) == 0 {
 		fields["lines"] = "Add at least one Finished Good"
