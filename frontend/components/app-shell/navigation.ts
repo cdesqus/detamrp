@@ -15,7 +15,9 @@ export const navigationGroups: NavigationGroup[] = [
     ] },
     { label: 'Plants', href: '/plants', icon: 'package', requiredPermission: 'master_data.view' },
     { label: 'Suppliers', href: '/suppliers', icon: 'supplier', requiredPermission: 'master_data.view' },
-    { label: 'Raw Materials', href: '/raw-materials', icon: 'package', requiredPermission: 'master_data.view' }
+    { label: 'Raw Materials', href: '/raw-materials', icon: 'package', requiredPermission: 'master_data.view' },
+    { label: 'Customers', href: '/customers', icon: 'users', requiredPermission: 'customer.view' },
+    { label: 'Finished Goods', href: '/finished-goods', icon: 'package', requiredPermission: 'fg.view' }
   ] },
   { label: 'Procurement', icon: 'clipboard', collapsible: true, items: [
     { label: 'Supplier Orders', href: '/supplier-orders', icon: 'clipboard', requiredPermission: 'po.view' }
@@ -45,6 +47,8 @@ const routeRules: Array<{ path: string; permission: string; exact?: boolean }> =
   { path: '/plants', permission: 'master_data.view' },
   { path: '/suppliers', permission: 'master_data.view' },
   { path: '/raw-materials', permission: 'master_data.view' },
+  { path: '/customers', permission: 'customer.view' },
+  { path: '/finished-goods', permission: 'fg.view' },
   { path: '/supplier-orders', permission: 'po.view' },
   { path: '/approvals', permission: 'po.approve' },
   { path: '/delivery-notes', permission: 'dn.view' },

@@ -116,3 +116,63 @@ func TestZeroPriceAndEmptyRemaining(t *testing.T) {
 		t.Fatal("negative order accepted")
 	}
 }
+
+func TestCalculationRetainsExactIntermediateProducts(t *testing.T) {
+	root := fixtureRoot()
+	root.Children = root.Children[:1]
+	root.Children[0].Usage = dec("0.123456")
+	root.Children[0].Children[0].Usage = dec("0.123456")
+	snapshot, err := BuildSnapshot(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := Calculate(snapshot, dec("100"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !got.Materials[0].Quantity.Equal(dec("1.524138")) {
+		t.Fatal(got.Materials[0].Quantity)
+	}
+}
+func TestPurchaseKanbanUsesExactCeiling(t *testing.T) {
+	root := fixtureRoot()
+	root.Children = root.Children[1:]
+	root.Children[0].QtyPerKanban = dec("99999999999999")
+	root.Children[0].UnitPrice = dec("0")
+	snapshot, err := BuildSnapshot(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := Calculate(snapshot, dec("99999999999999.000001"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !got.Materials[0].PurchaseKanban.Equal(dec("2")) {
+		t.Fatal(got.Materials[0].PurchaseKanban)
+	}
+}
+func TestSnapshotRejectsUnstorableMetadataAndInconsistentSharedItem(t *testing.T) {
+	for _, field := range []string{"price", "factor"} {
+		root := fixtureRoot()
+		if field == "price" {
+			root.Children[1].UnitPrice = dec("0.0000001")
+		} else {
+			root.Children[1].QtyPerKanban = dec("100000000000000")
+		}
+		if _, err := BuildSnapshot(root); err == nil {
+			t.Fatalf("accepted invalid %s", field)
+		}
+	}
+	root := fixtureRoot()
+	other := root.Children[1]
+	other.Unit = "KG"
+	root.Children = append(root.Children, other)
+	if _, err := BuildSnapshot(root); err == nil {
+		t.Fatal("accepted inconsistent units for same material")
+	}
+	root = fixtureRoot()
+	root.Children[0].Kind = "FG"
+	if _, err := BuildSnapshot(root); err == nil {
+		t.Fatal("FG cannot be a component")
+	}
+}
