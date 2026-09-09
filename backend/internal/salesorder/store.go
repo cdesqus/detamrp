@@ -112,11 +112,21 @@ func (s *Store) List(ctx context.Context, a Actor) (orders []Order, err error) {
 func (s *Store) CreateDelivery(ctx context.Context, a Actor, orderID uuid.UUID, input DeliveryInput) (delivery Delivery, err error) {
 	err = database.WithTenant(ctx, s.db, tenant(a), func(tx database.TenantTx) error {
 		var status string
-		if e := tx.QueryRow(ctx, `SELECT status FROM sales_orders WHERE tenant_id=$1 AND id=$2 FOR UPDATE`, a.TenantID, orderID).Scan(&status); e != nil {
+		var orderDate time.Time
+		if e := tx.QueryRow(ctx, `SELECT status,order_date FROM sales_orders WHERE tenant_id=$1 AND id=$2 FOR UPDATE`, a.TenantID, orderID).Scan(&status, &orderDate); e != nil {
 			return e
 		}
 		if status != StatusSubmitted {
 			return fmt.Errorf("only submitted sales orders can be delivered")
+		}
+		if input.DeliveryDate != "" {
+			deliveryDate, e := time.Parse("2006-01-02", input.DeliveryDate)
+			if e != nil {
+				return fmt.Errorf("delivery date must use YYYY-MM-DD")
+			}
+			if deliveryDate.Before(orderDate) {
+				return fmt.Errorf("delivery date cannot be before sales order date")
+			}
 		}
 		for _, line := range input.Lines {
 			var ordered, delivered decimal.Decimal
