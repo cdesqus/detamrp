@@ -127,9 +127,9 @@ ORDER BY r.receiving_date DESC,r.receiving_number,pol.raw_material_code_snapshot
 	result.Totals = summarize(result.Items)
 	return result, nil
 }
-func (s *Store) ListSalesOrders(ctx context.Context, actor Actor) (items []SalesOrderRow, err error) {
+func (s *Store) ListSalesOrders(ctx context.Context, actor Actor, filter Filter) (items []SalesOrderRow, err error) {
 	err = database.WithTenant(ctx, s.db, database.TenantContext{TenantID: actor.TenantID, UserID: actor.UserID}, func(tx database.TenantTx) error {
-		rows, e := tx.Query(ctx, `SELECT s.sales_order_number,c.name,s.order_date,s.status,l.item_code_snapshot,l.item_name_snapshot,l.quantity,COALESCE((SELECT sum(d.quantity) FROM customer_delivery_lines d WHERE d.tenant_id=l.tenant_id AND d.sales_order_line_id=l.id),0),l.quantity-COALESCE((SELECT sum(d.quantity) FROM customer_delivery_lines d WHERE d.tenant_id=l.tenant_id AND d.sales_order_line_id=l.id),0),l.base_unit_snapshot FROM sales_orders s JOIN customers c ON c.tenant_id=s.tenant_id AND c.id=s.customer_id JOIN sales_order_lines l ON l.tenant_id=s.tenant_id AND l.sales_order_id=s.id WHERE s.tenant_id=$1 ORDER BY s.order_date DESC,s.sales_order_number,l.sort_position`, actor.TenantID)
+		rows, e := tx.Query(ctx, `SELECT s.sales_order_number,c.name,s.order_date,s.status,l.item_code_snapshot,l.item_name_snapshot,l.quantity,COALESCE((SELECT sum(d.quantity) FROM customer_delivery_lines d WHERE d.tenant_id=l.tenant_id AND d.sales_order_line_id=l.id),0),l.quantity-COALESCE((SELECT sum(d.quantity) FROM customer_delivery_lines d WHERE d.tenant_id=l.tenant_id AND d.sales_order_line_id=l.id),0),l.base_unit_snapshot FROM sales_orders s JOIN customers c ON c.tenant_id=s.tenant_id AND c.id=s.customer_id JOIN sales_order_lines l ON l.tenant_id=s.tenant_id AND l.sales_order_id=s.id WHERE s.tenant_id=$1 AND ($2::date IS NULL OR s.order_date >= $2) AND ($3::date IS NULL OR s.order_date <= $3) AND ($4='' OR s.sales_order_number ILIKE '%'||$4||'%' OR c.name ILIKE '%'||$4||'%' OR l.item_code_snapshot ILIKE '%'||$4||'%') ORDER BY s.order_date DESC,s.sales_order_number,l.sort_position`, actor.TenantID, filter.FromDate, filter.ToDate, strings.TrimSpace(filter.Search))
 		if e != nil {
 			return e
 		}

@@ -59,7 +59,7 @@ func RegisterRoutes(router *gin.Engine, store *Store, authn Authenticator) {
 	group.GET("/receiving.pdf", rbac.RequirePermissions("receiving.view"), func(c *gin.Context) { handler(c, true) })
 	group.GET("/sales-orders", rbac.RequirePermissions("sales_report.view"), func(c *gin.Context) {
 		actor, _ := c.Get("report_actor")
-		items, err := store.ListSalesOrders(c, actor.(Actor))
+		items, err := store.ListSalesOrders(c, actor.(Actor), Filter{Search: c.Query("search")})
 		if err != nil {
 			c.JSON(500, gin.H{"error": "report could not be loaded"})
 			return
