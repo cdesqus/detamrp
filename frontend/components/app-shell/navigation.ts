@@ -17,13 +17,12 @@ export const navigationGroups: NavigationGroup[] = [
     { label: 'Suppliers', href: '/suppliers', icon: 'supplier', requiredPermission: 'master_data.view' },
     { label: 'Customers', href: '/customers', icon: 'users', requiredPermission: 'customer.view' },
     { label: 'Finished Goods', href: '/finished-goods', icon: 'package', requiredPermission: 'fg.view' },
-    { label: 'Raw Materials', href: '/raw-materials', icon: 'package', requiredPermission: 'master_data.view' },
-    { label: 'Customers', href: '/customers', icon: 'users', requiredPermission: 'customer.view' },
-    { label: 'Finished Goods', href: '/finished-goods', icon: 'package', requiredPermission: 'fg.view' }
+    { label: 'Raw Materials', href: '/raw-materials', icon: 'package', requiredPermission: 'master_data.view' }
   ] },
   { label: 'Procurement', icon: 'clipboard', collapsible: true, items: [
     { label: 'Supplier Orders', href: '/supplier-orders', icon: 'clipboard', requiredPermission: 'po.view' },
-    { label: 'Bill of Materials', href: '/boms', icon: 'package', requiredPermission: 'bom.view' }
+    { label: 'Bill of Materials', href: '/boms', icon: 'package', requiredPermission: 'bom.view' },
+    { label: 'Sales Orders', href: '/sales-orders', icon: 'clipboard', requiredPermission: 'sales_order.view' }
   ] },
   { label: 'Logistics', icon: 'package', collapsible: true, items: [
     { label: 'Stock Inventory', href: '/inventory', icon: 'package', requiredPermission: 'inventory.view' },
@@ -53,8 +52,8 @@ const routeRules: Array<{ path: string; permission: string; exact?: boolean }> =
   { path: '/customers', permission: 'customer.view' },
   { path: '/finished-goods', permission: 'fg.view' },
   { path: '/boms', permission: 'bom.view' },
-  { path: '/customers', permission: 'customer.view' },
-  { path: '/finished-goods', permission: 'fg.view' },
+  { path: '/sales-orders/new', permission: 'sales_order.create', exact: true },
+  { path: '/sales-orders', permission: 'sales_order.view' },
   { path: '/supplier-orders', permission: 'po.view' },
   { path: '/approvals', permission: 'po.approve' },
   { path: '/delivery-notes', permission: 'dn.view' },

@@ -17,6 +17,49 @@ const actorKey = "sales_order_actor"
 
 func RegisterRoutes(router *gin.Engine, service *Service, authenticator Authenticator) {
 	g := router.Group("", authenticate(authenticator))
+	g.GET("/sales-orders", rbac.RequirePermissions("sales_order.view"), func(c *gin.Context) {
+		items, err := service.List(c, actor(c))
+		if err != nil {
+			c.JSON(500, gin.H{"message": err.Error()})
+			return
+		}
+		c.JSON(200, gin.H{"items": items})
+	})
+	g.GET("/sales-orders/:id", rbac.RequirePermissions("sales_order.view"), func(c *gin.Context) {
+		id, err := uuid.Parse(c.Param("id"))
+		if err != nil {
+			c.JSON(400, gin.H{"message": "Invalid ID"})
+			return
+		}
+		item, err := service.Get(c, actor(c), id)
+		if err != nil {
+			c.JSON(404, gin.H{"message": "Sales order not found"})
+			return
+		}
+		c.JSON(200, item)
+	})
+	g.GET("/sales-orders/:id/requirements", rbac.RequirePermissions("sales_order.view"), func(c *gin.Context) {
+		id, err := uuid.Parse(c.Param("id"))
+		if err != nil {
+			c.JSON(400, gin.H{"message": "Invalid ID"})
+			return
+		}
+		item, err := service.Get(c, actor(c), id)
+		if err != nil {
+			c.JSON(404, gin.H{"message": "Sales order not found"})
+			return
+		}
+		if item.Status != StatusSubmitted {
+			c.JSON(409, gin.H{"message": "Submit the sales order before viewing calculation"})
+			return
+		}
+		result, err := CalculateRequirements(item.Lines)
+		if err != nil {
+			c.JSON(422, gin.H{"message": err.Error()})
+			return
+		}
+		c.JSON(200, gin.H{"lines": result})
+	})
 	g.POST("/sales-orders", rbac.RequirePermissions("sales_order.create"), func(c *gin.Context) {
 		var input Input
 		if c.ShouldBindJSON(&input) != nil {

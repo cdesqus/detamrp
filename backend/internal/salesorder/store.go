@@ -46,12 +46,15 @@ func tenant(a Actor) database.TenantContext {
 }
 func (s *Store) Create(ctx context.Context, a Actor, input Input) (order Order, err error) {
 	err = database.WithTenant(ctx, s.db, tenant(a), func(tx database.TenantTx) error {
+		if _, e := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtext($1))`, "sales-order-number-"+a.TenantID.String()+"-"+time.Now().Format("200601")); e != nil {
+			return e
+		}
 		var count int
 		if e := tx.QueryRow(ctx, `SELECT count(*) FROM sales_orders WHERE tenant_id=$1 AND date_trunc('month',created_at)=date_trunc('month',now())`, a.TenantID).Scan(&count); e != nil {
 			return e
 		}
 		number := fmt.Sprintf("SLO-%s-%04d", time.Now().Format("200601"), count+1)
-		if e := tx.QueryRow(ctx, `INSERT INTO sales_orders(tenant_id,sales_order_number,customer_id,customer_po_reference,notes,created_by_user_id,updated_by_user_id) VALUES($1,$2,$3,$4,$5,$6,$6) RETURNING id`, a.TenantID, number, input.CustomerID, input.CustomerPOReference, input.Notes, a.UserID).Scan(&order.ID); e != nil {
+		if e := tx.QueryRow(ctx, `INSERT INTO sales_orders(tenant_id,sales_order_number,customer_id,order_date,delivery_date,customer_po_reference,notes,created_by_user_id,updated_by_user_id) VALUES($1,$2,$3,COALESCE(NULLIF($4,'')::date,current_date),NULLIF($5,'')::date,$6,$7,$8,$8) RETURNING id`, a.TenantID, number, input.CustomerID, input.OrderDate, input.DeliveryDate, input.CustomerPOReference, input.Notes, a.UserID).Scan(&order.ID); e != nil {
 			return e
 		}
 		for pos, line := range input.Lines {
@@ -67,6 +70,40 @@ func (s *Store) Create(ctx context.Context, a Actor, input Input) (order Order, 
 			}
 		}
 		return s.load(ctx, tx, a.TenantID, order.ID, &order)
+	})
+	return
+}
+func (s *Store) Get(ctx context.Context, a Actor, id uuid.UUID) (order Order, err error) {
+	err = database.WithTenant(ctx, s.db, tenant(a), func(tx database.TenantTx) error { return s.load(ctx, tx, a.TenantID, id, &order) })
+	return
+}
+func (s *Store) List(ctx context.Context, a Actor) (orders []Order, err error) {
+	err = database.WithTenant(ctx, s.db, tenant(a), func(tx database.TenantTx) error {
+		rows, e := tx.Query(ctx, `SELECT id FROM sales_orders WHERE tenant_id=$1 ORDER BY created_at DESC`, a.TenantID)
+		if e != nil {
+			return e
+		}
+		ids := []uuid.UUID{}
+		for rows.Next() {
+			var id uuid.UUID
+			if e = rows.Scan(&id); e != nil {
+				return e
+			}
+			ids = append(ids, id)
+		}
+		if e = rows.Err(); e != nil {
+			rows.Close()
+			return e
+		}
+		rows.Close()
+		for _, id := range ids {
+			var order Order
+			if e = s.load(ctx, tx, a.TenantID, id, &order); e != nil {
+				return e
+			}
+			orders = append(orders, order)
+		}
+		return nil
 	})
 	return
 }
