@@ -17,6 +17,7 @@ import (
 	"order-stock/backend/internal/receiving"
 	"order-stock/backend/internal/report"
 	"order-stock/backend/internal/salesmaster"
+	"order-stock/backend/internal/salesorder"
 	"order-stock/backend/internal/settings"
 )
 
@@ -46,6 +47,7 @@ type serverConfig struct {
 	activityLogStore     *activitylog.Store
 	salesMasterService   *salesmaster.Service
 	bomService           *bom.Service
+	salesOrderService    *salesorder.Service
 }
 
 type ServerOption func(*serverConfig)
@@ -108,6 +110,9 @@ func WithSalesMasterService(service *salesmaster.Service) ServerOption {
 }
 func WithBOMService(service *bom.Service) ServerOption {
 	return func(c *serverConfig) { c.bomService = service }
+}
+func WithSalesOrderService(service *salesorder.Service) ServerOption {
+	return func(c *serverConfig) { c.salesOrderService = service }
 }
 
 func NewServer(options ...ServerOption) http.Handler {
@@ -172,6 +177,9 @@ func NewServer(options ...ServerOption) http.Handler {
 		}
 		if config.bomService != nil {
 			bom.RegisterRoutes(router, config.bomService, config.authenticator)
+		}
+		if config.salesOrderService != nil {
+			salesorder.RegisterRoutes(router, config.salesOrderService, config.authenticator)
 		}
 	}
 	return router

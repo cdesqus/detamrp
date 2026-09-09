@@ -22,6 +22,7 @@ import (
 	"order-stock/backend/internal/receiving"
 	"order-stock/backend/internal/report"
 	"order-stock/backend/internal/salesmaster"
+	"order-stock/backend/internal/salesorder"
 	"order-stock/backend/internal/settings"
 )
 
@@ -58,6 +59,7 @@ func main() {
 	activityLogStore := activitylog.NewStore(db)
 	salesMasterService := salesmaster.NewService(salesmaster.NewStore(db))
 	bomService := bom.NewService(bom.NewStore(db))
+	salesOrderService := salesorder.NewService(salesorder.NewStore(db))
 	secretBox, err := emailing.NewSecretBox(requiredEnv("EMAIL_ENCRYPTION_KEY"))
 	if err != nil {
 		log.Fatal(err)
@@ -75,7 +77,7 @@ func main() {
 		address = ":8091"
 	}
 	log.Printf("API listening on %s", address)
-	if err := http.ListenAndServe(address, api.NewServer(api.WithAuthenticator(authService), api.WithUnitService(unitService), api.WithCategoryService(categoryService), api.WithPackingService(packingService), api.WithPlantService(plantService), api.WithSupplierService(supplierService), api.WithRawMaterialService(rawMaterialService), api.WithSettingsService(settingsService), api.WithPurchaseOrderService(purchaseOrderService), api.WithReceivingStore(receivingStore), api.WithOutgoingStore(outgoingStore), api.WithInventoryStore(inventoryStore), api.WithReportStore(reportStore), api.WithEmailService(emailService), api.WithDashboardStore(dashboardStore), api.WithActivityLogStore(activityLogStore), api.WithSalesMasterService(salesMasterService), api.WithBOMService(bomService))); err != nil {
+	if err := http.ListenAndServe(address, api.NewServer(api.WithAuthenticator(authService), api.WithUnitService(unitService), api.WithCategoryService(categoryService), api.WithPackingService(packingService), api.WithPlantService(plantService), api.WithSupplierService(supplierService), api.WithRawMaterialService(rawMaterialService), api.WithSettingsService(settingsService), api.WithPurchaseOrderService(purchaseOrderService), api.WithReceivingStore(receivingStore), api.WithOutgoingStore(outgoingStore), api.WithInventoryStore(inventoryStore), api.WithReportStore(reportStore), api.WithEmailService(emailService), api.WithDashboardStore(dashboardStore), api.WithActivityLogStore(activityLogStore), api.WithSalesMasterService(salesMasterService), api.WithBOMService(bomService), api.WithSalesOrderService(salesOrderService))); err != nil {
 		log.Fatal(err)
 	}
 }
