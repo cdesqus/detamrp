@@ -107,6 +107,47 @@ func (s *Store) List(ctx context.Context, a Actor) (orders []Order, err error) {
 	})
 	return
 }
+func (s *Store) CreateDelivery(ctx context.Context, a Actor, orderID uuid.UUID, input DeliveryInput) (delivery Delivery, err error) {
+	err = database.WithTenant(ctx, s.db, tenant(a), func(tx database.TenantTx) error {
+		var status string
+		if e := tx.QueryRow(ctx, `SELECT status FROM sales_orders WHERE tenant_id=$1 AND id=$2 FOR UPDATE`, a.TenantID, orderID).Scan(&status); e != nil {
+			return e
+		}
+		if status != StatusSubmitted {
+			return fmt.Errorf("only submitted sales orders can be delivered")
+		}
+		for _, line := range input.Lines {
+			var ordered, delivered decimal.Decimal
+			e := tx.QueryRow(ctx, `SELECT l.quantity,COALESCE(sum(d.quantity),0) FROM sales_order_lines l LEFT JOIN customer_delivery_lines d ON d.tenant_id=l.tenant_id AND d.sales_order_line_id=l.id WHERE l.tenant_id=$1 AND l.sales_order_id=$2 AND l.id=$3 GROUP BY l.quantity`, a.TenantID, orderID, line.SalesOrderLineID).Scan(&ordered, &delivered)
+			if e != nil {
+				return fmt.Errorf("sales order line is invalid")
+			}
+			if line.Quantity.GreaterThan(ordered.Sub(delivered)) {
+				return fmt.Errorf("delivery quantity exceeds remaining order quantity")
+			}
+		}
+		if _, e := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtext($1))`, `customer-delivery-`+a.TenantID.String()+`-`+time.Now().Format("200601")); e != nil {
+			return e
+		}
+		var count int
+		if e := tx.QueryRow(ctx, `SELECT count(*) FROM customer_deliveries WHERE tenant_id=$1 AND date_trunc('month',created_at)=date_trunc('month',now())`, a.TenantID).Scan(&count); e != nil {
+			return e
+		}
+		delivery.Number = fmt.Sprintf("CD-%s-%04d", time.Now().Format("200601"), count+1)
+		delivery.SalesOrderID = orderID
+		if e := tx.QueryRow(ctx, `INSERT INTO customer_deliveries(tenant_id,delivery_number,sales_order_id,delivery_date,notes,created_by_user_id) VALUES($1,$2,$3,COALESCE(NULLIF($4,'')::date,current_date),$5,$6) RETURNING id,delivery_date::text`, a.TenantID, delivery.Number, orderID, input.DeliveryDate, input.Notes, a.UserID).Scan(&delivery.ID, &delivery.DeliveryDate); e != nil {
+			return e
+		}
+		for _, line := range input.Lines {
+			if _, e := tx.Exec(ctx, `INSERT INTO customer_delivery_lines(tenant_id,customer_delivery_id,sales_order_line_id,quantity) VALUES($1,$2,$3,$4)`, a.TenantID, delivery.ID, line.SalesOrderLineID, line.Quantity); e != nil {
+				return e
+			}
+		}
+		delivery.Lines = input.Lines
+		return nil
+	})
+	return
+}
 func (s *Store) Submit(ctx context.Context, a Actor, id uuid.UUID) (order Order, err error) {
 	err = database.WithTenant(ctx, s.db, tenant(a), func(tx database.TenantTx) error {
 		var status string

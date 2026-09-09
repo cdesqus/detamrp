@@ -86,6 +86,24 @@ func RegisterRoutes(router *gin.Engine, service *Service, authenticator Authenti
 		}
 		c.JSON(200, item)
 	})
+	g.POST("/sales-orders/:id/deliveries", rbac.RequirePermissions("customer_delivery.create"), func(c *gin.Context) {
+		id, e := uuid.Parse(c.Param("id"))
+		if e != nil {
+			c.JSON(400, gin.H{"message": "Invalid ID"})
+			return
+		}
+		var input DeliveryInput
+		if c.ShouldBindJSON(&input) != nil {
+			c.JSON(400, gin.H{"message": "Invalid JSON body"})
+			return
+		}
+		item, e := service.CreateDelivery(c, actor(c), id, input)
+		if e != nil {
+			c.JSON(422, gin.H{"message": e.Error()})
+			return
+		}
+		c.JSON(201, item)
+	})
 }
 func authenticate(authenticator Authenticator) gin.HandlerFunc {
 	return func(c *gin.Context) {

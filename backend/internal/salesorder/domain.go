@@ -25,6 +25,44 @@ type Input struct {
 	Notes               string      `json:"notes"`
 	Lines               []LineInput `json:"lines"`
 }
+type DeliveryLineInput struct {
+	SalesOrderLineID uuid.UUID       `json:"salesOrderLineId"`
+	Quantity         decimal.Decimal `json:"quantity"`
+}
+type DeliveryInput struct {
+	DeliveryDate string              `json:"deliveryDate"`
+	Notes        string              `json:"notes"`
+	Lines        []DeliveryLineInput `json:"lines"`
+}
+type Delivery struct {
+	ID           uuid.UUID           `json:"id"`
+	Number       string              `json:"number"`
+	SalesOrderID uuid.UUID           `json:"salesOrderId"`
+	DeliveryDate string              `json:"deliveryDate"`
+	Lines        []DeliveryLineInput `json:"lines"`
+}
+
+func (i *DeliveryInput) NormalizeAndValidate() FieldErrors {
+	fields := FieldErrors{}
+	if len(i.Lines) == 0 {
+		fields["lines"] = "Add at least one line"
+	}
+	seen := map[uuid.UUID]bool{}
+	for n, line := range i.Lines {
+		prefix := "lines[" + strconv.Itoa(n) + "]."
+		if line.SalesOrderLineID == uuid.Nil {
+			fields[prefix+"salesOrderLineId"] = "Select an order line"
+		} else if seen[line.SalesOrderLineID] {
+			fields[prefix+"salesOrderLineId"] = "A line can only be delivered once"
+		} else {
+			seen[line.SalesOrderLineID] = true
+		}
+		if !line.Quantity.IsPositive() || !line.Quantity.Equal(line.Quantity.Round(6)) {
+			fields[prefix+"quantity"] = "Quantity must be positive with up to 6 decimals"
+		}
+	}
+	return fields
+}
 
 func (i *Input) NormalizeAndValidate() FieldErrors {
 	i.CustomerPOReference = strings.TrimSpace(i.CustomerPOReference)
