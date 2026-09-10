@@ -268,16 +268,16 @@ func loadFinishedGoodNode(ctx context.Context, tx database.TenantTx, tenantID, f
 	var node bom.Node
 	node.Kind = "FG"
 	node.Usage = decimal.NewFromInt(1)
-	e := tx.QueryRow(ctx, `SELECT f.id,f.item_code,f.name,u.code FROM finished_goods f JOIN units u ON u.tenant_id=f.tenant_id AND u.id=f.base_unit_id WHERE f.tenant_id=$1 AND f.id=$2 AND f.active`, tenantID, fgID).Scan(&node.ItemID, &node.ItemCode, &node.Name, &node.Unit)
+	e := tx.QueryRow(ctx, `SELECT f.id,f.item_code,f.name,u.code FROM finished_goods f JOIN units u ON u.tenant_id=f.tenant_id AND u.id=f.base_unit_id WHERE f.tenant_id=$1 AND f.id=$2`, tenantID, fgID).Scan(&node.ItemID, &node.ItemCode, &node.Name, &node.Unit)
 	if e != nil {
-		return node, fmt.Errorf("Finished Good has no active BOM")
+		return node, fmt.Errorf("Finished Good ID %s could not be found for this order", fgID)
 	}
 	children, e := loadActiveComponents(ctx, tx, tenantID, "FG", fgID, map[uuid.UUID]bool{})
 	if e != nil {
 		return node, e
 	}
 	if len(children) == 0 {
-		return node, fmt.Errorf("Finished Good %s has no active BOM", node.ItemCode)
+		return node, fmt.Errorf("Finished Good %s — %s has no ACTIVE BOM", node.ItemCode, node.Name)
 	}
 	node.Children = children
 	return node, nil
