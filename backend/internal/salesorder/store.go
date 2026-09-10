@@ -257,6 +257,27 @@ func (s *Store) Submit(ctx context.Context, a Actor, id uuid.UUID) (order Order,
 	})
 	return
 }
+func (s *Store) Delete(ctx context.Context, a Actor, id uuid.UUID) (err error) {
+	err = database.WithTenant(ctx, s.db, tenant(a), func(tx database.TenantTx) error {
+		var status string
+		if e := tx.QueryRow(ctx, `SELECT status FROM sales_orders WHERE tenant_id=$1 AND id=$2 FOR UPDATE`, a.TenantID, id).Scan(&status); e != nil {
+			return e
+		}
+		if status != StatusDraft {
+			return fmt.Errorf("only draft sales orders can be deleted")
+		}
+		var deliveries int
+		if e := tx.QueryRow(ctx, `SELECT count(*) FROM customer_deliveries WHERE tenant_id=$1 AND sales_order_id=$2`, a.TenantID, id).Scan(&deliveries); e != nil {
+			return e
+		}
+		if deliveries > 0 {
+			return fmt.Errorf("sales orders with deliveries cannot be deleted")
+		}
+		_, e := tx.Exec(ctx, `DELETE FROM sales_orders WHERE tenant_id=$1 AND id=$2`, a.TenantID, id)
+		return e
+	})
+	return
+}
 func (s *Store) load(ctx context.Context, tx database.TenantTx, tenantID, id uuid.UUID, out *Order) error {
 	if e := tx.QueryRow(ctx, `SELECT s.id,s.sales_order_number,s.customer_id,c.name,s.status,s.order_date,s.delivery_date FROM sales_orders s JOIN customers c ON c.tenant_id=s.tenant_id AND c.id=s.customer_id WHERE s.tenant_id=$1 AND s.id=$2`, tenantID, id).Scan(&out.ID, &out.Number, &out.CustomerID, &out.CustomerName, &out.Status, &out.OrderDate, &out.DeliveryDate); e != nil {
 		return e

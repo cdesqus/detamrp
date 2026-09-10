@@ -112,6 +112,18 @@ func RegisterRoutes(router *gin.Engine, service *Service, authenticator Authenti
 		}
 		c.JSON(200, item)
 	})
+	g.DELETE("/sales-orders/:id", rbac.RequirePermissions("sales_order.edit_draft"), func(c *gin.Context) {
+		id, e := uuid.Parse(c.Param("id"))
+		if e != nil {
+			c.JSON(400, gin.H{"message": "Invalid ID"})
+			return
+		}
+		if e = service.Delete(c, actor(c), id); e != nil {
+			c.JSON(409, gin.H{"message": e.Error()})
+			return
+		}
+		c.Status(http.StatusNoContent)
+	})
 	g.POST("/sales-orders/:id/deliveries", rbac.RequirePermissions("customer_delivery.create"), func(c *gin.Context) {
 		id, e := uuid.Parse(c.Param("id"))
 		if e != nil {

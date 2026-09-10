@@ -57,5 +57,31 @@ BEGIN
     (v_tenant,v_bom1,v_rm1,2,0),(v_tenant,v_bom1,v_rm2,4,1),
     (v_tenant,v_bom2,v_rm1,1,0),(v_tenant,v_bom2,v_rm3,2,1)
   ON CONFLICT (tenant_id,bom_id,raw_material_id) DO UPDATE SET usage_qty=EXCLUDED.usage_qty,sort_position=EXCLUDED.sort_position;
+
+  -- Additional demo items for list, filtering, and revision testing.
+  FOR i IN 4..12 LOOP
+    INSERT INTO raw_materials (tenant_id,code,sage_item_code,name,supplier_id,base_unit_id,qty_per_kanban,minimum_stock,description,standard_unit_price,currency,active,created_by_user_id,updated_by_user_id)
+    VALUES (v_tenant,format('DEMO-RM-%s',i),format('DEMO-RM-%s',i),format('Demo Material %s',i),v_supplier,v_unit,10+i,0,'Demo BOM material',1000*i,'IDR',true,v_user,v_user)
+    ON CONFLICT (tenant_id,code) DO UPDATE SET active=true,updated_at=now(),updated_by_user_id=EXCLUDED.updated_by_user_id;
+  END LOOP;
+  FOR i IN 3..8 LOOP
+    INSERT INTO finished_goods (tenant_id,item_code,name,base_unit_id,sales_price,currency,price_version,active,created_by_user_id,updated_by_user_id)
+    VALUES (v_tenant,format('DEMO-FG-%s',i),format('Demo Finished Good %s',i),v_unit,100000*i,'IDR',1,true,v_user,v_user)
+    ON CONFLICT (tenant_id,item_code) DO UPDATE SET active=true,updated_at=now(),updated_by_user_id=EXCLUDED.updated_by_user_id;
+    SELECT id INTO v_fg1 FROM finished_goods WHERE tenant_id=v_tenant AND item_code=format('DEMO-FG-%s',i);
+    SELECT id INTO v_rm1 FROM raw_materials WHERE tenant_id=v_tenant AND code=format('DEMO-RM-%s',i+1);
+    SELECT id INTO v_rm2 FROM raw_materials WHERE tenant_id=v_tenant AND code=format('DEMO-RM-%s',i+2);
+    SELECT id INTO v_bom1 FROM boms WHERE tenant_id=v_tenant AND output_kind='FG' AND finished_good_id=v_fg1 AND revision=1;
+    IF v_bom1 IS NULL THEN
+      INSERT INTO boms (tenant_id,output_kind,finished_good_id,revision,status,notes,created_by_user_id,updated_by_user_id)
+      VALUES (v_tenant,'FG',v_fg1,1,'ACTIVE','Demo recipe',v_user,v_user) RETURNING id INTO v_bom1;
+    ELSE
+      UPDATE boms SET status='ACTIVE',updated_at=now(),updated_by_user_id=v_user WHERE id=v_bom1;
+    END IF;
+    INSERT INTO bom_components (tenant_id,bom_id,raw_material_id,usage_qty,sort_position)
+    VALUES (v_tenant,v_bom1,v_rm1,1+i/10.0,0),(v_tenant,v_bom1,v_rm2,2,1)
+    ON CONFLICT (tenant_id,bom_id,raw_material_id) DO UPDATE SET usage_qty=EXCLUDED.usage_qty,sort_position=EXCLUDED.sort_position;
+  END LOOP;
 END $$;
 COMMIT;
+

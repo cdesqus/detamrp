@@ -9,6 +9,7 @@ import (
 type Repository interface {
 	Create(context.Context, Actor, Input) (Order, error)
 	Submit(context.Context, Actor, uuid.UUID) (Order, error)
+	Delete(context.Context, Actor, uuid.UUID) error
 	Get(context.Context, Actor, uuid.UUID) (Order, error)
 	List(context.Context, Actor) ([]Order, error)
 	CreateDelivery(context.Context, Actor, uuid.UUID, DeliveryInput) (Delivery, error)
@@ -26,6 +27,9 @@ func (s *Service) Create(ctx context.Context, a Actor, input Input) (Order, erro
 }
 func (s *Service) Submit(ctx context.Context, a Actor, id uuid.UUID) (Order, error) {
 	return s.repo.Submit(ctx, a, id)
+}
+func (s *Service) Delete(ctx context.Context, a Actor, id uuid.UUID) error {
+	return s.repo.Delete(ctx, a, id)
 }
 func (s *Service) Get(ctx context.Context, a Actor, id uuid.UUID) (Order, error) {
 	return s.repo.Get(ctx, a, id)
