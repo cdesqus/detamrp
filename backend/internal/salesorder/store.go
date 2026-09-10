@@ -339,12 +339,18 @@ func loadActiveComponents(ctx context.Context, tx database.TenantTx, tenantID uu
 		if e = rows.Scan(&node.ItemID, &node.ItemCode, &node.Name, &node.Unit, &node.UnitPrice, &node.Currency, &node.QtyPerKanban, &node.Usage); e != nil {
 			return nil, e
 		}
-		children, e := loadActiveComponents(ctx, tx, tenantID, "RAW_MATERIAL", uuid.MustParse(node.ItemID), stack)
+		result = append(result, node)
+	}
+	if e = rows.Err(); e != nil {
+		return nil, e
+	}
+	rows.Close()
+	for i := range result {
+		children, e := loadActiveComponents(ctx, tx, tenantID, "RAW_MATERIAL", uuid.MustParse(result[i].ItemID), stack)
 		if e != nil {
 			return nil, e
 		}
-		node.Children = children
-		result = append(result, node)
+		result[i].Children = children
 	}
-	return result, rows.Err()
+	return result, nil
 }
