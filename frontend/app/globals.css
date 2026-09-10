@@ -181,6 +181,10 @@ button:disabled { cursor: not-allowed; opacity: .48; }
 .bom-detail-heading span { margin-top:3px; color:#71717a; font-size:12px; }
 .bom-component-row td { background:#fafafa; color:#52525b; }
 .bom-component-indent { display:inline-flex; align-items:center; gap:8px; padding-left:28px; color:#3f3f46; }
+.export-menu { position:absolute; z-index:10; margin-top:42px; right:0; min-width:150px; padding:6px; border:1px solid #d4d4d8; border-radius:8px; background:#fff; box-shadow:0 8px 24px rgba(24,24,27,.12); }
+.export-menu button { display:block; width:100%; padding:9px 12px; border:0; border-radius:5px; background:transparent; text-align:left; cursor:pointer; color:#27272a; }
+.export-menu button:hover { background:#f4f4f5; }
+@media print { .sidebar,.app-header,.toolbar-actions,.page-title-row button,.export-menu { display:none !important; } .module-index { max-width:none; padding:0; } }
 [aria-expanded="true"] > .dropdown-chevron { color:#3f3f46; transform:rotate(180deg); }
 .row-menu-list { display:flex; flex-direction:column; width:158px; }
 .row-menu-list a { display:flex; align-items:center; width:100%; height:28px; padding:0 9px; color:#27272a; font-size:11px; text-decoration:none; white-space:nowrap; }
@@ -442,3 +446,5 @@ button:disabled { cursor: not-allowed; opacity: .48; }
 .activity-change-table tbody tr:last-child > * { border-bottom: 0; }
 @media (max-width: 980px) { .activity-filter-bar { grid-template-columns: repeat(3, minmax(130px, 1fr)); } }
 @media (max-width: 620px) { .activity-filter-bar,.activity-detail-summary { grid-template-columns: 1fr; } .activity-record-count { justify-self: end; } }
+
+.page-title-row .toolbar-actions { position:relative; }
