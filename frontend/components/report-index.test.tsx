@@ -3,6 +3,8 @@ import userEvent from '@testing-library/user-event';
 import {afterEach,describe,expect,it,vi} from 'vitest';
 import {ReportIndex} from './report-index';
 
+vi.mock('next/navigation',()=>({useSearchParams:()=>new URLSearchParams()}));
+
 afterEach(()=>vi.unstubAllGlobals());
 
 describe('ReportIndex',()=>{
@@ -28,5 +30,13 @@ describe('ReportIndex',()=>{
     await userEvent.click(screen.getByRole('button',{name:'Reset'}));
     expect(screen.queryByText('RCV-1')).not.toBeInTheDocument();
     expect(screen.queryByRole('link',{name:'Export PDF'})).not.toBeInTheDocument();
+  });
+  it('loads and exports the material requirement report',async()=>{
+    const fetchMock=vi.fn((input:string)=>Promise.resolve(new Response(JSON.stringify(input.includes('material-requirements')?{items:[{itemCode:'RM-1',required:'12'}]}:{items:[]}))));
+    vi.stubGlobal('fetch',fetchMock); render(<ReportIndex/>);
+    await userEvent.click(screen.getByRole('button',{name:'Material Requirements'}));
+    await userEvent.click(screen.getByRole('button',{name:'Load Report'}));
+    expect(await screen.findByText('RM-1')).toBeInTheDocument();
+    expect(screen.getByRole('button',{name:'Export CSV'})).toBeInTheDocument();
   });
 });

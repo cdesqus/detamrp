@@ -1,4 +1,4 @@
-export type IconName = 'dashboard' | 'units' | 'supplier' | 'package' | 'clipboard' | 'receiving' | 'outgoing' | 'report' | 'settings' | 'users' | 'shield' | 'mail' | 'history' | 'bell' | 'chevron-left' | 'chevron-right' | 'chevron-down' | 'menu' | 'open' | 'edit' | 'pdf' | 'cancel';
+export type IconName = 'dashboard' | 'units' | 'supplier' | 'package' | 'clipboard' | 'receiving' | 'outgoing' | 'report' | 'settings' | 'users' | 'shield' | 'mail' | 'history' | 'bell' | 'chevron-left' | 'chevron-right' | 'chevron-down' | 'menu' | 'open' | 'edit' | 'pdf' | 'cancel' | 'factory' | 'tag' | 'box-check' | 'layers' | 'bom' | 'warehouse' | 'sales-order' | 'requirements' | 'delivery-report' | 'receiving-report';
 
 const paths: Record<IconName, React.ReactNode> = {
   dashboard: <><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></>,
@@ -22,7 +22,17 @@ const paths: Record<IconName, React.ReactNode> = {
   ,open: <><path d="M3 12s3.5-6 9-6 9 6 9 6-3.5 6-9 6-9-6-9-6Z"/><circle cx="12" cy="12" r="2.5"/></>,
   edit: <><path d="M4 20h4l11-11-4-4L4 16z"/><path d="m13.5 6.5 4 4"/></>,
   pdf: <><path d="M6 2h8l4 4v16H6z"/><path d="M14 2v5h5M8 17h8M8 13h5"/></>,
-  cancel: <><circle cx="12" cy="12" r="9"/><path d="m9 9 6 6m0-6-6 6"/></>
+  cancel: <><circle cx="12" cy="12" r="9"/><path d="m9 9 6 6m0-6-6 6"/></>,
+  factory: <><path d="M3 21V9l6 3V9l6 3V6h6v15z"/><path d="M7 17h.01M12 17h.01M17 17h.01"/></>,
+  tag: <><path d="M3 5v6l10 10 8-8L11 3H5a2 2 0 0 0-2 2Z"/><circle cx="7.5" cy="7.5" r="1"/></>,
+  'box-check': <><path d="m4 7 8-4 8 4v10l-8 4-8-4zM4 7l8 4 8-4M12 11v10"/><path d="m8 16 2 2 5-5"/></>,
+  layers: <><path d="m12 3 9 5-9 5-9-5zM3 12l9 5 9-5M3 16l9 5 9-5"/></>,
+  bom: <><rect x="9" y="3" width="6" height="5" rx="1"/><rect x="3" y="16" width="6" height="5" rx="1"/><rect x="15" y="16" width="6" height="5" rx="1"/><path d="M12 8v4M6 16v-4h12v4"/></>,
+  warehouse: <><path d="M3 21V8l9-5 9 5v13M7 21v-7h10v7M7 10h.01M12 10h.01M17 10h.01"/></>,
+  'sales-order': <><path d="M5 3h14v18H5zM8 7h8M8 11h8M8 15h5"/><path d="m16 17 2 2 3-3"/></>,
+  requirements: <><path d="M5 3h14v18H5zM8 7h8M8 11h8M8 15h2M14 15h2M8 19h8"/></>,
+  'delivery-report': <><path d="M3 5h12v12H3zM15 9h3l3 3v5h-6"/><path d="M9 8v6m-3-3 3 3 3-3M7 19a2 2 0 1 0 0 .01M18 19a2 2 0 1 0 0 .01"/></>,
+  'receiving-report': <><path d="M5 3h14v18H5zM9 17v-4M12 17V9M15 17v-7"/><path d="m8 7 2 2 4-4"/></>
 };
 
 export function Icon({ name, size = 16, className }: { name: IconName; size?: number; className?: string }) {

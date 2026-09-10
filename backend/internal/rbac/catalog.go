@@ -14,6 +14,10 @@ var Catalog = map[string]string{
 	"email_log.view": "View email log", "email_log.resend": "Resend emails",
 	"user.manage": "Manage users", "role.manage": "Manage roles", "configuration.manage": "Manage configuration",
 	"master_data.view": "View master data", "master_data.manage": "Manage master data",
+	"bom.view": "View bills of materials", "bom.manage": "Manage BOM drafts", "bom.activate": "Activate bills of materials",
+	"customer.view": "View customers", "customer.manage": "Manage customers",
+	"sales_report.view": "View sales reports",
+	"fg.view": "View finished goods", "fg.manage": "Manage finished goods", "fg.price.manage": "Manage finished-good prices",
 }
 
 func Allows(granted []string, required ...string) bool {

@@ -40,6 +40,37 @@ type Result struct {
 	Items  []Row  `json:"items"`
 	Totals Totals `json:"totals"`
 }
+type SalesOrderRow struct {
+	Number    string          `json:"number"`
+	Customer  string          `json:"customer"`
+	OrderDate time.Time       `json:"orderDate"`
+	Status    string          `json:"status"`
+	ItemCode  string          `json:"itemCode"`
+	ItemName  string          `json:"itemName"`
+	Ordered   decimal.Decimal `json:"ordered"`
+	Delivered decimal.Decimal `json:"delivered"`
+	Remaining decimal.Decimal `json:"remaining"`
+	Unit      string          `json:"unit"`
+}
+type MaterialRequirementRow struct {
+	ItemCode       string          `json:"itemCode"`
+	ItemName       string          `json:"itemName"`
+	Unit           string          `json:"unit"`
+	Required       decimal.Decimal `json:"required"`
+	QtyPerKanban   decimal.Decimal `json:"qtyPerKanban"`
+	PurchaseKanban decimal.Decimal `json:"purchaseKanban"`
+}
+type CustomerDeliveryRow struct {
+	ID               uuid.UUID       `json:"id"`
+	Number           string          `json:"number"`
+	DeliveryDate     time.Time       `json:"deliveryDate"`
+	SalesOrderNumber string          `json:"salesOrderNumber"`
+	Customer         string          `json:"customer"`
+	ItemCode         string          `json:"itemCode"`
+	ItemName         string          `json:"itemName"`
+	Quantity         decimal.Decimal `json:"quantity"`
+	Unit             string          `json:"unit"`
+}
 
 func summarize(rows []Row) Totals {
 	var totals Totals

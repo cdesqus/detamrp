@@ -10,22 +10,32 @@ export const navigationGroups: NavigationGroup[] = [
   { label: 'Data Master', icon: 'units', collapsible: true, items: [
     { label: 'Measurements', icon: 'units', requiredPermission: 'master_data.view', items: [
       { label: 'Unit', href: '/units', icon: 'units', requiredPermission: 'master_data.view' },
-      { label: 'Category', href: '/categories', icon: 'package', requiredPermission: 'master_data.view' },
-      { label: 'Packing', href: '/packings', icon: 'package', requiredPermission: 'master_data.view' }
+      { label: 'Category', href: '/categories', icon: 'tag', requiredPermission: 'master_data.view' },
+      { label: 'Packing', href: '/packings', icon: 'box-check', requiredPermission: 'master_data.view' }
     ] },
-    { label: 'Plants', href: '/plants', icon: 'package', requiredPermission: 'master_data.view' },
+    { label: 'Plants', href: '/plants', icon: 'factory', requiredPermission: 'master_data.view' },
     { label: 'Suppliers', href: '/suppliers', icon: 'supplier', requiredPermission: 'master_data.view' },
-    { label: 'Raw Materials', href: '/raw-materials', icon: 'package', requiredPermission: 'master_data.view' }
+    { label: 'Customers', href: '/customers', icon: 'users', requiredPermission: 'customer.view' },
+    { label: 'Finished Goods', href: '/finished-goods', icon: 'box-check', requiredPermission: 'fg.view' },
+    { label: 'Raw Materials', href: '/raw-materials', icon: 'layers', requiredPermission: 'master_data.view' },
+    { label: 'Bill of Materials', href: '/boms', icon: 'bom', requiredPermission: 'bom.view' }
   ] },
   { label: 'Procurement', icon: 'clipboard', collapsible: true, items: [
-    { label: 'Supplier Orders', href: '/supplier-orders', icon: 'clipboard', requiredPermission: 'po.view' }
+    { label: 'Supplier Orders', href: '/supplier-orders', icon: 'clipboard', requiredPermission: 'po.view' },
+    { label: 'Sales Orders', href: '/sales-orders', icon: 'sales-order', requiredPermission: 'sales_order.view' }
   ] },
-  { label: 'Logistics', icon: 'package', collapsible: true, items: [
-    { label: 'Stock Inventory', href: '/inventory', icon: 'package', requiredPermission: 'inventory.view' },
+  { label: 'Logistics', icon: 'warehouse', collapsible: true, items: [
+    { label: 'Stock Inventory', href: '/inventory', icon: 'warehouse', requiredPermission: 'inventory.view' },
     { label: 'Receiving', href: '/receiving', icon: 'receiving', requiredPermission: 'receiving.view' },
-    { label: 'Outgoing Material', href: '/outgoing-material', icon: 'outgoing', requiredPermission: 'inventory.view' }
+    { label: 'Outgoing Material', href: '/outgoing-material', icon: 'outgoing', requiredPermission: 'inventory.view' },
+    { label: 'Customer Deliveries', href: '/customer-deliveries', icon: 'delivery-report', requiredPermission: 'customer_delivery.view' }
   ] },
-  { items: [{ label: 'Reports', href: '/reports', icon: 'report', requiredPermission: 'receiving.view' }] },
+  { label: 'Reports', icon: 'report', collapsible: true, items: [
+    { label: 'Receiving', href: '/reports?type=receiving', icon: 'receiving-report', requiredPermission: 'receiving.view' },
+    { label: 'Sales Orders', href: '/reports?type=sales-orders', icon: 'sales-order', requiredPermission: 'sales_report.view' },
+    { label: 'Material Needs', href: '/reports?type=material-requirements', icon: 'requirements', requiredPermission: 'sales_report.view' },
+    { label: 'Deliveries', href: '/reports?type=customer-deliveries', icon: 'delivery-report', requiredPermission: 'customer_delivery.view' }
+  ] },
   { label: 'Settings', icon: 'settings', collapsible: true, items: [
     { label: 'Company Settings', href: '/settings/company', icon: 'settings', requiredPermission: 'configuration.manage' },
     { label: 'Users', href: '/settings/users', icon: 'users', requiredPermission: 'user.manage' },
@@ -45,13 +55,19 @@ const routeRules: Array<{ path: string; permission: string; exact?: boolean }> =
   { path: '/plants', permission: 'master_data.view' },
   { path: '/suppliers', permission: 'master_data.view' },
   { path: '/raw-materials', permission: 'master_data.view' },
+  { path: '/customers', permission: 'customer.view' },
+  { path: '/finished-goods', permission: 'fg.view' },
+  { path: '/boms', permission: 'bom.view' },
+  { path: '/sales-orders/new', permission: 'sales_order.create', exact: true },
+  { path: '/sales-orders', permission: 'sales_order.view' },
   { path: '/supplier-orders', permission: 'po.view' },
   { path: '/approvals', permission: 'po.approve' },
   { path: '/delivery-notes', permission: 'dn.view' },
   { path: '/inventory', permission: 'inventory.view' },
   { path: '/receiving', permission: 'receiving.view' },
   { path: '/outgoing-material', permission: 'inventory.view' },
-  { path: '/reports', permission: 'receiving.view' },
+  { path: '/customer-deliveries', permission: 'customer_delivery.view' },
+  { path: '/reports', permission: 'sales_report.view' },
   { path: '/settings/users', permission: 'user.manage' },
   { path: '/settings/company', permission: 'configuration.manage' },
   { path: '/settings/roles', permission: 'role.manage' },

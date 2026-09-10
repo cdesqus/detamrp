@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -42,12 +43,43 @@ func TestLiveSchemaMigrationsAreAppliedExactlyOnce(t *testing.T) {
 		t.Fatalf("open test database: %v", err)
 	}
 	defer pool.Close()
-	var count, distinct, minimum, maximum int
-	if err := pool.QueryRow(context.Background(), `SELECT count(*),count(DISTINCT version),min(version),max(version) FROM schema_migrations`).Scan(&count, &distinct, &minimum, &maximum); err != nil {
+	files, err := filepath.Glob(filepath.Join("..", "..", "..", "database", "migrations", "[0-9][0-9][0-9]_*.sql"))
+	if err != nil || len(files) == 0 {
+		t.Fatalf("discover migration files: %v (count %d)", err, len(files))
+	}
+	want := make(map[int]string, len(files))
+	for _, file := range files {
+		name := filepath.Base(file)
+		version, err := strconv.Atoi(strings.SplitN(name, "_", 2)[0])
+		if err != nil {
+			t.Fatal(err)
+		}
+		if previous, exists := want[version]; exists {
+			t.Fatalf("duplicate migration version: %s and %s", previous, name)
+		}
+		want[version] = name
+	}
+	rows, err := pool.Query(context.Background(), `SELECT version,name FROM schema_migrations ORDER BY version`)
+	if err != nil {
 		t.Fatalf("read schema migrations: %v", err)
 	}
-	if count != 9 || distinct != 9 || minimum != 1 || maximum != 9 {
-		t.Fatalf("schema migration versions = count %d distinct %d range %d-%d, want nine unique versions 1-9", count, distinct, minimum, maximum)
+	defer rows.Close()
+	for rows.Next() {
+		var version int
+		var name string
+		if err := rows.Scan(&version, &name); err != nil {
+			t.Fatal(err)
+		}
+		if expected, exists := want[version]; !exists || expected != name {
+			t.Errorf("unexpected migration %d %q, expected %q", version, name, expected)
+		}
+		delete(want, version)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	if len(want) != 0 {
+		t.Fatalf("unapplied migrations: %v", want)
 	}
 }
 
