@@ -88,6 +88,34 @@ func RegisterRoutes(router *gin.Engine, service *Service, authenticator Authenti
 		c.Header("Content-Disposition", `attachment; filename="`+item.Number+`-requirements.pdf"`)
 		c.Data(http.StatusOK, "application/pdf", data)
 	})
+	g.GET("/sales-orders/:id/requirements.xlsx", rbac.RequirePermissions("sales_order.view"), func(c *gin.Context) {
+		id, e := uuid.Parse(c.Param("id"))
+		if e != nil {
+			c.JSON(400, gin.H{"message": "Invalid ID"})
+			return
+		}
+		item, e := service.Get(c, actor(c), id)
+		if e != nil {
+			c.JSON(404, gin.H{"message": "Sales order not found"})
+			return
+		}
+		if item.Status != StatusSubmitted {
+			c.JSON(409, gin.H{"message": "Submit the sales order before exporting requirements"})
+			return
+		}
+		result, e := CalculateRequirements(item.Lines)
+		if e != nil {
+			c.JSON(422, gin.H{"message": e.Error()})
+			return
+		}
+		data, e := RenderRequirementsXLSX(item, result)
+		if e != nil {
+			c.JSON(500, gin.H{"message": "Requirements Excel could not be generated"})
+			return
+		}
+		c.Header("Content-Disposition", `attachment; filename="`+item.Number+`-requirements.xlsx"`)
+		c.Data(http.StatusOK, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", data)
+	})
 	g.GET("/sales-orders/:id/deliveries", rbac.RequirePermissions("customer_delivery.view"), func(c *gin.Context) {
 		id, e := uuid.Parse(c.Param("id"))
 		if e != nil {
