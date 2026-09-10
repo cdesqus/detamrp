@@ -60,6 +60,34 @@ func RegisterRoutes(router *gin.Engine, service *Service, authenticator Authenti
 		}
 		c.JSON(200, gin.H{"lines": result})
 	})
+	g.GET("/sales-orders/:id/requirements.pdf", rbac.RequirePermissions("sales_order.view"), func(c *gin.Context) {
+		id, e := uuid.Parse(c.Param("id"))
+		if e != nil {
+			c.JSON(400, gin.H{"message": "Invalid ID"})
+			return
+		}
+		item, e := service.Get(c, actor(c), id)
+		if e != nil {
+			c.JSON(404, gin.H{"message": "Sales order not found"})
+			return
+		}
+		if item.Status != StatusSubmitted {
+			c.JSON(409, gin.H{"message": "Submit the sales order before exporting requirements"})
+			return
+		}
+		result, e := CalculateRequirements(item.Lines)
+		if e != nil {
+			c.JSON(422, gin.H{"message": e.Error()})
+			return
+		}
+		data, e := RenderRequirementsPDF(item, result)
+		if e != nil {
+			c.JSON(500, gin.H{"message": "Requirements PDF could not be generated"})
+			return
+		}
+		c.Header("Content-Disposition", `attachment; filename="`+item.Number+`-requirements.pdf"`)
+		c.Data(http.StatusOK, "application/pdf", data)
+	})
 	g.GET("/sales-orders/:id/deliveries", rbac.RequirePermissions("customer_delivery.view"), func(c *gin.Context) {
 		id, e := uuid.Parse(c.Param("id"))
 		if e != nil {
