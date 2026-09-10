@@ -136,6 +136,13 @@ func (s *Store) Create(ctx context.Context, a Actor, input Input) (item BOM, err
 	}
 	return s.Get(ctx, a, item.ID)
 }
+func (s *Store) Update(ctx context.Context, a Actor, id uuid.UUID, input Input) (item BOM, err error) {
+	err = database.WithTenant(ctx, s.db, tenant(a), func(tx database.TenantTx) error {
+		var status string; if e:=tx.QueryRow(ctx, `SELECT status FROM boms WHERE tenant_id=$1 AND id=$2 FOR UPDATE`, a.TenantID,id).Scan(&status); e!=nil{return e}; if status!=StatusDraft{return fmt.Errorf("only draft BOMs can be edited")}
+		if input.Output.Kind==OutputFG { if _,e:=tx.Exec(ctx,`UPDATE boms SET output_kind='FG',finished_good_id=$3,raw_material_id=NULL,notes=$4,updated_by_user_id=$5,updated_at=now() WHERE tenant_id=$1 AND id=$2`,a.TenantID,id,input.Output.ID,input.Notes,a.UserID);e!=nil{return e} } else { if _,e:=tx.Exec(ctx,`UPDATE boms SET output_kind='RAW_MATERIAL',finished_good_id=NULL,raw_material_id=$3,notes=$4,updated_by_user_id=$5,updated_at=now() WHERE tenant_id=$1 AND id=$2`,a.TenantID,id,input.Output.ID,input.Notes,a.UserID);e!=nil{return e} }
+		if _,e:=tx.Exec(ctx,`DELETE FROM bom_components WHERE tenant_id=$1 AND bom_id=$2`,a.TenantID,id);e!=nil{return e}; for pos,c:=range input.Components{if _,e:=tx.Exec(ctx,`INSERT INTO bom_components(tenant_id,bom_id,raw_material_id,usage_qty,sort_position) VALUES($1,$2,$3,$4,$5)`,a.TenantID,id,c.RawMaterialID,c.UsageQty,pos);e!=nil{return e}};return nil
+	}); if err!=nil{return item,err}; return s.Get(ctx,a,id)
+}
 func (s *Store) Activate(ctx context.Context, a Actor, id uuid.UUID) (item BOM, err error) {
 	err = database.WithTenant(ctx, s.db, tenant(a), func(tx database.TenantTx) error {
 		var kind string
