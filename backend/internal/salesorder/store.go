@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/shopspring/decimal"
@@ -269,14 +270,15 @@ func loadFinishedGoodNode(ctx context.Context, tx database.TenantTx, tenantID, f
 	var node bom.Node
 	node.Kind = "FG"
 	node.Usage = decimal.NewFromInt(1)
-	e := tx.QueryRow(ctx, `SELECT f.id,f.item_code,f.name,u.code FROM finished_goods f JOIN units u ON u.tenant_id=f.tenant_id AND u.id=f.base_unit_id WHERE f.tenant_id=$1 AND f.id=$2`, tenantID, fgID).Scan(&node.ItemID, &node.ItemCode, &node.Name, &node.Unit)
+	e := tx.QueryRow(ctx, `SELECT f.id::text,f.item_code,f.name,u.code FROM finished_goods f JOIN units u ON u.tenant_id=f.tenant_id AND u.id=f.base_unit_id WHERE f.tenant_id=$1 AND f.id=$2`, tenantID, fgID).Scan(&node.ItemID, &node.ItemCode, &node.Name, &node.Unit)
 	if e == pgx.ErrNoRows && itemCode != "" {
-		e = tx.QueryRow(ctx, `SELECT f.id,f.item_code,f.name,u.code FROM finished_goods f JOIN units u ON u.tenant_id=f.tenant_id AND u.id=f.base_unit_id WHERE f.tenant_id=$1 AND f.item_code=$2 AND f.active ORDER BY f.updated_at DESC LIMIT 1`, tenantID, itemCode).Scan(&node.ItemID, &node.ItemCode, &node.Name, &node.Unit)
+		e = tx.QueryRow(ctx, `SELECT f.id::text,f.item_code,f.name,u.code FROM finished_goods f JOIN units u ON u.tenant_id=f.tenant_id AND u.id=f.base_unit_id WHERE f.tenant_id=$1 AND f.item_code=$2 AND f.active ORDER BY f.updated_at DESC LIMIT 1`, tenantID, itemCode).Scan(&node.ItemID, &node.ItemCode, &node.Name, &node.Unit)
 	}
 	if e == pgx.ErrNoRows && itemName != "" {
-		e = tx.QueryRow(ctx, `SELECT f.id,f.item_code,f.name,u.code FROM finished_goods f JOIN units u ON u.tenant_id=f.tenant_id AND u.id=f.base_unit_id WHERE f.tenant_id=$1 AND lower(trim(f.name))=lower(trim($2)) AND f.active ORDER BY f.updated_at DESC LIMIT 1`, tenantID, itemName).Scan(&node.ItemID, &node.ItemCode, &node.Name, &node.Unit)
+		e = tx.QueryRow(ctx, `SELECT f.id::text,f.item_code,f.name,u.code FROM finished_goods f JOIN units u ON u.tenant_id=f.tenant_id AND u.id=f.base_unit_id WHERE f.tenant_id=$1 AND lower(trim(f.name))=lower(trim($2)) AND f.active ORDER BY f.updated_at DESC LIMIT 1`, tenantID, itemName).Scan(&node.ItemID, &node.ItemCode, &node.Name, &node.Unit)
 	}
 	if e != nil {
+		log.Printf("sales order finished good lookup failed tenant=%s fg=%s item_code=%q item_name=%q err=%v", tenantID, fgID, itemCode, itemName, e)
 		return node, fmt.Errorf("Finished Good ID %s could not be found for this order", fgID)
 	}
 	// The order line can contain an ID from an older master-data record. When
