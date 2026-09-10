@@ -146,6 +146,7 @@ func authenticate(authenticator Authenticator) gin.HandlerFunc {
 			return
 		}
 		c.Set(actorKey, Actor{TenantID: user.TenantID, UserID: user.ID})
+		c.Set(rbac.ContextPermissionsKey, user.Permissions)
 		c.Next()
 	}
 }

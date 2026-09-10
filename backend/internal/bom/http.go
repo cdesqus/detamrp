@@ -50,6 +50,11 @@ func RegisterRoutes(router *gin.Engine, service *Service, authenticator Authenti
 		}
 		c.JSON(201, item)
 	})
+	g.PUT("/boms/:id", rbac.RequirePermissions("bom.manage"), func(c *gin.Context) {
+		id, ok := idFrom(c); if !ok { return }; var input Input
+		if c.ShouldBindJSON(&input) != nil { c.JSON(400, gin.H{"message":"Invalid JSON body"}); return }
+		item, err := service.Update(c, actorFrom(c), id, input); if err != nil { c.JSON(422, gin.H{"message":err.Error()}); return }; c.JSON(200, item)
+	})
 	g.POST("/boms/:id/activate", rbac.RequirePermissions("bom.activate"), func(c *gin.Context) {
 		id, ok := idFrom(c)
 		if !ok {
