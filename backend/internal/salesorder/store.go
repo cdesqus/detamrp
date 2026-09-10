@@ -214,15 +214,27 @@ func (s *Store) Submit(ctx context.Context, a Actor, id uuid.UUID) (order Order,
 		if e != nil {
 			return e
 		}
-		defer rows.Close()
+		type submitLine struct {
+			id, finishedGoodID uuid.UUID
+			itemCode, itemName string
+			quantity           decimal.Decimal
+		}
+		lines := make([]submitLine, 0)
 		for rows.Next() {
-			var lineID, fgID uuid.UUID
-			var itemCode, itemName string
-			var qty decimal.Decimal
-			if e = rows.Scan(&lineID, &fgID, &itemCode, &itemName, &qty); e != nil {
+			var line submitLine
+			if e = rows.Scan(&line.id, &line.finishedGoodID, &line.itemCode, &line.itemName, &line.quantity); e != nil {
+				rows.Close()
 				return e
 			}
-			root, e := loadFinishedGoodNode(ctx, tx, a.TenantID, fgID, itemCode, itemName)
+			lines = append(lines, line)
+		}
+		if e = rows.Err(); e != nil {
+			rows.Close()
+			return e
+		}
+		rows.Close()
+		for _, line := range lines {
+			root, e := loadFinishedGoodNode(ctx, tx, a.TenantID, line.finishedGoodID, line.itemCode, line.itemName)
 			if e != nil {
 				return e
 			}
@@ -234,12 +246,9 @@ func (s *Store) Submit(ctx context.Context, a Actor, id uuid.UUID) (order Order,
 			if e != nil {
 				return e
 			}
-			if _, e = tx.Exec(ctx, `UPDATE sales_order_lines SET calculation_snapshot=$3 WHERE tenant_id=$1 AND id=$2`, a.TenantID, lineID, payload); e != nil {
+			if _, e = tx.Exec(ctx, `UPDATE sales_order_lines SET calculation_snapshot=$3 WHERE tenant_id=$1 AND id=$2`, a.TenantID, line.id, payload); e != nil {
 				return e
 			}
-		}
-		if e = rows.Err(); e != nil {
-			return e
 		}
 		if _, e = tx.Exec(ctx, `UPDATE sales_orders SET status='SUBMITTED',updated_by_user_id=$3,updated_at=now() WHERE tenant_id=$1 AND id=$2`, a.TenantID, id, a.UserID); e != nil {
 			return e
