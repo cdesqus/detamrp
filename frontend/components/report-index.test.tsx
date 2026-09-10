@@ -3,6 +3,8 @@ import userEvent from '@testing-library/user-event';
 import {afterEach,describe,expect,it,vi} from 'vitest';
 import {ReportIndex} from './report-index';
 
+vi.mock('next/navigation',()=>({useSearchParams:()=>new URLSearchParams()}));
+
 afterEach(()=>vi.unstubAllGlobals());
 
 describe('ReportIndex',()=>{

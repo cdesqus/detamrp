@@ -10,31 +10,31 @@ export const navigationGroups: NavigationGroup[] = [
   { label: 'Data Master', icon: 'units', collapsible: true, items: [
     { label: 'Measurements', icon: 'units', requiredPermission: 'master_data.view', items: [
       { label: 'Unit', href: '/units', icon: 'units', requiredPermission: 'master_data.view' },
-      { label: 'Category', href: '/categories', icon: 'package', requiredPermission: 'master_data.view' },
-      { label: 'Packing', href: '/packings', icon: 'package', requiredPermission: 'master_data.view' }
+      { label: 'Category', href: '/categories', icon: 'tag', requiredPermission: 'master_data.view' },
+      { label: 'Packing', href: '/packings', icon: 'box-check', requiredPermission: 'master_data.view' }
     ] },
-    { label: 'Plants', href: '/plants', icon: 'package', requiredPermission: 'master_data.view' },
+    { label: 'Plants', href: '/plants', icon: 'factory', requiredPermission: 'master_data.view' },
     { label: 'Suppliers', href: '/suppliers', icon: 'supplier', requiredPermission: 'master_data.view' },
     { label: 'Customers', href: '/customers', icon: 'users', requiredPermission: 'customer.view' },
-    { label: 'Finished Goods', href: '/finished-goods', icon: 'package', requiredPermission: 'fg.view' },
-    { label: 'Raw Materials', href: '/raw-materials', icon: 'package', requiredPermission: 'master_data.view' },
-    { label: 'Bill of Materials', href: '/boms', icon: 'package', requiredPermission: 'bom.view' }
+    { label: 'Finished Goods', href: '/finished-goods', icon: 'box-check', requiredPermission: 'fg.view' },
+    { label: 'Raw Materials', href: '/raw-materials', icon: 'layers', requiredPermission: 'master_data.view' },
+    { label: 'Bill of Materials', href: '/boms', icon: 'bom', requiredPermission: 'bom.view' }
   ] },
   { label: 'Procurement', icon: 'clipboard', collapsible: true, items: [
     { label: 'Supplier Orders', href: '/supplier-orders', icon: 'clipboard', requiredPermission: 'po.view' },
-    { label: 'Sales Orders', href: '/sales-orders', icon: 'clipboard', requiredPermission: 'sales_order.view' }
+    { label: 'Sales Orders', href: '/sales-orders', icon: 'sales-order', requiredPermission: 'sales_order.view' }
   ] },
-  { label: 'Logistics', icon: 'package', collapsible: true, items: [
-    { label: 'Stock Inventory', href: '/inventory', icon: 'package', requiredPermission: 'inventory.view' },
+  { label: 'Logistics', icon: 'warehouse', collapsible: true, items: [
+    { label: 'Stock Inventory', href: '/inventory', icon: 'warehouse', requiredPermission: 'inventory.view' },
     { label: 'Receiving', href: '/receiving', icon: 'receiving', requiredPermission: 'receiving.view' },
     { label: 'Outgoing Material', href: '/outgoing-material', icon: 'outgoing', requiredPermission: 'inventory.view' },
-    { label: 'Customer Deliveries', href: '/customer-deliveries', icon: 'outgoing', requiredPermission: 'customer_delivery.view' }
+    { label: 'Customer Deliveries', href: '/customer-deliveries', icon: 'delivery-report', requiredPermission: 'customer_delivery.view' }
   ] },
   { label: 'Reports', icon: 'report', collapsible: true, items: [
-    { label: 'Receiving Report', href: '/reports?type=receiving', icon: 'report', requiredPermission: 'receiving.view' },
-    { label: 'Sales Order Report', href: '/reports?type=sales-orders', icon: 'report', requiredPermission: 'sales_report.view' },
-    { label: 'Material Requirement Report', href: '/reports?type=material-requirements', icon: 'report', requiredPermission: 'sales_report.view' },
-    { label: 'Customer Delivery Report', href: '/reports?type=customer-deliveries', icon: 'report', requiredPermission: 'customer_delivery.view' }
+    { label: 'Receiving', href: '/reports?type=receiving', icon: 'receiving-report', requiredPermission: 'receiving.view' },
+    { label: 'Sales Orders', href: '/reports?type=sales-orders', icon: 'sales-order', requiredPermission: 'sales_report.view' },
+    { label: 'Material Needs', href: '/reports?type=material-requirements', icon: 'requirements', requiredPermission: 'sales_report.view' },
+    { label: 'Deliveries', href: '/reports?type=customer-deliveries', icon: 'delivery-report', requiredPermission: 'customer_delivery.view' }
   ] },
   { label: 'Settings', icon: 'settings', collapsible: true, items: [
     { label: 'Company Settings', href: '/settings/company', icon: 'settings', requiredPermission: 'configuration.manage' },

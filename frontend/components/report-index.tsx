@@ -1,5 +1,6 @@
 'use client';
 import {useEffect,useState} from 'react';
+import {useSearchParams} from 'next/navigation';
 import {formatQuantity} from '../lib/number-format';
 
 type Supplier={id:string;name:string};
@@ -9,10 +10,13 @@ const empty:Result={items:[],totals:{kanbanReceived:0,receivedQuantity:'0'}};
 const reportLabels:Record<string,string>={number:'Number',customer:'Customer',orderDate:'Order Date',status:'Status',itemCode:'Item Code',itemName:'Item Name',ordered:'Ordered',delivered:'Delivered',remaining:'Remaining',unit:'Unit',required:'Required Qty',qtyPerKanban:'Qty / Kanban',purchaseKanban:'Purchase Kanban',deliveryDate:'Delivery Date',salesOrderNumber:'Sales Order',quantity:'Quantity'};
 
 export function ReportIndex(){
-  const[report,setReport]=useState<'receiving'|'sales-orders'|'material-requirements'|'customer-deliveries'>('receiving');
+  const searchParams=useSearchParams();
+  const reportType=searchParams.get('type');
+  const[report,setReport]=useState<'receiving'|'sales-orders'|'material-requirements'|'customer-deliveries'>(reportType==='sales-orders'||reportType==='material-requirements'||reportType==='customer-deliveries'?reportType:'receiving');
   const[fromDate,setFromDate]=useState(''),[toDate,setToDate]=useState(''),[supplierId,setSupplierId]=useState(''),[search,setSearch]=useState('');
   const[suppliers,setSuppliers]=useState<Supplier[]>([]),[data,setData]=useState<Result>(empty),[loading,setLoading]=useState(false),[error,setError]=useState(''),[appliedQuery,setAppliedQuery]=useState<string|null>(null);
   useEffect(()=>{fetch('/api/master-data/suppliers?active=true&limit=200',{credentials:'include'}).then(r=>r.json()).then(x=>setSuppliers(x.items??[])).catch(()=>{})},[]);
+  useEffect(()=>{if(reportType==='receiving'||reportType==='sales-orders'||reportType==='material-requirements'||reportType==='customer-deliveries')setReport(reportType)},[reportType]);
   async function apply(){
     if(report!=='receiving'){setLoading(true);setError('');try{const response=await fetch(`/api/reports/${report}`,{credentials:'include'});if(!response.ok)throw new Error();const payload=await response.json() as Result;const items=payload.items.filter((item:unknown)=>{const row=item as Record<string,string>;const date=(row.orderDate??row.deliveryDate??'').slice(0,10);return (!fromDate||date>=fromDate)&&(!toDate||date<=toDate)&&(!search.trim()||Object.values(row).join(' ').toLowerCase().includes(search.trim().toLowerCase()))});setData({...payload,items});setAppliedQuery('loaded')}catch{setError('Report could not be loaded.')}finally{setLoading(false)};return}
     if(!fromDate||!toDate)return;
@@ -24,8 +28,7 @@ export function ReportIndex(){
   function reset(){setFromDate('');setToDate('');setSupplierId('');setSearch('');setAppliedQuery(null);setData(empty);setError('')}
   function exportCSV(){const rows=data.items as unknown as Record<string,unknown>[];if(!rows.length)return;const headers=Object.keys(rows[0]);const escape=(value:unknown)=>`"${String(value??'').replaceAll('"','""')}"`;const csv=[headers.join(','),...rows.map(row=>headers.map(header=>escape(row[header])).join(','))].join('\r\n');const url=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));const link=document.createElement('a');link.href=url;link.download=`${report}-report.csv`;link.click();URL.revokeObjectURL(url)}
   return <section className="report-index">
-    <div className="toolbar-actions"><button className={report==='receiving'?'primary-button':''} onClick={()=>setReport('receiving')}>Receiving</button><button className={report==='sales-orders'?'primary-button':''} onClick={()=>setReport('sales-orders')}>Sales Orders</button><button className={report==='material-requirements'?'primary-button':''} onClick={()=>setReport('material-requirements')}>Material Requirements</button><button className={report==='customer-deliveries'?'primary-button':''} onClick={()=>setReport('customer-deliveries')}>Customer Deliveries</button></div>
-    <div className="page-title-row"><div><h1>{report==='receiving'?'Receiving Report':report==='sales-orders'?'Sales Order Report':report==='material-requirements'?'Material Requirement Report':'Customer Delivery Report'}</h1><p className="muted">{report==='receiving'?'Choose a date range before loading the report.':'Load the current report for manual SAGE input.'}</p></div>{report==='receiving'&&appliedQuery&&<a className="primary-button" aria-label="Export PDF" href={`/api/reports/receiving.pdf?${appliedQuery}`} target="_blank" rel="noopener noreferrer">Export PDF</a>}</div>
+    <div className="page-title-row"><div><h1>{report==='receiving'?'Receiving':report==='sales-orders'?'Sales Orders':report==='material-requirements'?'Material Needs':'Deliveries'}</h1><p className="muted">{report==='receiving'?'Choose a date range before loading the report.':'Load the current report for manual SAGE input.'}</p></div>{report==='receiving'&&appliedQuery&&<a className="primary-button" aria-label="Export PDF" href={`/api/reports/receiving.pdf?${appliedQuery}`} target="_blank" rel="noopener noreferrer">Export PDF</a>}</div>
     {report==='receiving'&&<div className="report-filters">
       <label>From Date<input type="date" value={fromDate} onChange={e=>setFromDate(e.target.value)}/></label>
       <label>To Date<input type="date" value={toDate} onChange={e=>setToDate(e.target.value)}/></label>
