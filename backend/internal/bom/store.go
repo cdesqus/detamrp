@@ -26,13 +26,17 @@ func (s *Store) List(ctx context.Context, a Actor) (items []BOM, err error) {
 		}
 		defer rows.Close()
 		for rows.Next() {
-			item, e := scanBOM(ctx, tx, rows, a.TenantID)
+			item, e := scanBOMHeader(rows)
 			if e != nil {
 				return e
 			}
 			items = append(items, item)
 		}
-		return rows.Err()
+		if e := rows.Err(); e != nil { return e }
+		for i := range items {
+			if e := loadComponents(ctx, tx, a.TenantID, &items[i]); e != nil { return e }
+		}
+		return nil
 	})
 	return
 }
@@ -52,6 +56,15 @@ func scanBOM(ctx context.Context, tx database.TenantTx, row pgx.Row, tenantID uu
 	if len(target) > 0 {
 		item = *target[0]
 	}
+	header, e := scanBOMHeader(row)
+	if e != nil { return item, e }
+	item = header
+	if e = loadComponents(ctx, tx, tenantID, &item); e != nil { return item, e }
+	return item, nil
+}
+
+func scanBOMHeader(row pgx.Row) (BOM, error) {
+	var item BOM
 	var fgID, rmID uuid.UUID
 	var fgCode, fgName, fgUnit, rmCode, rmName, rmUnit string
 	if e := row.Scan(&item.ID, &item.Output.Kind, &fgID, &fgCode, &fgName, &fgUnit, &rmID, &rmCode, &rmName, &rmUnit, &item.Revision, &item.Status, &item.Notes); e != nil {
@@ -68,19 +81,23 @@ func scanBOM(ctx context.Context, tx database.TenantTx, row pgx.Row, tenantID uu
 		item.Output.Name = rmName
 		item.Output.Unit = rmUnit
 	}
+	return item, nil
+}
+
+func loadComponents(ctx context.Context, tx database.TenantTx, tenantID uuid.UUID, item *BOM) error {
 	rows, e := tx.Query(ctx, `SELECT r.id,r.code,r.name,u.code,c.usage_qty FROM bom_components c JOIN raw_materials r ON r.tenant_id=c.tenant_id AND r.id=c.raw_material_id JOIN units u ON u.tenant_id=r.tenant_id AND u.id=r.base_unit_id WHERE c.tenant_id=$1 AND c.bom_id=$2 ORDER BY c.sort_position`, tenantID, item.ID)
 	if e != nil {
-		return item, e
+		return e
 	}
 	defer rows.Close()
 	for rows.Next() {
 		var c Component
 		if e = rows.Scan(&c.RawMaterialID, &c.ItemCode, &c.Name, &c.Unit, &c.UsageQty); e != nil {
-			return item, e
+			return e
 		}
 		item.Components = append(item.Components, c)
 	}
-	return item, rows.Err()
+	return rows.Err()
 }
 func (s *Store) Create(ctx context.Context, a Actor, input Input) (item BOM, err error) {
 	err = database.WithTenant(ctx, s.db, tenant(a), func(tx database.TenantTx) error {
