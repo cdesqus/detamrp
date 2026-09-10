@@ -270,11 +270,23 @@ func loadFinishedGoodNode(ctx context.Context, tx database.TenantTx, tenantID, f
 	node.Kind = "FG"
 	node.Usage = decimal.NewFromInt(1)
 	e := tx.QueryRow(ctx, `SELECT f.id,f.item_code,f.name,u.code FROM finished_goods f JOIN units u ON u.tenant_id=f.tenant_id AND u.id=f.base_unit_id WHERE f.tenant_id=$1 AND f.id=$2`, tenantID, fgID).Scan(&node.ItemID, &node.ItemCode, &node.Name, &node.Unit)
-	if e == pgx.ErrNoRows && itemCode != "" { e = tx.QueryRow(ctx, `SELECT f.id,f.item_code,f.name,u.code FROM finished_goods f JOIN units u ON u.tenant_id=f.tenant_id AND u.id=f.base_unit_id WHERE f.tenant_id=$1 AND f.item_code=$2 AND f.active ORDER BY f.updated_at DESC LIMIT 1`, tenantID, itemCode).Scan(&node.ItemID, &node.ItemCode, &node.Name, &node.Unit) }
-	if e == pgx.ErrNoRows && itemName != "" { e = tx.QueryRow(ctx, `SELECT f.id,f.item_code,f.name,u.code FROM finished_goods f JOIN units u ON u.tenant_id=f.tenant_id AND u.id=f.base_unit_id WHERE f.tenant_id=$1 AND lower(trim(f.name))=lower(trim($2)) AND f.active ORDER BY f.updated_at DESC LIMIT 1`, tenantID, itemName).Scan(&node.ItemID, &node.ItemCode, &node.Name, &node.Unit) }
+	if e == pgx.ErrNoRows && itemCode != "" {
+		e = tx.QueryRow(ctx, `SELECT f.id,f.item_code,f.name,u.code FROM finished_goods f JOIN units u ON u.tenant_id=f.tenant_id AND u.id=f.base_unit_id WHERE f.tenant_id=$1 AND f.item_code=$2 AND f.active ORDER BY f.updated_at DESC LIMIT 1`, tenantID, itemCode).Scan(&node.ItemID, &node.ItemCode, &node.Name, &node.Unit)
+	}
+	if e == pgx.ErrNoRows && itemName != "" {
+		e = tx.QueryRow(ctx, `SELECT f.id,f.item_code,f.name,u.code FROM finished_goods f JOIN units u ON u.tenant_id=f.tenant_id AND u.id=f.base_unit_id WHERE f.tenant_id=$1 AND lower(trim(f.name))=lower(trim($2)) AND f.active ORDER BY f.updated_at DESC LIMIT 1`, tenantID, itemName).Scan(&node.ItemID, &node.ItemCode, &node.Name, &node.Unit)
+	}
 	if e != nil {
 		return node, fmt.Errorf("Finished Good ID %s could not be found for this order", fgID)
 	}
+	// The order line can contain an ID from an older master-data record. When
+	// the code/name fallback above resolves that snapshot to the current
+	// finished good, use the resolved ID for the BOM lookup as well.
+	resolvedID, parseErr := uuid.Parse(node.ItemID)
+	if parseErr != nil {
+		return node, fmt.Errorf("resolved Finished Good %q has invalid ID", node.ItemID)
+	}
+	fgID = resolvedID
 	children, e := loadActiveComponents(ctx, tx, tenantID, "FG", fgID, map[uuid.UUID]bool{})
 	if e != nil {
 		return node, e
