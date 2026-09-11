@@ -43,6 +43,33 @@ func RenderRequirementsPDF(order Order, requirements []RequirementLine) ([]byte,
 	}
 	pdf.Ln(6)
 	pdf.SetFont("Arial", "B", 12)
+	pdf.CellFormat(273, 7, "BOM Breakdown", "", 1, "L", false, 0, "")
+	pdf.SetFont("Arial", "B", 8)
+	pdf.SetFillColor(245, 245, 247)
+	bw := []float64{55, 82, 48, 45, 20}
+	for i, h := range []string{"Finished Good", "Component", "Usage / Output", "Required Qty", "Unit"} {
+		pdf.CellFormat(bw[i], 7, h, "1", 0, "C", true, 0, "")
+	}
+	pdf.Ln(-1)
+	for _, req := range requirements {
+		if len(req.Result.Nodes) == 0 {
+			continue
+		}
+		root := req.Result.Nodes[0]
+		for _, node := range req.Result.Nodes {
+			if node.Depth != 1 {
+				continue
+			}
+			values := []string{root.ItemCode, node.ItemCode + " - " + node.Name, node.Usage.String() + " " + node.Unit + " per 1 " + root.Unit, node.Quantity.String(), node.Unit}
+			for i, value := range values {
+				pdf.SetFont("Arial", "", 8)
+				pdf.CellFormat(bw[i], 7, value, "1", 0, "L", false, 0, "")
+			}
+			pdf.Ln(-1)
+		}
+	}
+	pdf.Ln(6)
+	pdf.SetFont("Arial", "B", 12)
 	pdf.CellFormat(273, 7, "Material Requirements", "", 1, "L", false, 0, "")
 	pdf.SetFont("Arial", "B", 8)
 	pdf.SetFillColor(245, 245, 247)

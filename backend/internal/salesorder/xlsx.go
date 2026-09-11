@@ -39,18 +39,23 @@ func RenderRequirementsXLSX(order Order, requirements []RequirementLine) ([]byte
 			f.SetCellValue(fg, fmt.Sprintf("%c%d", 'A'+i, row), v)
 		}
 	}
-	for i, h := range []string{"Finished Good", "Component", "Required Qty", "Unit"} {
+	for i, h := range []string{"Finished Good", "Component", "Usage / Output", "Required Qty", "Unit"} {
 		f.SetCellValue("BOM Breakdown", fmt.Sprintf("%c1", 'A'+i), h)
 		f.SetCellStyle("BOM Breakdown", fmt.Sprintf("%c1", 'A'+i), fmt.Sprintf("%c1", 'A'+i), header)
 	}
 	row := 2
 	for _, req := range requirements {
+		if len(req.Result.Nodes) == 0 {
+			continue
+		}
+		root := req.Result.Nodes[0]
 		for _, n := range req.Result.Nodes {
 			if n.Depth == 1 {
 				f.SetCellValue("BOM Breakdown", fmt.Sprintf("A%d", row), req.LineID)
 				f.SetCellValue("BOM Breakdown", fmt.Sprintf("B%d", row), n.ItemCode+" - "+n.Name)
-				f.SetCellValue("BOM Breakdown", fmt.Sprintf("C%d", row), n.Quantity.String())
-				f.SetCellValue("BOM Breakdown", fmt.Sprintf("D%d", row), n.Unit)
+				f.SetCellValue("BOM Breakdown", fmt.Sprintf("C%d", row), n.Usage.String()+" "+n.Unit+" per 1 "+root.Unit)
+				f.SetCellValue("BOM Breakdown", fmt.Sprintf("D%d", row), n.Quantity.String())
+				f.SetCellValue("BOM Breakdown", fmt.Sprintf("E%d", row), n.Unit)
 				row++
 			}
 		}
@@ -82,6 +87,11 @@ func RenderRequirementsXLSX(order Order, requirements []RequirementLine) ([]byte
 	for _, sheet := range []string{"Summary", fg, "BOM Breakdown", "Material Requirements"} {
 		f.SetColWidth(sheet, "A", "A", 22)
 		f.SetColWidth(sheet, "B", "B", 34)
+		if sheet == "BOM Breakdown" {
+			f.SetColWidth(sheet, "C", "C", 26)
+			f.SetColWidth(sheet, "D", "D", 18)
+			f.SetColWidth(sheet, "E", "E", 12)
+		}
 		f.SetRowHeight(sheet, 1, 22)
 		f.SetPanes(sheet, &excelize.Panes{Freeze: true, YSplit: 1})
 	}
