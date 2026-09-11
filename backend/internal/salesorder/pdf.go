@@ -16,7 +16,7 @@ func RenderRequirementsPDF(order Order, requirements []RequirementLine) ([]byte,
 	pdf.SetFooterFunc(func() {
 		pdf.SetY(-10)
 		pdf.SetFont("Arial", "", 7)
-		pdf.CellFormat(273, 5, fmt.Sprintf("Generated %s · Page %d", time.Now().Format("02 Jan 2006 15:04"), pdf.PageNo()), "", 0, "R", false, 0, "")
+		pdf.CellFormat(273, 5, fmt.Sprintf("Generated %s - Page %d", time.Now().Format("02 Jan 2006 15:04"), pdf.PageNo()), "", 0, "R", false, 0, "")
 	})
 	pdf.AddPage()
 	pdf.SetFont("Arial", "B", 18)
@@ -24,7 +24,7 @@ func RenderRequirementsPDF(order Order, requirements []RequirementLine) ([]byte,
 	pdf.SetFont("Arial", "B", 14)
 	pdf.CellFormat(93, 9, "MATERIAL REQUIREMENTS", "", 1, "R", false, 0, "")
 	pdf.SetFont("Arial", "", 9)
-	pdf.CellFormat(273, 6, "Sales Order "+order.Number+" · "+order.CustomerName+" · "+order.Status, "", 1, "L", false, 0, "")
+	pdf.CellFormat(273, 6, "Sales Order "+order.Number+" - "+order.CustomerName+" - "+order.Status, "", 1, "L", false, 0, "")
 	pdf.Ln(4)
 	pdf.SetFillColor(245, 245, 247)
 	pdf.SetFont("Arial", "B", 9)
@@ -34,7 +34,7 @@ func RenderRequirementsPDF(order Order, requirements []RequirementLine) ([]byte,
 	pdf.Ln(-1)
 	widths := []float64{90, 25, 20, 35, 38, 25}
 	for _, line := range order.Lines {
-		values := []string{line.ItemCode + " — " + line.Name, line.Quantity.String(), line.Unit, line.SalesPrice.String(), line.Quantity.Mul(line.SalesPrice).String(), line.Currency}
+		values := []string{line.ItemCode + " - " + line.Name, line.Quantity.String(), line.Unit, line.SalesPrice.String(), line.Quantity.Mul(line.SalesPrice).String(), line.Currency}
 		for i, v := range values {
 			pdf.SetFont("Arial", "", 8)
 			pdf.CellFormat(widths[i], 7, v, "1", 0, "L", false, 0, "")

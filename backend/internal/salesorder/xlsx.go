@@ -20,7 +20,7 @@ func RenderRequirementsXLSX(order Order, requirements []RequirementLine) ([]byte
 	f.DeleteSheet("Sheet1")
 	header, _ := f.NewStyle(&excelize.Style{Font: &excelize.Font{Bold: true, Color: "FFFFFF"}, Fill: excelize.Fill{Type: "pattern", Color: []string{"1F2937"}, Pattern: 1}, Alignment: &excelize.Alignment{Horizontal: "center"}})
 	bold, _ := f.NewStyle(&excelize.Style{Font: &excelize.Font{Bold: true}})
-	f.SetCellValue("Summary", "A1", "DETA MRP — Sales Order Requirements")
+	f.SetCellValue("Summary", "A1", "DETA MRP - Sales Order Requirements")
 	f.SetCellStyle("Summary", "A1", "A1", bold)
 	for i, row := range [][]string{{"Sales Order", order.Number}, {"Customer", order.CustomerName}, {"Status", order.Status}} {
 		f.SetCellValue("Summary", fmt.Sprintf("A%d", i+3), row[0])
@@ -48,7 +48,7 @@ func RenderRequirementsXLSX(order Order, requirements []RequirementLine) ([]byte
 		for _, n := range req.Result.Nodes {
 			if n.Depth == 1 {
 				f.SetCellValue("BOM Breakdown", fmt.Sprintf("A%d", row), req.LineID)
-				f.SetCellValue("BOM Breakdown", fmt.Sprintf("B%d", row), n.ItemCode+" — "+n.Name)
+				f.SetCellValue("BOM Breakdown", fmt.Sprintf("B%d", row), n.ItemCode+" - "+n.Name)
 				f.SetCellValue("BOM Breakdown", fmt.Sprintf("C%d", row), n.Quantity.String())
 				f.SetCellValue("BOM Breakdown", fmt.Sprintf("D%d", row), n.Unit)
 				row++
