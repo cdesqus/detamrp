@@ -134,3 +134,17 @@ it('totals WIP value in the reporting currency', async () => {
   expect(screen.getByText(format(175))).toBeInTheDocument();
   expect(screen.getByText('12')).toBeInTheDocument();
 });
+
+it('offers the transfer straight from the balance list', async () => {
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(respond({ items: [balance] })));
+  render(<WIPIndex />);
+  expect(await screen.findByRole('link', { name: 'Transfer WIP' })).toHaveAttribute('href', '/production-wip/o1');
+});
+
+it('explains the missing transfer button to users without the permission', async () => {
+  auth.permissions = ['production.view'];
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(respond(balance)));
+  render(<WIPDetail id="o1" />);
+  await screen.findByText(/Transfer work in progress/);
+  expect(screen.queryByRole('button', { name: 'Transfer WIP' })).not.toBeInTheDocument();
+});

@@ -346,6 +346,11 @@ export function DailyProductionForm({
                     </div>
                     <div className="execution-panel-body">
                       <ErrorMessage error={validation} />
+                      {index > 0 && remaining <= 0 && selected ? (
+                        <p className="execution-footer-note">
+                          <a href={`/production-wip/${selected.id}`}>Transfer WIP to this operation</a> first, then record the output here.
+                        </p>
+                      ) : null}
                       <Metrics
                         items={[
                           {

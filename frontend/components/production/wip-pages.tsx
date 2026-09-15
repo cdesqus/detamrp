@@ -42,6 +42,7 @@ export function WIPIndex() {
   }, []);
 
   const costs = Boolean(user?.permissions.includes('production.report'));
+  const manage = Boolean(user?.permissions.includes('production.wip'));
   const filtered = useMemo(() => items.filter((order) => {
     const matches = `${order.orderNumber} ${order.partNumber} ${order.partName} ${order.plantName}`.toLowerCase().includes(search.toLowerCase());
     if (!matches) return false;
@@ -105,6 +106,7 @@ export function WIPIndex() {
                   <th className="numeric">WIP quantity</th>
                   {costs && <th className="numeric">WIP value</th>}
                   <th>Ledger</th>
+                  <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -135,6 +137,11 @@ export function WIPIndex() {
                       <span className={`execution-badge status-${order.reconciled ? 'completed' : 'cancelled'}`}>
                         {order.reconciled ? 'RECONCILED' : 'CHECK'}
                       </span>
+                    </td>
+                    <td>
+                      <a className="ex-button" href={`/production-wip/${order.orderId}`}>
+                        {manage ? 'Transfer WIP' : 'Open ledger'}
+                      </a>
                     </td>
                   </tr>
                 ))}
@@ -246,7 +253,13 @@ export function WIPDetail({ id }: { id: string }) {
           <a className="ex-button" href="/production-wip">All balances</a>
           {order && <a className="ex-button" href={`/production-orders/${order.orderId}`}>Production order</a>}
           {order && manage && (
-            <button type="button" className="ex-button primary" disabled={busy || movable.length === 0} onClick={openTransfer}>
+            <button
+              type="button"
+              className="ex-button primary"
+              disabled={busy || movable.length === 0}
+              title={movable.length === 0 ? 'No operation is holding WIP that can move yet' : undefined}
+              onClick={openTransfer}
+            >
               Transfer WIP
             </button>
           )}
@@ -275,6 +288,12 @@ export function WIPDetail({ id }: { id: string }) {
               },
             ]}
           />
+
+          {!manage && (
+            <p className="execution-footer-note">
+              Moving WIP between operations needs the “Transfer work in progress” permission.
+            </p>
+          )}
 
           <div className="execution-snapshot">
             <span><small>Production order</small><a href={`/production-orders/${order.orderId}`}>{order.orderNumber}</a></span>
