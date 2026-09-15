@@ -119,7 +119,15 @@ func lockRoutingPart(ctx context.Context, tx database.TenantTx, a Actor, kind st
 		query = `SELECT id FROM raw_materials WHERE tenant_id=$1 AND id=$2 FOR UPDATE`
 	}
 	var id uuid.UUID
-	return tx.QueryRow(ctx, query, a.TenantID, part).Scan(&id)
+	if e := tx.QueryRow(ctx, query, a.TenantID, part).Scan(&id); e != nil {
+		// A part that does not belong to this company is a reference problem,
+		// not a missing routing.
+		if errors.Is(e, pgx.ErrNoRows) {
+			return ErrInvalidReference
+		}
+		return e
+	}
+	return nil
 }
 
 // The caller holds the part lock, so this fresh statement sees every revision
@@ -173,7 +181,7 @@ func (s *Store) CreateRouting(ctx context.Context, a Actor, input RoutingInput) 
 		// inactive until they are explicitly activated.
 		if _, e = tx.Exec(ctx, `INSERT INTO production_routings(id,tenant_id,finished_good_id,raw_material_id,name,revision,currency,steps,active,created_by_user_id,updated_by_user_id)
  VALUES($1,$2,NULLIF($3::uuid,'`+nilUUID+`'),NULLIF($4::uuid,'`+nilUUID+`'),$5,$6,$7,$8,$9,$10,$10)`,
-			id, a.TenantID, fg, rm, input.Name, revision, input.Currency, steps, activeCount == 0, a.UserID); e != nil {
+			id, a.TenantID, fg, rm, input.Name, revision, input.Currency, string(steps), activeCount == 0, a.UserID); e != nil {
 			return e
 		}
 		r, e = loadRouting(ctx, tx, a, id)
@@ -200,7 +208,7 @@ func (s *Store) UpdateRouting(ctx context.Context, a Actor, id uuid.UUID, input 
 			return e
 		}
 		if _, e = tx.Exec(ctx, `UPDATE production_routings SET name=$3,currency=$4,steps=$5,updated_at=now(),updated_by_user_id=$6 WHERE tenant_id=$1 AND id=$2`,
-			a.TenantID, id, input.Name, input.Currency, steps, a.UserID); e != nil {
+			a.TenantID, id, input.Name, input.Currency, string(steps), a.UserID); e != nil {
 			return e
 		}
 		r, e = loadRouting(ctx, tx, a, id)

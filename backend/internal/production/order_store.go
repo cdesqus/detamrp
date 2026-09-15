@@ -258,7 +258,7 @@ func createOrder(ctx context.Context, tx database.TenantTx, a Actor, input Order
 	for _, step := range steps {
 		processUnit = processUnit.Add(step.Rate)
 	}
-	raw, e := json.Marshal(materials)
+	rawSnapshot, e := json.Marshal(materials)
 	if e != nil {
 		return o, e
 	}
@@ -268,7 +268,7 @@ func createOrder(ctx context.Context, tx database.TenantTx, a Actor, input Order
 		return o, e
 	}
 	number := fmt.Sprintf("PRO-%07d", sequence)
-	_, e = tx.Exec(ctx, `INSERT INTO production_orders(id,tenant_id,order_number,plan_id,plan_line_id,finished_good_id,raw_material_id,planned_qty,bom_revision,bom_snapshot,notes,created_by_user_id,updated_by_user_id,routing_id,routing_revision,part_number,part_name,unit_code,plant_id,period_start,due_date,currency,material_estimate,process_estimate) VALUES($1,$2,$3,$4,$5,NULLIF($6::uuid,'00000000-0000-0000-0000-000000000000'),NULLIF($7::uuid,'00000000-0000-0000-0000-000000000000'),$8,$9,$10,$11,$12,$12,$13,$14,$15,$16,$17,$18,$19::date,$20::date,$21,$22,$23)`, id, a.TenantID, number, planID, input.PlanLineID, fg, rm, input.PlannedQty, revision, raw, input.Notes, a.UserID, routingID, routingRevision, part, partName, unit, plant, start, input.DueDate, currency, materialUnit.Mul(input.PlannedQty), processUnit.Mul(input.PlannedQty))
+	_, e = tx.Exec(ctx, `INSERT INTO production_orders(id,tenant_id,order_number,plan_id,plan_line_id,finished_good_id,raw_material_id,planned_qty,bom_revision,bom_snapshot,notes,created_by_user_id,updated_by_user_id,routing_id,routing_revision,part_number,part_name,unit_code,plant_id,period_start,due_date,currency,material_estimate,process_estimate) VALUES($1,$2,$3,$4,$5,NULLIF($6::uuid,'00000000-0000-0000-0000-000000000000'),NULLIF($7::uuid,'00000000-0000-0000-0000-000000000000'),$8,$9,$10,$11,$12,$12,$13,$14,$15,$16,$17,$18,$19::date,$20::date,$21,$22,$23)`, id, a.TenantID, number, planID, input.PlanLineID, fg, rm, input.PlannedQty, revision, string(rawSnapshot), input.Notes, a.UserID, routingID, routingRevision, part, partName, unit, plant, start, input.DueDate, currency, materialUnit.Mul(input.PlannedQty), processUnit.Mul(input.PlannedQty))
 	if e != nil {
 		return o, e
 	}

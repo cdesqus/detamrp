@@ -131,7 +131,7 @@ func (s *Store) CreateEntry(ctx context.Context, a Actor, i EntryInput) (v Entry
 		if e != nil {
 			return e
 		}
-		raw, e := json.Marshal(materials)
+		rawUsage, e := json.Marshal(materials)
 		if e != nil {
 			return e
 		}
@@ -144,7 +144,7 @@ func (s *Store) CreateEntry(ctx context.Context, a Actor, i EntryInput) (v Entry
 			return e
 		}
 		id := uuid.New()
-		_, e = tx.Exec(ctx, `INSERT INTO production_entries(id,tenant_id,entry_number,operation_id,production_date,shift_code,qty_processed,qty_good,qty_rejected,operator_user_id,notes,created_by_user_id,updated_by_user_id,material_usage,material_cost,process_cost,process_rate_snapshot,currency) VALUES($1,$2,$3,$4,$5::date,$6,$7,$8,$9,$10,$11,$12,$12,$13,$14,$15,$16,$17)`, id, a.TenantID, fmt.Sprintf("DP-%07d", number), i.OperationID, i.ProductionDate, strings.TrimSpace(i.Shift), i.Processed, i.Good, i.Rejected, i.OperatorID, strings.TrimSpace(i.Notes), a.UserID, raw, materialCost, processCost, rate, o.Currency)
+		_, e = tx.Exec(ctx, `INSERT INTO production_entries(id,tenant_id,entry_number,operation_id,production_date,shift_code,qty_processed,qty_good,qty_rejected,operator_user_id,notes,created_by_user_id,updated_by_user_id,material_usage,material_cost,process_cost,process_rate_snapshot,currency) VALUES($1,$2,$3,$4,$5::date,$6,$7,$8,$9,$10,$11,$12,$12,$13,$14,$15,$16,$17)`, id, a.TenantID, fmt.Sprintf("DP-%07d", number), i.OperationID, i.ProductionDate, strings.TrimSpace(i.Shift), i.Processed, i.Good, i.Rejected, i.OperatorID, strings.TrimSpace(i.Notes), a.UserID, string(rawUsage), materialCost, processCost, rate, o.Currency)
 		if e != nil {
 			return e
 		}
@@ -277,7 +277,7 @@ func (s *Store) UpdateEntry(ctx context.Context, a Actor, id uuid.UUID, i EntryI
 		if e != nil {
 			return e
 		}
-		raw, e := json.Marshal(materials)
+		rawUsage, e := json.Marshal(materials)
 		if e != nil {
 			return e
 		}
@@ -293,7 +293,7 @@ func (s *Store) UpdateEntry(ctx context.Context, a Actor, id uuid.UUID, i EntryI
 		if e = returnMaterialToInventory(ctx, tx, a, id); e != nil {
 			return e
 		}
-		_, e = tx.Exec(ctx, `UPDATE production_entries SET production_date=$3::date,shift_code=$4,qty_processed=$5,qty_good=$6,qty_rejected=$7,operator_user_id=$8,notes=$9,material_usage=$10,material_cost=$11,process_cost=$12,updated_by_user_id=$13,updated_at=now(),version=version+1 WHERE tenant_id=$1 AND id=$2`, a.TenantID, id, i.ProductionDate, strings.TrimSpace(i.Shift), i.Processed, i.Good, i.Rejected, i.OperatorID, strings.TrimSpace(i.Notes), raw, materialCost, processCost, a.UserID)
+		_, e = tx.Exec(ctx, `UPDATE production_entries SET production_date=$3::date,shift_code=$4,qty_processed=$5,qty_good=$6,qty_rejected=$7,operator_user_id=$8,notes=$9,material_usage=$10,material_cost=$11,process_cost=$12,updated_by_user_id=$13,updated_at=now(),version=version+1 WHERE tenant_id=$1 AND id=$2`, a.TenantID, id, i.ProductionDate, strings.TrimSpace(i.Shift), i.Processed, i.Good, i.Rejected, i.OperatorID, strings.TrimSpace(i.Notes), string(rawUsage), materialCost, processCost, a.UserID)
 		if e != nil {
 			return e
 		}

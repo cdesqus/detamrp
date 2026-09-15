@@ -20,8 +20,10 @@ func issueMaterialToInventory(ctx context.Context, tx database.TenantTx, a Actor
 		if !material.Quantity.IsPositive() {
 			continue
 		}
+		// The quantity is cast before it is negated: PostgreSQL cannot resolve
+		// unary minus on an untyped parameter.
 		if _, e := tx.Exec(ctx, inventoryLedgerInsert+`
- VALUES($1,'PRODUCTION_ISSUE',$2,-$3,$4,'RAW MATERIAL','PRODUCTION','PRODUCTION_ENTRY',$5,$6)`,
+ VALUES($1,'PRODUCTION_ISSUE',$2,-($3::numeric),$4,'RAW MATERIAL','PRODUCTION','PRODUCTION_ENTRY',$5,$6)`,
 			a.TenantID, material.MaterialID, material.Quantity, material.UnitCode, entryID, a.UserID); e != nil {
 			return e
 		}

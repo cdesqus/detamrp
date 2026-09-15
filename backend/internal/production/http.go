@@ -147,7 +147,9 @@ func respondError(c *gin.Context, e error) {
 	case errors.Is(e, ErrInvalidReference):
 		c.JSON(422, gin.H{"message": e.Error()})
 	default:
-		log.Printf("production planning: %v", e)
-		c.JSON(500, gin.H{"message": "Planning could not be processed"})
+		// The cause stays in the server log; the client gets a stable message
+		// that names the module it came from.
+		log.Printf("production %s %s: %v", c.Request.Method, c.Request.URL.Path, e)
+		c.JSON(500, gin.H{"message": "This production request could not be processed"})
 	}
 }
