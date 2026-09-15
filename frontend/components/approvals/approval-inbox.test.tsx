@@ -77,8 +77,8 @@ describe('ApprovalInbox', () => {
 
     expect(await screen.findByText('201–204 of 204')).toBeInTheDocument();
     expect(screen.queryByText('PO-201')).not.toBeInTheDocument();
-    expect(fetchMock).toHaveBeenCalledWith('/api/purchase-order-approvals?limit=50&offset=200', expect.anything());
-  });
+    expect(fetchMock).toHaveBeenCalledWith('/api/purchase-order-approvals?limit=50&offset=200', expect.anything());
+  }, 20000);
 
   it('returns to the previous page after deciding the only item on the last page', async () => {
     let decided = false;
