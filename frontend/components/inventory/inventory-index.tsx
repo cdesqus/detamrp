@@ -18,9 +18,20 @@ type StockItem = {
   supplierName: string;
   availableKanban: number;
   stockQuantity: string;
+  issuedToProduction: string;
   baseUnitCode: string;
   minimumStock: string;
   stockStatus: 'IN_STOCK' | 'LOW_STOCK' | 'OUT_OF_STOCK';
+};
+
+type WorkInProgress = {
+  orderId: string;
+  orderNumber: string;
+  partNumber: string;
+  partName: string;
+  unitCode: string;
+  totalQty: string;
+  operations: Array<{ operationId: string; code: string; balance: string }>;
 };
 
 type KanbanItem = {
@@ -66,6 +77,20 @@ export function InventoryIndex() {
   const [detailTitle, setDetailTitle] = useState('');
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState('');
+  const [workInProgress, setWorkInProgress] = useState<WorkInProgress[]>([]);
+
+  useEffect(() => {
+    let alive = true;
+    fetch('/api/production-wip', { credentials: 'include' })
+      .then(response => (response.ok ? response.json() : { items: [] }))
+      .then(payload => {
+        if (!alive) return;
+        const rows: WorkInProgress[] = Array.isArray(payload.items) ? payload.items : [];
+        setWorkInProgress(rows.filter(row => row.orderId && Number(row.totalQty) !== 0));
+      })
+      .catch(() => undefined);
+    return () => { alive = false; };
+  }, []);
 
   const query = useMemo(() => {
     const params = new URLSearchParams();
@@ -164,10 +189,10 @@ export function InventoryIndex() {
         </div>
         {error ? <div className="table-empty"><p className="form-error" role="alert">{error}</p><button className="table-action" onClick={() => void load()}>Retry</button></div> :
           <table>
-            <thead><tr><th>Item Code</th><th>Raw Material</th><th>Supplier</th><th>Available Kanban</th><th>Stock Quantity</th><th>Base Unit</th><th>Minimum Stock</th><th>Status</th><th>Action</th></tr></thead>
+            <thead><tr><th>Item Code</th><th>Raw Material</th><th>Supplier</th><th>Available Kanban</th><th>Issued to Production</th><th>Stock Quantity</th><th>Base Unit</th><th>Minimum Stock</th><th>Status</th><th>Action</th></tr></thead>
             <tbody>
-              {loading ? <tr><td colSpan={9}><div className="table-empty">Loading stock inventory...</div></td></tr> :
-                items.length === 0 ? <tr><td colSpan={9}><div className="table-empty">No stock records found.</div></td></tr> :
+              {loading ? <tr><td colSpan={10}><div className="table-empty">Loading stock inventory...</div></td></tr> :
+                items.length === 0 ? <tr><td colSpan={10}><div className="table-empty">No stock records found.</div></td></tr> :
                   items.map(item => {
                     const presentation = statusPresentation[item.stockStatus];
                     return <tr key={item.rawMaterialId}>
@@ -185,6 +210,26 @@ export function InventoryIndex() {
             </tbody>
           </table>}
       </div>
+
+      {workInProgress.length > 0 ? <div className="inventory-wip">
+        <div className="table-toolbar">
+          <span><strong>Work in progress</strong> — material already issued and still on the production floor</span>
+          <a className="table-action" href="/production-wip">Open WIP ledger</a>
+        </div>
+        <div className="table-frame">
+          <table>
+            <thead><tr><th>Production Order</th><th>Part</th><th>Balance per operation</th><th>WIP Quantity</th></tr></thead>
+            <tbody>
+              {workInProgress.map(row => <tr key={row.orderId}>
+                <td><a href={`/production-wip/${row.orderId}`}>{row.orderNumber}</a></td>
+                <td>{row.partNumber} — {row.partName}</td>
+                <td>{(row.operations ?? []).filter(operation => Number(operation.balance) !== 0).map(operation => `${operation.code} ${formatQuantity(operation.balance)}`).join(' · ') || '—'}</td>
+                <td>{formatQuantity(row.totalQty)} {row.unitCode}</td>
+              </tr>)}
+            </tbody>
+          </table>
+        </div>
+      </div> : null}
 
       {detailTitle ? <>
         <button className="crud-scrim" aria-label="Close Kanban detail" onClick={closeDetail} />

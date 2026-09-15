@@ -37,7 +37,10 @@ type StockItem struct {
 	SupplierName    string          `json:"supplierName"`
 	AvailableKanban int             `json:"availableKanban"`
 	StockQuantity   decimal.Decimal `json:"stockQuantity"`
-	BaseUnitCode    string          `json:"baseUnitCode"`
+	// IssuedToProduction is the quantity daily production has taken out of the
+	// warehouse and not returned; StockQuantity is already net of it.
+	IssuedToProduction decimal.Decimal `json:"issuedToProduction"`
+	BaseUnitCode       string          `json:"baseUnitCode"`
 	MinimumStock    decimal.Decimal `json:"minimumStock"`
 	StockStatus     string          `json:"stockStatus"`
 }

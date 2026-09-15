@@ -71,25 +71,25 @@ describe('InventoryIndex', () => {
   });
 
   it('opens an in-stock Kanban detail modal', async () => {
-    const fetchMock = vi.spyOn(globalThis, 'fetch')
-      .mockResolvedValueOnce({ ok: true, json: async () => response } as Response)
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          rawMaterialId: 'rm-stock',
-          itemCode: 'RM-003',
-          rawMaterialName: 'Coil',
-          kanbans: [{
-            kanbanLotId: 'lot-1',
-            kanbanId: 'KB-001',
-            deliveryNoteNumber: 'DN-001',
-            poNumber: 'PO-001',
-            quantity: '6.250000',
-            baseUnitCode: 'KG',
-            receivedDate: '2026-07-23T00:00:00Z',
-          }],
-        }),
-      } as Response);
+    const kanbans = {
+      rawMaterialId: 'rm-stock',
+      itemCode: 'RM-003',
+      rawMaterialName: 'Coil',
+      kanbans: [{
+        kanbanLotId: 'lot-1',
+        kanbanId: 'KB-001',
+        deliveryNoteNumber: 'DN-001',
+        poNumber: 'PO-001',
+        quantity: '6.250000',
+        baseUnitCode: 'KG',
+        receivedDate: '2026-07-23T00:00:00Z',
+      }],
+    };
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation((input: RequestInfo | URL) => {
+      const url = String(input);
+      const body = url.includes('/kanbans') ? kanbans : url.includes('production-wip') ? { items: [] } : response;
+      return Promise.resolve({ ok: true, json: async () => body } as Response);
+    });
 
     render(<InventoryIndex />);
     await screen.findByText('RM-003');
@@ -117,5 +117,18 @@ describe('InventoryIndex', () => {
       '/api/inventory/stock?supplierId=supplier-a&status=OUT_OF_STOCK',
       { credentials: 'include' },
     ));
+  });
+
+  it('shows what production issued and the work in progress it became', async () => {
+    const wip = { items: [{ orderId: 'o1', orderNumber: 'PRO-0000001', partNumber: 'FG-001', partName: 'Panel', unitCode: 'PCS', totalQty: '8', operations: [{ operationId: 'op1', code: 'STAMPING', balance: '3' }, { operationId: 'op2', code: 'WELDING', balance: '5' }] }] };
+    const issued = { ...response, items: response.items.map(item => ({ ...item, issuedToProduction: item.rawMaterialId === 'rm-stock' ? '4.000000' : '0.000000' })) };
+    vi.spyOn(globalThis, 'fetch').mockImplementation((input: RequestInfo | URL) =>
+      Promise.resolve({ ok: true, json: async () => (String(input).includes('production-wip') ? wip : issued) } as Response));
+
+    render(<InventoryIndex />);
+    await screen.findByText('RM-003');
+    expect(screen.getByRole('columnheader', { name: 'Issued to Production' })).toBeInTheDocument();
+    expect(screen.getByText('PRO-0000001')).toBeInTheDocument();
+    expect(screen.getByText('STAMPING 3 · WELDING 5')).toBeInTheDocument();
   });
 });

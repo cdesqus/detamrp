@@ -28,19 +28,20 @@ func (s *Store) ListStock(ctx context.Context, actor Actor, filters Filters) (St
 	err := database.WithTenant(ctx, s.db, tenant(actor), func(tx database.TenantTx) error {
 		rows, err := tx.Query(ctx, `
 SELECT rm.id, rm.code, rm.name, s.id, s.name,
-       COUNT(kl.id), COALESCE(SUM(kl.quantity), 0),
+       COUNT(kl.id), COALESCE(SUM(kl.quantity), 0), COALESCE(production.issued, 0),
        m.code, rm.minimum_stock
 FROM raw_materials rm
 JOIN suppliers s ON s.tenant_id = rm.tenant_id AND s.id = rm.supplier_id
 JOIN units m ON m.tenant_id = rm.tenant_id AND m.id = rm.base_unit_id
 LEFT JOIN purchase_order_lines pol
   ON pol.tenant_id = rm.tenant_id AND pol.raw_material_id = rm.id
+LEFT JOIN LATERAL (SELECT -COALESCE(SUM(l.quantity_delta), 0) AS issued FROM inventory_ledger_entries l WHERE l.tenant_id = rm.tenant_id AND l.raw_material_id = rm.id AND l.event_type IN ('PRODUCTION_ISSUE', 'PRODUCTION_RETURN')) production ON true
 LEFT JOIN kanban_lots kl
   ON kl.tenant_id = pol.tenant_id
  AND kl.purchase_order_line_id = pol.id
  AND kl.status = 'IN_STOCK'
 WHERE rm.tenant_id = $1 AND rm.active = true
-GROUP BY rm.id, rm.code, rm.name, s.id, s.name, m.code, rm.minimum_stock
+GROUP BY rm.id, rm.code, rm.name, s.id, s.name, m.code, rm.minimum_stock, production.issued
 ORDER BY rm.code`, actor.TenantID)
 		if err != nil {
 			return err
@@ -56,11 +57,14 @@ ORDER BY rm.code`, actor.TenantID)
 				&item.SupplierName,
 				&item.AvailableKanban,
 				&item.StockQuantity,
+				&item.IssuedToProduction,
 				&item.BaseUnitCode,
 				&item.MinimumStock,
 			); err != nil {
 				return err
 			}
+			// Stock on hand is the kanban balance less what production still holds.
+			item.StockQuantity = item.StockQuantity.Sub(item.IssuedToProduction)
 			item.StockStatus = StockStatus(item.StockQuantity, item.MinimumStock)
 			all = append(all, item)
 		}
