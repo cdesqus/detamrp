@@ -191,6 +191,8 @@ func permissionGroup(code string) string {
 		return "Integration"
 	case strings.HasPrefix(code, "master_data."):
 		return "Data Master"
+	case strings.HasPrefix(code, "production."):
+		return "Production"
 	default:
 		return "Settings"
 	}

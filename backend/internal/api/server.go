@@ -13,6 +13,7 @@ import (
 	"order-stock/backend/internal/inventory"
 	"order-stock/backend/internal/masterdata"
 	"order-stock/backend/internal/outgoing"
+	"order-stock/backend/internal/production"
 	"order-stock/backend/internal/purchaseorder"
 	"order-stock/backend/internal/receiving"
 	"order-stock/backend/internal/report"
@@ -28,29 +29,39 @@ type Authenticator interface {
 }
 
 type serverConfig struct {
-	authenticator        Authenticator
-	cookieSecure         bool
-	unitService          *masterdata.UnitService
-	categoryService      *masterdata.CategoryService
-	packingService       *masterdata.PackingService
-	plantService         *masterdata.PlantService
-	supplierService      *masterdata.SupplierService
-	rawMaterialService   *masterdata.RawMaterialService
-	settingsService      *settings.Service
-	purchaseOrderService *purchaseorder.Service
-	receivingStore       *receiving.Store
-	outgoingStore        *outgoing.Store
-	inventoryStore       *inventory.Store
-	reportStore          *report.Store
-	emailService         *emailing.Service
-	dashboardStore       *dashboard.Store
-	activityLogStore     *activitylog.Store
-	salesMasterService   *salesmaster.Service
-	bomService           *bom.Service
-	salesOrderService    *salesorder.Service
+	productionStore       *production.Store
+	productionPlanService *production.PlanService
+	authenticator         Authenticator
+	cookieSecure          bool
+	unitService           *masterdata.UnitService
+	categoryService       *masterdata.CategoryService
+	packingService        *masterdata.PackingService
+	plantService          *masterdata.PlantService
+	supplierService       *masterdata.SupplierService
+	rawMaterialService    *masterdata.RawMaterialService
+	settingsService       *settings.Service
+	purchaseOrderService  *purchaseorder.Service
+	receivingStore        *receiving.Store
+	outgoingStore         *outgoing.Store
+	inventoryStore        *inventory.Store
+	reportStore           *report.Store
+	emailService          *emailing.Service
+	dashboardStore        *dashboard.Store
+	activityLogStore      *activitylog.Store
+	salesMasterService    *salesmaster.Service
+	bomService            *bom.Service
+	salesOrderService     *salesorder.Service
 }
 
 type ServerOption func(*serverConfig)
+
+func WithProductionStore(store *production.Store) ServerOption {
+	return func(c *serverConfig) { c.productionStore = store }
+}
+
+func WithProductionPlanService(service *production.PlanService) ServerOption {
+	return func(c *serverConfig) { c.productionPlanService = service }
+}
 
 func WithAuthenticator(authenticator Authenticator) ServerOption {
 	return func(config *serverConfig) { config.authenticator = authenticator }
@@ -127,6 +138,17 @@ func NewServer(options ...ServerOption) http.Handler {
 	})
 	if config.authenticator != nil {
 		registerAuthRoutes(router, config)
+		if config.productionStore != nil {
+			production.RegisterOrderRoutes(router, config.productionStore, config.authenticator)
+			production.RegisterRoutingRoutes(router, config.productionStore, config.authenticator)
+			production.RegisterEntryRoutes(router, config.productionStore, config.authenticator)
+			production.RegisterWIPRoutes(router, config.productionStore, config.authenticator)
+			production.RegisterCostRoutes(router, config.productionStore, config.authenticator)
+			production.RegisterDashboardRoutes(router, config.productionStore, config.authenticator)
+		}
+		if config.productionPlanService != nil {
+			production.RegisterRoutes(router, config.productionPlanService, config.authenticator)
+		}
 		if config.unitService != nil {
 			masterdata.RegisterUnitRoutes(router, config.unitService, config.authenticator)
 		}

@@ -2,7 +2,6 @@ package production
 
 import (
 	"errors"
-	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -10,17 +9,41 @@ import (
 )
 
 type Plan struct {
-	ID          uuid.UUID  `json:"id"`
-	PlanNumber  string     `json:"planNumber"`
-	PeriodStart time.Time  `json:"periodStart"`
-	PeriodEnd   time.Time  `json:"periodEnd"`
-	PlantID     uuid.UUID  `json:"plantId"`
-	Status      PlanStatus `json:"status"`
-	Notes       string     `json:"notes"`
-	Lines       []PlanLine `json:"lines"`
+	ID                     uuid.UUID       `json:"id"`
+	PlanNumber             string          `json:"planNumber"`
+	PeriodStart            time.Time       `json:"periodStart"`
+	PeriodEnd              time.Time       `json:"periodEnd"`
+	PlantID                uuid.UUID       `json:"plantId"`
+	Status                 PlanStatus      `json:"status"`
+	Notes                  string          `json:"notes"`
+	Lines                  []PlanLine      `json:"lines"`
+	PlantName              string          `json:"plantName"`
+	CreatedBy              string          `json:"createdBy"`
+	UpdatedAt              time.Time       `json:"updatedAt"`
+	TotalPart              int             `json:"totalPart"`
+	TotalPlannedQty        decimal.Decimal `json:"totalPlannedQty"`
+	LinkedProductionOrders int             `json:"linkedProductionOrders"`
+	Orders                 []LinkedOrder   `json:"orders"`
+	History                []PlanHistory   `json:"history"`
+}
+
+type LinkedOrder struct {
+	ID          uuid.UUID       `json:"id"`
+	OrderNumber string          `json:"orderNumber"`
+	Status      string          `json:"status"`
+	PlannedQty  decimal.Decimal `json:"plannedQty"`
+	GoodQty     decimal.Decimal `json:"goodQty"`
+}
+type PlanHistory struct {
+	Action     string    `json:"action"`
+	Actor      string    `json:"actor"`
+	OccurredAt time.Time `json:"occurredAt"`
 }
 
 type PlanLine struct {
+	ID             uuid.UUID       `json:"id"`
+	PartNumber     string          `json:"partNumber"`
+	PartName       string          `json:"partName"`
 	FinishedGoodID uuid.UUID       `json:"finishedGoodId"`
 	RawMaterialID  uuid.UUID       `json:"rawMaterialId"`
 	PlannedQty     decimal.Decimal `json:"plannedQty"`
@@ -28,8 +51,8 @@ type PlanLine struct {
 }
 
 func ValidatePlanInput(p Plan) error {
-	if strings.TrimSpace(p.PlanNumber) == "" {
-		return errors.New("plan number is required")
+	if p.PlantID == uuid.Nil {
+		return errors.New("plant is required")
 	}
 	if p.PeriodStart.IsZero() || p.PeriodEnd.IsZero() {
 		return errors.New("planning period is required")
@@ -47,8 +70,8 @@ func ValidatePlanInput(p Plan) error {
 		if !line.PlannedQty.GreaterThan(decimal.Zero) {
 			return errors.New("planned quantity must be greater than zero")
 		}
-		if strings.TrimSpace(line.UnitCode) == "" {
-			return errors.New("unit is required")
+		if !line.PlannedQty.Equal(line.PlannedQty.Round(6)) || line.PlannedQty.GreaterThanOrEqual(decimal.New(1, 14)) {
+			return errors.New("quantity must fit 14 integer digits and at most 6 decimal places")
 		}
 	}
 	return nil

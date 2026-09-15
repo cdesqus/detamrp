@@ -15,6 +15,8 @@ type PlanRepository interface {
 	Delete(context.Context, Actor, uuid.UUID) error
 	Approve(context.Context, Actor, uuid.UUID) (Plan, error)
 	Close(context.Context, Actor, uuid.UUID) (Plan, error)
+	CreateOrders(context.Context, Actor, uuid.UUID) (Plan, error)
+	Options(context.Context, Actor) (PlanOptions, error)
 }
 
 type PlanService struct{ repo PlanRepository }
@@ -45,4 +47,10 @@ func (s *PlanService) Approve(ctx context.Context, a Actor, id uuid.UUID) (Plan,
 }
 func (s *PlanService) Close(ctx context.Context, a Actor, id uuid.UUID) (Plan, error) {
 	return s.repo.Close(ctx, a, id)
+}
+func (s *PlanService) CreateOrders(ctx context.Context, a Actor, id uuid.UUID) (Plan, error) {
+	return s.repo.CreateOrders(ctx, a, id)
+}
+func (s *PlanService) Options(ctx context.Context, a Actor) (PlanOptions, error) {
+	return s.repo.Options(ctx, a)
 }

@@ -1,0 +1,36 @@
+# Production execution implementation plan
+
+Approved scope: Production Order → Routing → Daily Production → WIP → Actual Cost → Dashboard/native exports. Continue from the existing Planning CRUD, preserving current changes.
+
+Architecture: production package with focused domain/store/HTTP files; tenant transactions lock the order before any mutation. Versioned routing and BOM/cost snapshots freeze order estimates. Daily entries carry immutable transaction costs. WIP uses append-only signed ledger movements with originating entry lots; corrections reverse entries only when no downstream activity has consumed or transferred their output. No hard deletion of entries.
+
+Decisions:
+- PARTIAL orders require Resume to IN_PROGRESS before a new daily entry.
+- Only APPROVED plans may create orders. Partial quantities may split one plan line into multiple orders; non-cancelled allocations cannot exceed its target.
+- Order snapshots use active BOM, material prices, routing rates and units. Actual entry snapshots use active prices/rates at posting time. Single currency per order; mixed currencies are rejected without an exchange-rate policy.
+- Order edit/delete only before any entry or WIP transaction. Editing scheduling/notes/quantity preserves the original snapshot.
+- First operation records actual material usage. Subsequent operations consume transferred WIP FIFO. Good output from non-final operations becomes WIP; final-operation good is FG actual. Unclassified processed quantity is not returned to available WIP.
+- Close monthly production periods explicitly; closed periods reject new/edit/void entries and movements.
+- Cancel requires a reason and no remaining WIP; completed/cancelled orders cannot resume.
+- Production reports in Rupiah. Amounts recorded in another currency are converted with the tenant rate in `tenant_settings.currency_rates` (migration 034), and an order cannot be released in a currency without a rate, so no report ever mixes or invents denominations. Transaction rows — entries, WIP movements and order snapshots — keep the currency they were booked in.
+- Material leaves the warehouse when production books it: a daily entry posts PRODUCTION_ISSUE rows on the inventory ledger (migration 033) and a correction or void posts the matching return, so stock on hand is the kanban balance less what production still holds. Production moves quantities, not whole kanban lots, so those ledger rows carry no lot reference.
+- Dashboard quantities are visible to the floor while money needs production.report; exports are report-only. Charts use one hue with direct labels and a dashed planned-target track, never a value ramp, and every chart is paired with the same figures as a table.
+- Finished cost is everything booked on an order less the cost still held in WIP, and cost per piece divides it by good output of the final operation, so rejects are absorbed by the pieces that survive. Material usage variance is measured against the BOM expectation for the quantity started at the first operation.
+- WIP is an explicit ledger, not a derived number: good output of a non-final operation is received at that operation, an operator transfers part or all of it to the next operation, and processing there consumes the staged balance FIFO. An operation cannot run on output that was never transferred to it.
+- Ledger rows are never edited or deleted. A correction posts a signed reversal; an entry whose output has already been transferred is locked until that transfer is reversed, and the lock lifts automatically when the WIP comes back.
+- Routings are revisioned per part: the first revision goes live on creation, later revisions start inactive and activation deactivates the previous one in the same locked transaction. A routing referenced by any order can no longer be edited or deleted; it must be superseded by a new revision.
+- UI follows an enterprise production workspace: compact filters/tables, KPI summary cards, status badges, clear primary actions, order progress per operation, cost breakdown and traceable references.
+
+Stages (each must pass its tests before the next):
+1. [x] Order CRUD: migration 030, order snapshots/allocation guards, order API, and the enterprise production workspace (shared UI kit in `frontend/components/production/execution-ui.tsx` + `execution.css`) used by the order list/form/detail and the planning screens.
+2. [x] Routing CRUD: revisioned operation sequences with rates per output, one active revision per part, frozen once an order references them; API and enterprise list/detail/form. Plan-level order creation now runs through the same single-order path, so every order carries a BOM, routing and cost snapshot and consumes its planning allocation.
+3. [x] Daily CRUD: migration 031, validated entries and material snapshots, operation/date availability, status progress, versioned edit/void guards, monthly period closure, permissions and audit history; enterprise list/form/detail at `/daily-production`.
+4. [x] WIP: migration 032, append-only signed ledger of receipts, transfers, consumption and reversals with FIFO lot costing; balances, reconciliation and transfer/reversal API plus the enterprise WIP workspace at `/production-wip`. Daily entries after the first operation now consume transferred WIP instead of upstream good output.
+5. [x] Actual cost: per-order material and per-operation process actuals from the transaction snapshots, WIP-adjusted finished cost and cost per piece, variance against the release estimate, BOM usage variance, and a monthly summary with its closed state; API and cost workspace at `/production-costs`, restricted to production.report.
+6. [x] Dashboard and exports: production dashboard API/workspace at `/production-dashboard` (plan vs actual per part, live WIP per process, reject rate per operation, cost per part number, each chart paired with its table), plus native XLSX and PDF documents for the order execution report and the dashboard, written with excelize and fpdf. Full regression, TypeScript, lint and production build pass; the SQL integration suite and an independent review are still outstanding.
+
+Validation: Go domain/API tests, migrated disposable PostgreSQL-compatible integration database, Vitest UI tests, TypeScript, targeted ESLint and production build. Native PostgreSQL concurrency behavior is reviewed through lock ordering; the local WASM SQL harness cannot prove true parallel-session behavior.
+
+Stage 3 verification: all Go packages pass, including the migrated Daily Production SQL workflow; 38 frontend test files / 172 tests pass; TypeScript, targeted Daily Production ESLint and production build pass. Review fixes cover API cost redaction, chronological input availability for backdated entries, and six-decimal material defaults. Migration 031 was applied only to the disposable test database.
+
+Stage 3 boundary: operation balances currently derive from good output minus subsequent processed quantity. Explicit transfers, FIFO lots, inventory posting and reconciliation remain stage 4. Entry snapshots support subsequent actual-cost reporting; `effects_locked` protects corrections once downstream posting is added. No stage 4–6 completion is claimed.

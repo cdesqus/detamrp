@@ -24,6 +24,15 @@ export const navigationGroups: NavigationGroup[] = [
     { label: 'Supplier Orders', href: '/supplier-orders', icon: 'clipboard', requiredPermission: 'po.view' },
     { label: 'Sales Orders', href: '/sales-orders', icon: 'sales-order', requiredPermission: 'sales_order.view' }
   ] },
+  { label: 'Production', icon: 'factory', collapsible: true, items: [
+    { label: 'Production Dashboard', href: '/production-dashboard', icon: 'dashboard', requiredPermission: 'production.view' },
+    { label: 'Production Planning', href: '/production-planning', icon: 'clipboard', requiredPermission: 'production.view' },
+    { label: 'Production Orders', href: '/production-orders', icon: 'factory', requiredPermission: 'production.view' },
+    { label: 'Routing & Operations', href: '/production-routings', icon: 'layers', requiredPermission: 'production.view' },
+    { label: 'Daily Production', href: '/daily-production', icon: 'receiving', requiredPermission: 'production.view' },
+    { label: 'Work in Progress', href: '/production-wip', icon: 'warehouse', requiredPermission: 'production.view' },
+    { label: 'Production Cost', href: '/production-costs', icon: 'report', requiredPermission: 'production.report' }
+  ] },
   { label: 'Logistics', icon: 'warehouse', collapsible: true, items: [
     { label: 'Stock Inventory', href: '/inventory', icon: 'warehouse', requiredPermission: 'inventory.view' },
     { label: 'Receiving', href: '/receiving', icon: 'receiving', requiredPermission: 'receiving.view' },
@@ -47,6 +56,17 @@ export const navigationGroups: NavigationGroup[] = [
 ];
 
 const routeRules: Array<{ path: string; permission: string; exact?: boolean }> = [
+  { path: '/daily-production/new', permission: 'production.entry', exact: true },
+  { path: '/daily-production', permission: 'production.view' },
+  { path: '/production-dashboard', permission: 'production.view' },
+  { path: '/production-planning/new', permission: 'production.plan', exact: true },
+  { path: '/production-planning', permission: 'production.view' },
+  { path: '/production-orders/new', permission: 'production.order', exact: true },
+  { path: '/production-orders', permission: 'production.view' },
+  { path: '/production-routings/new', permission: 'production.routing', exact: true },
+  { path: '/production-routings', permission: 'production.view' },
+  { path: '/production-wip', permission: 'production.view' },
+  { path: '/production-costs', permission: 'production.report' },
   { path: '/supplier-orders/new', permission: 'po.create', exact: true },
   { path: '/dashboard', permission: 'dashboard.view' },
   { path: '/units', permission: 'master_data.view' },

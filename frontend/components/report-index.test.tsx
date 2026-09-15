@@ -1,9 +1,11 @@
 import {render,screen,waitFor} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import {afterEach,describe,expect,it,vi} from 'vitest';
+import {afterEach,beforeEach,describe,expect,it,vi} from 'vitest';
 import {ReportIndex} from './report-index';
 
-vi.mock('next/navigation',()=>({useSearchParams:()=>new URLSearchParams()}));
+const route=vi.hoisted(()=>({query:''}));
+vi.mock('next/navigation',()=>({useSearchParams:()=>new URLSearchParams(route.query)}));
+beforeEach(()=>{route.query=''});
 
 afterEach(()=>vi.unstubAllGlobals());
 
@@ -32,9 +34,9 @@ describe('ReportIndex',()=>{
     expect(screen.queryByRole('link',{name:'Export PDF'})).not.toBeInTheDocument();
   });
   it('loads and exports the material requirement report',async()=>{
+    route.query='type=material-requirements';
     const fetchMock=vi.fn((input:string)=>Promise.resolve(new Response(JSON.stringify(input.includes('material-requirements')?{items:[{itemCode:'RM-1',required:'12'}]}:{items:[]}))));
     vi.stubGlobal('fetch',fetchMock); render(<ReportIndex/>);
-    await userEvent.click(screen.getByRole('button',{name:'Material Requirements'}));
     await userEvent.click(screen.getByRole('button',{name:'Load Report'}));
     expect(await screen.findByText('RM-1')).toBeInTheDocument();
     expect(screen.getByRole('button',{name:'Export CSV'})).toBeInTheDocument();

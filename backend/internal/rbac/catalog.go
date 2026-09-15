@@ -1,8 +1,17 @@
 package rbac
 
 var Catalog = map[string]string{
-	"dashboard.view": "View dashboard",
-	"po.view":        "View supplier orders", "po.create": "Create supplier orders", "po.edit_draft": "Edit draft supplier orders",
+	"production.view":    "View production planning and execution",
+	"production.plan":    "Create, edit and approve production plans",
+	"production.order":   "Create and manage production orders",
+	"production.routing": "Manage production routings",
+	"production.entry":   "Record daily production",
+	"production.wip":     "Transfer work in progress",
+	"production.void":    "Void production transactions",
+	"production.period":  "Close production periods",
+	"production.report":  "View production costs and export reports",
+	"dashboard.view":     "View dashboard",
+	"po.view":            "View supplier orders", "po.create": "Create supplier orders", "po.edit_draft": "Edit draft supplier orders",
 	"po.submit": "Submit supplier orders", "po.approve": "Approve supplier orders", "po.reject": "Reject supplier orders",
 	"po.price.view": "View purchase prices", "po.unit_price.edit": "Edit purchase prices",
 	"dn.view": "View delivery notes", "dn.issue": "Issue delivery notes", "dn.cancel": "Cancel delivery notes",
@@ -17,7 +26,7 @@ var Catalog = map[string]string{
 	"bom.view": "View bills of materials", "bom.manage": "Manage BOM drafts", "bom.activate": "Activate bills of materials",
 	"customer.view": "View customers", "customer.manage": "Manage customers",
 	"sales_report.view": "View sales reports",
-	"fg.view": "View finished goods", "fg.manage": "Manage finished goods", "fg.price.manage": "Manage finished-good prices",
+	"fg.view":           "View finished goods", "fg.manage": "Manage finished goods", "fg.price.manage": "Manage finished-good prices",
 }
 
 func Allows(granted []string, required ...string) bool {
