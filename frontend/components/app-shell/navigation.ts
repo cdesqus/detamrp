@@ -6,7 +6,10 @@ export type NavigationItem = NavigationLeaf | NavigationBranch;
 export type NavigationGroup = { label?: string; icon?: IconName; collapsible?: boolean; items: NavigationItem[] };
 
 export const navigationGroups: NavigationGroup[] = [
-  { items: [{ label: 'Dashboard', href: '/dashboard', icon: 'dashboard', requiredPermission: 'dashboard.view' }] },
+  { label: 'Dashboard', icon: 'dashboard', collapsible: true, items: [
+    { label: 'Overview', href: '/dashboard', icon: 'dashboard', requiredPermission: 'dashboard.view' },
+    { label: 'Production Dashboard', href: '/production-dashboard', icon: 'dashboard', requiredPermission: 'production.view' }
+  ] },
   { label: 'Data Master', icon: 'units', collapsible: true, items: [
     { label: 'Measurements', icon: 'units', requiredPermission: 'master_data.view', items: [
       { label: 'Unit', href: '/units', icon: 'units', requiredPermission: 'master_data.view' },
@@ -26,7 +29,6 @@ export const navigationGroups: NavigationGroup[] = [
     { label: 'Sales Orders', href: '/sales-orders', icon: 'sales-order', requiredPermission: 'sales_order.view' }
   ] },
   { label: 'Production', icon: 'factory', collapsible: true, items: [
-    { label: 'Production Dashboard', href: '/production-dashboard', icon: 'dashboard', requiredPermission: 'production.view' },
     { label: 'Production Planning', href: '/production-planning', icon: 'clipboard', requiredPermission: 'production.view' },
     { label: 'Production Orders', href: '/production-orders', icon: 'factory', requiredPermission: 'production.view' },
     { label: 'Daily Production', href: '/daily-production', icon: 'receiving', requiredPermission: 'production.view' },

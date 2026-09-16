@@ -45,7 +45,7 @@ describe('AppShell', () => {
     await screen.findByText('Role Manager');
     expect(screen.getByRole('link', { name: 'Roles & Permissions' })).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Users' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: 'Dashboard' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Dashboard' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Data Master' })).not.toBeInTheDocument();
   });
 
@@ -78,7 +78,8 @@ describe('AppShell', () => {
     expect(text.indexOf('Stock Inventory')).toBeLessThan(text.indexOf('Receiving'));
     expect(screen.queryByRole('link', { name: 'Delivery Notes' })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Approval Inbox' })).not.toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Dashboard' }).querySelector('svg')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Dashboard' }));
+    expect(screen.getByRole('link', { name: 'Overview' }).querySelector('svg')).toBeInTheDocument();
   });
 
   it('owns the desktop collapse control in the sidebar and expands active settings', async () => {
