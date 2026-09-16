@@ -192,7 +192,11 @@ it("rounds calculated material usage to the supported precision", async () => {
   fireEvent.change(screen.getByLabelText("Qty processed"), {
     target: { value: "3" },
   });
-  expect(screen.getByLabelText("Material quantity RM-001")).toHaveValue(0.3);
+  expect(screen.getByLabelText("Material quantity RM-001")).toHaveTextContent(/0[.,]3/);
+  // Clearing and retyping the quantity recalculates instead of sticking.
+  fireEvent.change(screen.getByLabelText("Qty processed"), { target: { value: "" } });
+  fireEvent.change(screen.getByLabelText("Qty processed"), { target: { value: "5" } });
+  expect(screen.getByLabelText("Material quantity RM-001")).toHaveTextContent(/0[.,]5/);
 });
 it("rejects good plus reject greater than processed", async () => {
   vi.stubGlobal("fetch", vi.fn().mockResolvedValue(reply(options)));
@@ -276,4 +280,14 @@ it("voids with a reason and version and preserves the detail record", async () =
     reason: "Duplicate",
   });
   expect(push).not.toHaveBeenCalled();
+});
+
+it("books no material at a later operation", async () => {
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(reply(options)));
+  render(<DailyProductionForm orderId="o1" />);
+  await screen.findByRole("option", { name: "Operator One" });
+  expect(screen.getByLabelText("Material quantity RM-001")).toBeInTheDocument();
+  fireEvent.change(screen.getByLabelText("Operation"), { target: { value: "op2" } });
+  expect(screen.queryByLabelText("Material quantity RM-001")).not.toBeInTheDocument();
+  expect(screen.getByText("No material is consumed at this operation.")).toBeInTheDocument();
 });

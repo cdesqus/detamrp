@@ -29,7 +29,6 @@ export function DailyProductionForm({
     [good, setGood] = useState("0"),
     [rejected, setRejected] = useState("0"),
     [notes, setNotes] = useState(""),
-    [usage, setUsage] = useState<Record<string, string>>({}),
     [error, setError] = useState(""),
     [loaded, setLoaded] = useState(false),
     [busy, setBusy] = useState(false);
@@ -58,11 +57,6 @@ export function DailyProductionForm({
           setGood(e.good);
           setRejected(e.rejected);
           setNotes(e.notes);
-          setUsage(
-            Object.fromEntries(
-              e.materials.map((m) => [m.materialId, m.quantity]),
-            ),
-          );
         } else if (initialOrderId) {
           const chosen = o.orders.find((x) => x.id === initialOrderId);
           setOperationId(chosen?.operations[0]?.id ?? "");
@@ -104,17 +98,15 @@ export function DailyProductionForm({
           : Number(processed) > remaining
             ? "Processed quantity exceeds what the previous operation has produced."
             : "";
+  // Material is booked at the first operation only, and always at the BOM rate
+  // for what is being processed.
   const materialRows =
     index === 0
       ? (selected?.materials ?? []).map((m) => ({
           materialId: m.id,
-          quantity:
-            usage[m.id] ??
-            String(
-              Number(
-                (Number(m.usageQty) * (Number(processed) || 0)).toFixed(6),
-              ),
-            ),
+          quantity: String(
+            Number((Number(m.usageQty) * (Number(processed) || 0)).toFixed(6)),
+          ),
         }))
       : [];
   const eligible =
@@ -128,7 +120,6 @@ export function DailyProductionForm({
     setOperationId(
       options?.orders.find((o) => o.id === value)?.operations[0]?.id ?? "",
     );
-    setUsage({});
     setProcessed("");
     setGood("0");
     setRejected("0");
@@ -230,7 +221,6 @@ export function DailyProductionForm({
                           value={operationId}
                           onChange={(e) => {
                             setOperationId(e.target.value);
-                            setUsage({});
                           }}
                         >
                           <option value="">Select operation</option>
@@ -375,49 +365,50 @@ export function DailyProductionForm({
                       />
                     </div>
                   </Panel>
-                  {index === 0 && selected && (
+                  {selected && index >= 0 && (
                     <Panel
-                      title="Actual material usage"
-                      note="Confirm consumed quantities. Prices are captured when this entry is recorded."
+                      title="Material usage"
+                      note={
+                        index === 0
+                          ? "Taken from the bill of materials for the quantity processed. Prices are captured when this entry is recorded."
+                          : "Material is booked at the first operation; this one works on output that already carries it."
+                      }
                     >
-                      <div className="execution-table-wrap">
-                        <table className="execution-table">
-                          <thead>
-                            <tr>
-                              <th>Material</th>
-                              <th>Unit</th>
-                              <th>Quantity consumed</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {selected.materials.map((m, n) => (
-                              <tr key={m.id}>
-                                <td>
-                                  <strong>{m.partNumber}</strong>
-                                  <small>{m.partName}</small>
-                                </td>
-                                <td>{m.unitCode}</td>
-                                <td>
-                                  <input
-                                    aria-label={`Material quantity ${m.partNumber}`}
-                                    required
-                                    type="number"
-                                    min="0.000001"
-                                    step="0.000001"
-                                    value={materialRows[n]?.quantity ?? ""}
-                                    onChange={(e) =>
-                                      setUsage((v) => ({
-                                        ...v,
-                                        [m.id]: e.target.value,
-                                      }))
-                                    }
-                                  />
-                                </td>
+                      {index === 0 ? (
+                        <div className="execution-table-wrap">
+                          <table className="execution-table">
+                            <thead>
+                              <tr>
+                                <th>Material</th>
+                                <th>Unit</th>
+                                <th className="numeric">Per piece</th>
+                                <th className="numeric">Quantity consumed</th>
                               </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
+                            </thead>
+                            <tbody>
+                              {selected.materials.map((m, n) => (
+                                <tr key={m.id}>
+                                  <td>
+                                    <strong>{m.partNumber}</strong>
+                                    <small>{m.partName}</small>
+                                  </td>
+                                  <td>{m.unitCode}</td>
+                                  <td className="numeric">{quantity(m.usageQty)}</td>
+                                  <td className="numeric">
+                                    <output aria-label={`Material quantity ${m.partNumber}`}>
+                                      {quantity(materialRows[n]?.quantity ?? "0")} {m.unitCode}
+                                    </output>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      ) : (
+                        <p className="execution-panel-body">
+                          No material is consumed at this operation.
+                        </p>
+                      )}
                     </Panel>
                   )}
                   <Panel title="Production notes">
