@@ -1,5 +1,5 @@
 'use client';
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useCurrentUser } from '../app-shell/app-shell';
 import { request, quantity, money } from './execution-api';
 import { movementLabel, type WIPMovement, type WIPOrderBalance } from './wip-api';
@@ -24,6 +24,106 @@ function MovementBadge({ movement }: { movement: WIPMovement }) {
   return <span className={`execution-badge status-${tone}`}>{label}</span>;
 }
 
+/** Only output waiting at an operation that has a successor can be moved. */
+const movableOperations = (order: WIPOrderBalance) =>
+  order.operations.filter((operation) => !operation.final && Number(operation.onHand) > 0);
+
+/** The transfer form, usable from the balance list and from the order ledger. */
+function TransferDialog({ order, onPosted, onClose }: {
+  order: WIPOrderBalance;
+  onPosted: (saved: WIPOrderBalance) => void;
+  onClose: () => void;
+}) {
+  const movable = movableOperations(order);
+  const [source, setSource] = useState(movable[0]?.operationId ?? '');
+  const [qty, setQty] = useState(movable[0]?.onHand ?? '');
+  const [movementDate, setMovementDate] = useState(new Date().toISOString().slice(0, 10));
+  const [notes, setNotes] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const selected = movable.find((operation) => operation.operationId === source);
+
+  async function submit() {
+    if (!source) {
+      setError('Select the operation holding the WIP.');
+      return;
+    }
+    if (!Number.isFinite(Number(qty)) || Number(qty) <= 0) {
+      setError('Enter a quantity greater than zero.');
+      return;
+    }
+    if (selected && Number(qty) > Number(selected.onHand)) {
+      setError('Quantity exceeds the WIP available at this operation.');
+      return;
+    }
+    setBusy(true);
+    setError('');
+    try {
+      const saved = await request<WIPOrderBalance>('/production-wip/transfers', {
+        method: 'POST',
+        body: JSON.stringify({ orderId: order.orderId, sourceOperationId: source, quantity: qty, movementDate, notes }),
+      });
+      onPosted(saved);
+    } catch (cause) {
+      setError(message(cause));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <ConfirmDialog
+      title={`Transfer WIP · ${order.orderNumber}`}
+      confirmLabel="Post transfer"
+      cancelLabel="Cancel"
+      busy={busy}
+      onConfirm={() => void submit()}
+      onClose={onClose}
+    >
+      <ErrorMessage error={error} />
+      <p>Move finished pieces to the next operation. Only transferred stock can be processed there.</p>
+      <label>
+        From operation
+        <select
+          aria-label="Source operation"
+          value={source}
+          onChange={(event) => {
+            setSource(event.target.value);
+            const next = movable.find((operation) => operation.operationId === event.target.value);
+            setQty(next ? next.onHand : '');
+          }}
+        >
+          {movable.map((operation) => (
+            <option key={operation.operationId} value={operation.operationId}>
+              {operation.code} · {quantity(operation.onHand)} {order.unitCode} waiting
+            </option>
+          ))}
+        </select>
+      </label>
+      <label>
+        Quantity
+        <input
+          aria-label="Transfer quantity"
+          type="number"
+          min="0.000001"
+          step="any"
+          value={qty}
+          onChange={(event) => setQty(event.target.value)}
+        />
+        <small>Up to {quantity(selected?.onHand ?? '0')} {order.unitCode} is waiting at this operation.</small>
+      </label>
+      <label>
+        Movement date
+        <input aria-label="Movement date" type="date" value={movementDate} onChange={(event) => setMovementDate(event.target.value)} />
+      </label>
+      <label>
+        Notes
+        <textarea rows={2} value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Trolley, batch or handover note" />
+      </label>
+    </ConfirmDialog>
+  );
+}
+
 export function WIPIndex() {
   const user = useCurrentUser();
   const [items, setItems] = useState<WIPOrderBalance[]>([]);
@@ -43,6 +143,7 @@ export function WIPIndex() {
 
   const costs = Boolean(user?.permissions.includes('production.report'));
   const manage = Boolean(user?.permissions.includes('production.wip'));
+  const [transferring, setTransferring] = useState<WIPOrderBalance>();
   const filtered = useMemo(() => items.filter((order) => {
     const matches = `${order.orderNumber} ${order.partNumber} ${order.partName} ${order.plantName}`.toLowerCase().includes(search.toLowerCase());
     if (!matches) return false;
@@ -139,9 +240,13 @@ export function WIPIndex() {
                       </span>
                     </td>
                     <td>
-                      <a className="ex-button" href={`/production-wip/${order.orderId}`}>
-                        {manage ? 'Transfer WIP' : 'Open ledger'}
-                      </a>
+                      {manage && movableOperations(order).length > 0 ? (
+                        <button type="button" className="ex-button primary" onClick={() => setTransferring(order)}>
+                          Transfer WIP
+                        </button>
+                      ) : (
+                        <a className="ex-button" href={`/production-wip/${order.orderId}`}>Open ledger</a>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -153,6 +258,16 @@ export function WIPIndex() {
           <span>{filtered.length} of {items.length} active orders</span>
         </div>
       </Panel>
+      {transferring && (
+        <TransferDialog
+          order={transferring}
+          onPosted={(saved) => {
+            setItems((current) => current.map((order) => (order.orderId === saved.orderId ? saved : order)));
+            setTransferring(undefined);
+          }}
+          onClose={() => setTransferring(undefined)}
+        />
+      )}
     </Workspace>
   );
 }
@@ -164,10 +279,6 @@ export function WIPDetail({ id }: { id: string }) {
   const [busy, setBusy] = useState(false);
   const [transfer, setTransfer] = useState(false);
   const [reverse, setReverse] = useState<WIPMovement>();
-  const [source, setSource] = useState('');
-  const [qty, setQty] = useState('');
-  const [movementDate, setMovementDate] = useState('');
-  const [notes, setNotes] = useState('');
   const [reason, setReason] = useState('');
 
   const load = useCallback(async () => {
@@ -181,47 +292,11 @@ export function WIPDetail({ id }: { id: string }) {
 
   const costs = Boolean(user?.permissions.includes('production.report'));
   const manage = Boolean(user?.permissions.includes('production.wip'));
-  const movable = order?.operations.filter((operation) => !operation.final && Number(operation.onHand) > 0) ?? [];
-  const selected = movable.find((operation) => operation.operationId === source);
+  const movable = order ? movableOperations(order) : [];
 
   function openTransfer() {
-    const first = movable[0];
-    setSource(first?.operationId ?? '');
-    setQty(first ? first.onHand : '');
-    setMovementDate(new Date().toISOString().slice(0, 10));
-    setNotes('');
     setError('');
     setTransfer(true);
-  }
-
-  async function submitTransfer(event?: FormEvent) {
-    event?.preventDefault();
-    if (!source) {
-      setError('Select the operation holding the WIP.');
-      return;
-    }
-    if (!Number.isFinite(Number(qty)) || Number(qty) <= 0) {
-      setError('Enter a quantity greater than zero.');
-      return;
-    }
-    if (selected && Number(qty) > Number(selected.onHand)) {
-      setError('Quantity exceeds the WIP available at this operation.');
-      return;
-    }
-    setBusy(true);
-    setError('');
-    try {
-      const saved = await request<WIPOrderBalance>('/production-wip/transfers', {
-        method: 'POST',
-        body: JSON.stringify({ orderId: id, sourceOperationId: source, quantity: qty, movementDate, notes }),
-      });
-      setOrder(saved);
-      setTransfer(false);
-    } catch (cause) {
-      setError(message(cause));
-    } finally {
-      setBusy(false);
-    }
   }
 
   async function submitReversal() {
@@ -427,50 +502,14 @@ export function WIPDetail({ id }: { id: string }) {
           </Panel>
 
           {transfer && (
-            <ConfirmDialog
-              title="Transfer WIP to the next operation"
-              confirmLabel="Post transfer"
-              cancelLabel="Cancel"
-              busy={busy}
-              onConfirm={() => void submitTransfer()}
+            <TransferDialog
+              order={order}
+              onPosted={(saved) => {
+                setOrder(saved);
+                setTransfer(false);
+              }}
               onClose={() => setTransfer(false)}
-            >
-              <p>Move finished pieces to the next operation. Only transferred stock can be processed there.</p>
-              <label>
-                From operation
-                <select aria-label="Source operation" value={source} onChange={(event) => {
-                  setSource(event.target.value);
-                  const next = movable.find((operation) => operation.operationId === event.target.value);
-                  setQty(next ? next.onHand : '');
-                }}>
-                  {movable.map((operation) => (
-                    <option key={operation.operationId} value={operation.operationId}>
-                      {operation.code} · {quantity(operation.onHand)} {order.unitCode} waiting
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                Quantity
-                <input
-                  aria-label="Transfer quantity"
-                  type="number"
-                  min="0.000001"
-                  step="any"
-                  value={qty}
-                  onChange={(event) => setQty(event.target.value)}
-                />
-                <small>Up to {quantity(selected?.onHand ?? '0')} {order.unitCode} is waiting at this operation.</small>
-              </label>
-              <label>
-                Movement date
-                <input aria-label="Movement date" type="date" value={movementDate} onChange={(event) => setMovementDate(event.target.value)} />
-              </label>
-              <label>
-                Notes
-                <textarea rows={2} value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Trolley, batch or handover note" />
-              </label>
-            </ConfirmDialog>
+            />
           )}
 
           {reverse && (

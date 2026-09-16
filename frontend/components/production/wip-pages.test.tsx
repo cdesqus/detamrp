@@ -135,10 +135,17 @@ it('totals WIP value in the reporting currency', async () => {
   expect(screen.getByText('12')).toBeInTheDocument();
 });
 
-it('offers the transfer straight from the balance list', async () => {
-  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(respond({ items: [balance] })));
+it('opens the transfer dialog straight from the balance list', async () => {
+  const fetcher = vi.fn().mockResolvedValueOnce(respond({ items: [balance] })).mockResolvedValueOnce(respond(balance));
+  vi.stubGlobal('fetch', fetcher);
   render(<WIPIndex />);
-  expect(await screen.findByRole('link', { name: 'Transfer WIP' })).toHaveAttribute('href', '/production-wip/o1');
+  fireEvent.click(await screen.findByRole('button', { name: 'Transfer WIP' }));
+  expect(screen.getByRole('dialog', { name: /Transfer WIP/ })).toBeInTheDocument();
+  fireEvent.change(screen.getByLabelText('Transfer quantity'), { target: { value: '2' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Post transfer' }));
+  await waitFor(() => expect(fetcher).toHaveBeenCalledTimes(2));
+  expect(fetcher.mock.calls[1][0]).toBe('/api/production-wip/transfers');
+  expect(JSON.parse(fetcher.mock.calls[1][1].body)).toMatchObject({ orderId: 'o1', sourceOperationId: 'op1', quantity: '2' });
 });
 
 it('explains the missing transfer button to users without the permission', async () => {
