@@ -18,7 +18,8 @@ export const navigationGroups: NavigationGroup[] = [
     { label: 'Customers', href: '/customers', icon: 'users', requiredPermission: 'customer.view' },
     { label: 'Finished Goods', href: '/finished-goods', icon: 'box-check', requiredPermission: 'fg.view' },
     { label: 'Raw Materials', href: '/raw-materials', icon: 'layers', requiredPermission: 'master_data.view' },
-    { label: 'Bill of Materials', href: '/boms', icon: 'bom', requiredPermission: 'bom.view' }
+    { label: 'Bill of Materials', href: '/boms', icon: 'bom', requiredPermission: 'bom.view' },
+    { label: 'Routing & Operations', href: '/production-routings', icon: 'layers', requiredPermission: 'production.view' }
   ] },
   { label: 'Procurement', icon: 'clipboard', collapsible: true, items: [
     { label: 'Supplier Orders', href: '/supplier-orders', icon: 'clipboard', requiredPermission: 'po.view' },
@@ -28,7 +29,6 @@ export const navigationGroups: NavigationGroup[] = [
     { label: 'Production Dashboard', href: '/production-dashboard', icon: 'dashboard', requiredPermission: 'production.view' },
     { label: 'Production Planning', href: '/production-planning', icon: 'clipboard', requiredPermission: 'production.view' },
     { label: 'Production Orders', href: '/production-orders', icon: 'factory', requiredPermission: 'production.view' },
-    { label: 'Routing & Operations', href: '/production-routings', icon: 'layers', requiredPermission: 'production.view' },
     { label: 'Daily Production', href: '/daily-production', icon: 'receiving', requiredPermission: 'production.view' },
     { label: 'Work in Progress', href: '/production-wip', icon: 'warehouse', requiredPermission: 'production.view' },
     { label: 'Production Cost', href: '/production-costs', icon: 'report', requiredPermission: 'production.report' }
