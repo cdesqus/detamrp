@@ -34,3 +34,5 @@ Validation: Go domain/API tests, migrated disposable PostgreSQL-compatible integ
 Stage 3 verification: all Go packages pass, including the migrated Daily Production SQL workflow; 38 frontend test files / 172 tests pass; TypeScript, targeted Daily Production ESLint and production build pass. Review fixes cover API cost redaction, chronological input availability for backdated entries, and six-decimal material defaults. Migration 031 was applied only to the disposable test database.
 
 Stage 3 boundary: operation balances currently derive from good output minus subsequent processed quantity. Explicit transfers, FIFO lots, inventory posting and reconciliation remain stage 4. Entry snapshots support subsequent actual-cost reporting; `effects_locked` protects corrections once downstream posting is added. No stage 4–6 completion is claimed.
+
+Resetting a test environment: `database/reset-transactions.sql` truncates every transactional table, including the append-only ledgers, and leaves master data, users and roles in place. Document numbering restarts at 1. It clears every tenant, so take a backup first.
