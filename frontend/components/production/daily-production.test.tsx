@@ -164,7 +164,7 @@ it("prevents next operation entry without upstream output", async () => {
     target: { value: "op2" },
   });
   expect(
-    screen.getByText(/No WIP has been transferred to this operation/),
+    screen.getByText(/previous operation has not finished any output/),
   ).toBeInTheDocument();
   expect(
     screen.getByRole("button", { name: "Record Production" }),

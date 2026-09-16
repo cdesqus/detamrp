@@ -113,9 +113,6 @@ func TestDailyProductionSQLWorkflow(t *testing.T) {
 	secondInput.Processed = decimal.NewFromInt(20)
 	secondInput.Good = decimal.NewFromInt(18)
 	secondInput.Rejected = decimal.NewFromInt(2)
-	if _, e = s.CreateEntry(ctx, a, secondInput); e == nil {
-		t.Fatal("welding started without a WIP transfer")
-	}
 	transfer, e := s.CreateTransfer(ctx, a, TransferInput{OrderID: o.ID, SourceOperationID: o.Operations[0].ID, Quantity: decimal.NewFromInt(20), MovementDate: "2026-09-14"})
 	if e != nil {
 		t.Fatal("transfer:", e)

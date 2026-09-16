@@ -81,7 +81,7 @@ function TransferDialog({ order, onPosted, onClose }: {
       onClose={onClose}
     >
       <ErrorMessage error={error} />
-      <p>Move finished pieces to the next operation. Only transferred stock can be processed there.</p>
+      <p>Record a physical hand-over to the next operation. Production moves stock on its own, so this is only needed when you want the movement itself on record.</p>
       <label>
         From operation
         <select
@@ -169,7 +169,7 @@ export function WIPIndex() {
         ]}
       />
       <ErrorMessage error={error} />
-      <Panel title="WIP balances" note="Balances are the sum of the ledger: receipts less transfers, transfers less consumption.">
+      <Panel title="WIP balances" note="Stock moves to the next operation automatically when it reports output; transfer by hand only to record a physical hand-over.">
         <div className="execution-filters">
           <label>
             Search orders

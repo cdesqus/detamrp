@@ -222,17 +222,69 @@ func insertMovement(ctx context.Context, tx database.TenantTx, a Actor, orderID 
 // postEntryMovements turns one posted entry into ledger movements: it consumes
 // staged WIP for later operations and receipts the good output of every
 // operation that still has a successor.
+// allocatable is how much the open lots can still supply, used to explain a
+// shortage in the operator's own terms.
+func allocatable(lots []Lot) decimal.Decimal {
+	available := decimal.Zero
+	for _, lot := range lots {
+		if lot.Remaining.IsPositive() {
+			available = available.Add(lot.Remaining)
+		}
+	}
+	return available
+}
+
+// stageUpstreamOutput moves what the operation is short of from the previous
+// operation. The movement is a normal ledger transfer, tied to the entry that
+// triggered it, so correcting that entry takes it back again.
+func stageUpstreamOutput(ctx context.Context, tx database.TenantTx, a Actor, o Order, index int, entryID uuid.UUID, date string, processed decimal.Decimal) error {
+	operation, upstream := o.Operations[index], o.Operations[index-1]
+	staged, e := openLots(ctx, tx, a, o.ID, operation.ID, MovementTransfer, date)
+	if e != nil {
+		return e
+	}
+	short := processed.Sub(allocatable(staged))
+	if !short.IsPositive() {
+		return nil
+	}
+	waiting, e := openLots(ctx, tx, a, o.ID, upstream.ID, MovementReceipt, date)
+	if e != nil {
+		return e
+	}
+	allocations, e := allocateFIFO(waiting, short)
+	if e != nil {
+		return invalid("%s has only %s good output available on this date; %s cannot process %s yet",
+			upstream.Code, allocatable(staged).Add(allocatable(waiting)), operation.Code, processed)
+	}
+	for _, allocation := range allocations {
+		if _, e = insertMovement(ctx, tx, a, o.ID, movementRow{
+			Type: MovementTransfer, Source: upstream.ID, Destination: operation.ID,
+			Quantity: allocation.Quantity, UnitCost: allocation.UnitCost, Currency: o.Currency,
+			LotID: allocation.LotID, EntryID: entryID, MovementDate: date,
+			Notes: "Moved automatically for " + operation.Code,
+		}); e != nil {
+			return e
+		}
+	}
+	return refreshEntryLocks(ctx, tx, a, o.ID)
+}
+
 func postEntryMovements(ctx context.Context, tx database.TenantTx, a Actor, o Order, index int, entryID uuid.UUID, date string, processed, good, inputCost, processCost decimal.Decimal) error {
 	operation := o.Operations[index]
 	consumedCost := inputCost
 	if index > 0 {
+		// Whatever the previous operation finished and has not passed on yet is
+		// moved across automatically, so the floor only has to report output.
+		if e := stageUpstreamOutput(ctx, tx, a, o, index, entryID, date, processed); e != nil {
+			return e
+		}
 		lots, e := openLots(ctx, tx, a, o.ID, operation.ID, MovementTransfer, date)
 		if e != nil {
 			return e
 		}
 		allocations, e := allocateFIFO(lots, processed)
 		if e != nil {
-			return invalid("Not enough WIP has been transferred to %s; transfer stock from %s first", operation.Code, o.Operations[index-1].Code)
+			return invalid("%s has only %s available from %s on this date", operation.Code, allocatable(lots), o.Operations[index-1].Code)
 		}
 		consumedCost = allocationCost(allocations)
 		for _, allocation := range allocations {
@@ -260,7 +312,7 @@ func postEntryMovements(ctx context.Context, tx database.TenantTx, a Actor, o Or
 // already moved downstream cannot be annulled, which is what locks the entry.
 func reverseEntryMovements(ctx context.Context, tx database.TenantTx, a Actor, orderID, entryID uuid.UUID) error {
 	rows, e := tx.Query(ctx, `SELECT m.id,m.movement_type,COALESCE(m.source_operation_id,'`+nilUUID+`'),COALESCE(m.destination_operation_id,'`+nilUUID+`'),m.quantity,m.unit_cost,m.currency,COALESCE(m.lot_movement_id,'`+nilUUID+`'),m.movement_date::text,
- COALESCE((SELECT sum(c.quantity) FROM production_wip_movements c WHERE c.tenant_id=m.tenant_id AND c.lot_movement_id=m.id),0)
+ COALESCE((SELECT sum(c.quantity) FROM production_wip_movements c WHERE c.tenant_id=m.tenant_id AND c.lot_movement_id=m.id AND (c.entry_id IS NULL OR c.entry_id<>$2)),0)
  FROM production_wip_movements m WHERE m.tenant_id=$1 AND m.entry_id=$2 AND m.reverses_id IS NULL
  AND NOT EXISTS(SELECT 1 FROM production_wip_movements rv WHERE rv.tenant_id=m.tenant_id AND rv.reverses_id=m.id)`, a.TenantID, entryID)
 	if e != nil {
@@ -297,7 +349,8 @@ func reverseEntryMovements(ctx context.Context, tx database.TenantTx, a Actor, o
 			return e
 		}
 	}
-	return nil
+	// Taking movements back can release the upstream entry that produced them.
+	return refreshEntryLocks(ctx, tx, a, orderID)
 }
 
 // refreshEntryLocks re-derives which entries may still be corrected: an entry is

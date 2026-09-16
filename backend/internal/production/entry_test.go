@@ -44,8 +44,9 @@ func TestEntryTimelineAllowsValidBackdating(t *testing.T) {
 		t.Fatal("double consumed input")
 	}
 }
-func TestEntryAvailabilityFollowsStagedWIP(t *testing.T) {
-	// 55 good pieces exist at stamping but only 15 were transferred to welding.
+func TestEntryAvailabilityFollowsUpstreamOutput(t *testing.T) {
+	// Stamping still holds 40 pieces and 15 were already moved to welding, so
+	// welding may work on all 55 without anyone posting a transfer first.
 	o := Order{PlannedQty: decimal.NewFromInt(100), Operations: []Operation{
 		{ID: uuid.New(), ProcessedQty: decimal.NewFromInt(60), GoodQty: decimal.NewFromInt(55), OnHandQty: decimal.NewFromInt(40)},
 		{ID: uuid.New(), ProcessedQty: decimal.NewFromInt(20), StagedQty: decimal.NewFromInt(15)},
@@ -53,12 +54,14 @@ func TestEntryAvailabilityFollowsStagedWIP(t *testing.T) {
 	if !operationRemaining(o, 0).Equal(decimal.NewFromInt(40)) {
 		t.Fatal("wrong first operation remainder")
 	}
-	if !operationRemaining(o, 1).Equal(decimal.NewFromInt(15)) {
-		t.Fatal("downstream availability must follow transferred WIP, not upstream good output")
+	if !operationRemaining(o, 1).Equal(decimal.NewFromInt(55)) {
+		t.Fatal("downstream availability must include what the previous operation still holds")
 	}
+	// Nothing upstream, nothing staged: welding has nothing to work on.
+	o.Operations[0].OnHandQty = decimal.Zero
 	o.Operations[1].StagedQty = decimal.Zero
 	if !operationRemaining(o, 1).IsZero() {
-		t.Fatal("welding may not run without staged WIP")
+		t.Fatal("welding may not run ahead of the previous operation")
 	}
 }
 func TestEntryStatusRecalculation(t *testing.T) {

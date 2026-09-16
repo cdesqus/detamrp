@@ -129,10 +129,11 @@ func inputTimelineAvailable(days []OperationDay, date string, processed decimal.
 }
 
 // operationRemaining is what an operation may still process: its order target
-// for the first operation, and the WIP staged into it for every later one.
+// for the first operation, and for every later one whatever the operation
+// before it has finished and not passed on yet, plus anything already staged.
 func operationRemaining(o Order, index int) decimal.Decimal {
 	if index > 0 {
-		return decimal.Max(decimal.Zero, o.Operations[index].StagedQty)
+		return decimal.Max(decimal.Zero, o.Operations[index].StagedQty.Add(o.Operations[index-1].OnHandQty))
 	}
 	return decimal.Max(decimal.Zero, o.PlannedQty.Sub(o.Operations[index].ProcessedQty))
 }

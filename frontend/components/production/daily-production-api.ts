@@ -51,8 +51,14 @@ export type DailyOptions = {
 };
 export function inputRemaining(order: Order, index: number) {
   if (index < 0) return 0;
-  // Later operations may only process the WIP transferred to them.
-  if (index > 0) return Math.max(0, Number(order.operations[index].stagedQty ?? 0));
+  // Later operations work on what the previous operation has finished; the
+  // system moves it across on its own.
+  if (index > 0) {
+    return Math.max(
+      0,
+      Number(order.operations[index].stagedQty ?? 0) + Number(order.operations[index - 1].onHandQty ?? 0),
+    );
+  }
   return Math.max(
     0,
     Number(order.plannedQty) - Number(order.operations[0].processedQty),

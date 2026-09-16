@@ -100,9 +100,9 @@ export function DailyProductionForm({
       : isClosed
         ? "Production period is closed."
         : index > 0 && remaining <= 0
-          ? "No WIP has been transferred to this operation yet."
+          ? "The previous operation has not finished any output yet."
           : Number(processed) > remaining
-            ? "Processed quantity exceeds the WIP available at this operation."
+            ? "Processed quantity exceeds what the previous operation has produced."
             : "";
   const materialRows =
     index === 0
@@ -348,7 +348,8 @@ export function DailyProductionForm({
                       <ErrorMessage error={validation} />
                       {index > 0 && remaining <= 0 && selected ? (
                         <p className="execution-footer-note">
-                          <a href={`/production-wip/${selected.id}`}>Transfer WIP to this operation</a> first, then record the output here.
+                          Record the previous operation first, or check the{' '}
+                          <a href={`/production-wip/${selected.id}`}>WIP ledger</a> for this order.
                         </p>
                       ) : null}
                       <Metrics

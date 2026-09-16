@@ -113,10 +113,7 @@ func TestWIPLedgerSQLWorkflow(t *testing.T) {
 		t.Fatalf("fresh ledger does not reconcile: %+v", balance.Operations)
 	}
 
-	// Welding may only work on what was transferred to it.
-	if _, e = s.CreateEntry(ctx, a, EntryInput{OrderID: o.ID, OperationID: welding.ID, OperatorID: a.UserID, ProductionDate: "2026-09-13", Shift: "1", Processed: decimal.NewFromInt(1), Good: decimal.NewFromInt(1)}); e == nil {
-		t.Fatal("welding ran without staged WIP")
-	}
+	// A manual transfer still cannot overdraw the balance or predate its stock.
 	if _, e = s.CreateTransfer(ctx, a, TransferInput{OrderID: o.ID, SourceOperationID: stamping.ID, Quantity: decimal.NewFromInt(29), MovementDate: "2026-09-13"}); e == nil {
 		t.Fatal("transferred more than the WIP balance")
 	}

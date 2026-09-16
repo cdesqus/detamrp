@@ -203,12 +203,13 @@ func validateEntryAgainstOrder(ctx context.Context, tx database.TenantTx, a Acto
 		if old != nil {
 			excluded = old.ID
 		}
-		// Later operations may only work on WIP transferred to them by that date.
+		// A later operation may only work on output the operation before it had
+		// already finished on that date; moving it across is automatic.
 		rows, e := tx.Query(ctx, `SELECT day::text,COALESCE(sum(supplied),0),COALESCE(sum(processed),0) FROM (
- SELECT m.movement_date AS day,m.quantity AS supplied,0::numeric AS processed FROM production_wip_movements m WHERE m.tenant_id=$1 AND m.movement_type='TRANSFER' AND m.destination_operation_id=$2
+ SELECT e.production_date AS day,e.qty_good AS supplied,0::numeric AS processed FROM production_entries e WHERE e.tenant_id=$1 AND e.operation_id=$4 AND e.voided_at IS NULL
  UNION ALL
  SELECT e.production_date,0::numeric,e.qty_processed FROM production_entries e WHERE e.tenant_id=$1 AND e.operation_id=$2 AND e.id<>$3 AND e.voided_at IS NULL
- ) timeline GROUP BY day ORDER BY day`, a.TenantID, i.OperationID, excluded)
+ ) timeline GROUP BY day ORDER BY day`, a.TenantID, i.OperationID, excluded, o.Operations[index-1].ID)
 		if e != nil {
 			return 0, e
 		}
@@ -227,12 +228,12 @@ func validateEntryAgainstOrder(ctx context.Context, tx database.TenantTx, a Acto
 			return 0, e
 		}
 		if !inputTimelineAvailable(days, i.ProductionDate, i.Processed) {
-			return 0, invalid("Not enough WIP had been transferred to %s on this production date", o.Operations[index].Code)
+			return 0, invalid("%s had not finished enough good output by this production date", o.Operations[index-1].Code)
 		}
 	}
 	if i.Processed.GreaterThan(remaining) {
 		if index > 0 {
-			return 0, invalid("Processed quantity exceeds the WIP staged at %s (%s); transfer stock from %s first", o.Operations[index].Code, decimal.Max(decimal.Zero, remaining), o.Operations[index-1].Code)
+			return 0, invalid("Processed quantity exceeds what %s has available from %s (%s)", o.Operations[index].Code, o.Operations[index-1].Code, decimal.Max(decimal.Zero, remaining))
 		}
 		return 0, invalid("Processed quantity exceeds the remaining order target (%s)", decimal.Max(decimal.Zero, remaining))
 	}
